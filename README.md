@@ -1,5 +1,8 @@
+<img src="assets/bbu-logo.png" width="70" align="right" alt="Build Bright University" />
+
 # 📦 Inventory Management System
 
+**University:** Build Bright University (BBU)
 **Course:** Advanced PHP & MySQL
 **Stack:** PHP (PDO) · MySQL · Bootstrap 5 · Vanilla JS
 
