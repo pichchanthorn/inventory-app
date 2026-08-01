@@ -1,72 +1,120 @@
-# Inventory Management System — Starter (Advanced PHP & MySQL)
+# 📦 Inventory Management System
 
-This is a working starter that follows the same modules the teacher demoed:
-Login/Register → Dashboard → Categories → Units → Suppliers → Products →
-Stock In → Stock Out → Stock Adjustments → Reports.
+**Course:** Advanced PHP & MySQL
+**Stack:** PHP (PDO) · MySQL · Bootstrap 5 · Vanilla JS
 
-**Design:** a dark, terminal/scanner-inspired look (own visual identity — not
-a copy of the classroom demo's styling). Tokens live in `assets/style.css`.
+A full-stack inventory management system for tracking products, suppliers,
+and stock movements — built with plain PHP and MySQL (no framework), using
+prepared statements throughout for SQL-injection safety.
 
-**Sample scope:** the schema ships with no seed rows for categories/units/
-suppliers/products — add your own when you first run it, so the data in
-your submission is yours, not the classroom demo's.
+---
 
-**What's fully built:** Login, Register, Logout, Dashboard, Profile (with
-photo upload), and a complete **Categories** module (list, search, create,
-edit, delete) — this is your template for every other module.
+## ✨ Features
 
-Note: the `uploads/avatars/` folder must be writable by PHP (on most local
-setups like XAMPP/Laragon this works out of the box).
+| Module | What it does |
+|---|---|
+| **Auth** | Register, login (hashed passwords), logout, session-based access control |
+| **Dashboard** | Live totals: products, units in stock, inventory value, low-stock alerts |
+| **Categories** | Full CRUD with search |
+| **Units** | Full CRUD with search |
+| **Suppliers** | Full CRUD with search (phone, email, address) |
+| **Products** | Full CRUD — linked to category/supplier/unit, auto-calculated margin %, low-stock badge |
+| **Stock In** | Multi-line receiving form; increases stock and logs a transaction inside a DB transaction |
+| **Stock Out** | Multi-line issuing form; decreases stock with an availability check |
+| **Stock Adjustments** | Sets an exact stock count with a required reason (for physical counts / corrections) |
+| **Stock Reports** | Overview, full transaction log (filterable), by-product stock levels, CSV export |
+| **Profile** | Update name/email, change password, upload a profile photo |
 
-## 1. Setup
-1. Install XAMPP or Laragon, start Apache + MySQL.
-2. Put this whole `inventory-app` folder inside `htdocs` (XAMPP) or `www` (Laragon).
-3. Open phpMyAdmin → Import → select `database/schema.sql`. This creates the
-   `inventory_db` database and all tables (categories, units, suppliers,
-   products, stock_transactions, stock_transaction_items, users, roles).
-4. If your MySQL root user has a password, edit `config/db.php` and set `$pass`.
-5. Visit `http://localhost/inventory-app/` in your browser → Register an
-   account → Log in.
+---
 
-## 2. How to build the remaining modules
-Copy `category/index.php` into a new folder (e.g. `unit/index.php`,
-`supplier/index.php`, `product/index.php`) and change 3 things:
-1. The table name in the 4 SQL queries (`categories` → `units`, etc.)
-2. The column names in the form fields to match that table
-3. `$activePage = 'category'` → `$activePage = 'unit'` (so the sidebar
-   highlights the right link)
+## 🖼️ Screenshots
 
-That's the entire pattern: **list (SELECT) → create (INSERT) → edit
-(UPDATE) → delete (DELETE)**, all through the same `$pdo->prepare(...)`
-style so you're protected from SQL injection.
+| Login | Dashboard |
+|---|---|
+| ![Login](screenshots/login.png) | ![Dashboard](screenshots/dashboard.png) |
 
-## 3. Stock In / Stock Out / Adjustments (next step, more advanced)
-These are one level up from plain CRUD because one form submission writes
-to **two tables at once** inside a transaction:
-```php
-$pdo->beginTransaction();
-$stmt = $pdo->prepare('INSERT INTO stock_transactions (reference, type, transaction_date, note, supplier_id, user_id) VALUES (?,?,?,?,?,?)');
-$stmt->execute([$reference, 'in', $date, $note, $supplierId, $_SESSION['user_id']]);
-$transactionId = $pdo->lastInsertId();
+| Categories | Products |
+|---|---|
+| ![Categories](screenshots/categories.png) | ![Products](screenshots/products.png) |
 
-foreach ($items as $item) {
-    $stmt = $pdo->prepare('INSERT INTO stock_transaction_items (transaction_id, product_id, qty, unit_price, subtotal) VALUES (?,?,?,?,?)');
-    $stmt->execute([$transactionId, $item['product_id'], $item['qty'], $item['unit_price'], $item['qty'] * $item['unit_price']]);
+| Stock In | Stock Out |
+|---|---|
+| ![Stock In](screenshots/stock-in.png) | ![Stock Out](screenshots/stock-out.png) |
 
-    // Stock In increases stock, Stock Out decreases it
-    $pdo->prepare('UPDATE products SET current_stock = current_stock + ? WHERE id = ?')
-        ->execute([$item['qty'], $item['product_id']]);
-}
-$pdo->commit();
+| Stock Reports | Profile |
+|---|---|
+| ![Stock Reports](screenshots/stock-report.png) | ![Profile](screenshots/profile.png) |
+
+---
+
+## 🗄️ Database Schema
+
 ```
-Use `current_stock - ?` for Stock Out, and a direct `SET current_stock = ?`
-for Adjustments.
-
-## 4. Roles / Permissions (later step)
-`users.role_id` already links to the `roles` table (Admin/User/Viewer).
-A simple way to gate a page:
-```php
-if ($_SESSION['role_id'] != 1) { // 1 = Admin
-    die('You do not have permission to view this page.');
-}
+roles              (id, name)
+users              (id, name, email, password, role_id, avatar, created_at)
+categories         (id, name, slug, note, created_at)
+units              (id, name, note)
+suppliers          (id, name, phone, email, address, note)
+products           (id, name, sku, barcode, category_id, supplier_id, unit_id,
+                     note, cost_price, sale_price, min_stock, current_stock, created_at)
+stock_transactions       (id, reference, type, transaction_date, note, supplier_id, user_id, created_at)
+stock_transaction_items  (id, transaction_id, product_id, qty, unit_price, subtotal)
 ```
+
+`stock_transactions.type` is one of `in` / `out` / `adjustment` — every stock
+change (in, out, or manual correction) is logged here for a full audit trail.
+
+---
+
+## 📂 Project Structure
+
+```
+inventory-app/
+├── auth/                 Login, register, logout
+├── category/             Categories CRUD
+├── unit/                 Units CRUD
+├── supplier/             Suppliers CRUD
+├── product/               Products CRUD
+├── stock-in/             Stock In form + logic
+├── stock-out/            Stock Out form + logic
+├── stock-adjustment/     Stock Adjustments form + logic
+├── stock-report/         Reports (overview / log / by-product) + CSV export
+├── includes/             Shared header, footer, auth guard
+├── config/                DB connection + base-URL helper
+├── database/             schema.sql (tables) + seed.sql (sample data)
+├── assets/               style.css (design system)
+├── uploads/avatars/      Profile photo uploads
+├── screenshots/          README screenshots
+├── profile.php
+├── dashboard.php
+└── index.php
+```
+
+---
+
+## ⚙️ Setup & Installation
+
+1. Install **XAMPP** (or a similar Apache + MySQL + PHP stack) and start
+   **Apache** and **MySQL**.
+2. Copy the `inventory-app` folder into `C:\xampp\htdocs\`.
+3. Open `http://localhost/phpmyadmin` → **Import** → select
+   `database/schema.sql` → **Go**. This creates the `inventory_db` database
+   and all tables.
+4. *(Optional)* Import `database/seed.sql` the same way to load sample data.
+5. If your MySQL root user has a password, edit `config/db.php` and set `$pass`.
+6. Visit `http://localhost/inventory-app/` → **Register** an account → **Log in**.
+
+---
+
+## 🔒 Security notes
+
+- All queries use **PDO prepared statements** — no raw string concatenation.
+- Passwords are hashed with `password_hash()` / verified with `password_verify()`.
+- Every protected page checks `$_SESSION['user_id']` via `includes/auth_check.php`.
+- Uploaded profile photos are validated by MIME type and size before saving.
+
+---
+
+## 👤 Author
+
+Built by **[Pich Chan Thorn]** — BBU, Year 3 Semester 1, Advanced PHP & MySQL.
