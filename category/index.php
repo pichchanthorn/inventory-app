@@ -34,8 +34,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'update') {
     exit;
 }
 
-// ---------- DELETE ----------
-if (isset($_GET['delete'])) {
+// ---------- DELETE (Admin only) ----------
+if (isset($_GET['delete']) && isAdmin()) {
     $id = (int) $_GET['delete'];
     $stmt = $pdo->prepare('DELETE FROM categories WHERE id = ?');
     $stmt->execute([$id]);
@@ -88,11 +88,13 @@ require_once __DIR__ . '/../includes/header.php';
                   data-bs-toggle="modal" data-bs-target="#editModal<?= $cat['id'] ?>">
             <i class="bi bi-pencil"></i>
           </button>
+          <?php if (isAdmin()): ?>
           <a class="btn btn-sm btn-outline-danger"
              href="?delete=<?= $cat['id'] ?>"
              onclick="return confirm('Delete this category?')">
             <i class="bi bi-trash"></i>
           </a>
+          <?php endif; ?>
         </td>
       </tr>
 

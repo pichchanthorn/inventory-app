@@ -22,6 +22,7 @@ CREATE TABLE users (
     password VARCHAR(255) NOT NULL,
     role_id INT DEFAULT 2,
     avatar VARCHAR(255) DEFAULT NULL,
+    must_change_password TINYINT(1) NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (role_id) REFERENCES roles(id)
 );

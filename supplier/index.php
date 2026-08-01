@@ -29,7 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'update') {
     exit;
 }
 
-if (isset($_GET['delete'])) {
+if (isset($_GET['delete']) && isAdmin()) {
     $stmt = $pdo->prepare('DELETE FROM suppliers WHERE id = ?');
     $stmt->execute([(int) $_GET['delete']]);
     header('Location: ' . BASE_URL . '/supplier/index.php');
@@ -82,11 +82,13 @@ require_once __DIR__ . '/../includes/header.php';
                   data-bs-toggle="modal" data-bs-target="#editModal<?= $s['id'] ?>">
             <i class="bi bi-pencil"></i>
           </button>
+          <?php if (isAdmin()): ?>
           <a class="btn btn-sm btn-outline-danger"
              href="?delete=<?= $s['id'] ?>"
              onclick="return confirm('Delete this supplier?')">
             <i class="bi bi-trash"></i>
           </a>
+          <?php endif; ?>
         </td>
       </tr>
 

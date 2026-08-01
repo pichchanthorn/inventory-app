@@ -19,7 +19,7 @@ function navClass($page, $active) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
-<link rel="stylesheet" href="<?= BASE_URL ?>/assets/style.css">
+<link rel="stylesheet" href="<?= BASE_URL ?>/assets/style.css?v=<?= ASSET_VER ?>">
 <style>
   .sidebar { min-height:100vh; }
   .sidebar .nav-link { padding:.5rem 1rem; margin-bottom:2px; }
@@ -55,6 +55,11 @@ function navClass($page, $active) {
 
     <div class="sidebar-section">Reports</div>
     <a class="<?= navClass('stock-report', $activePage) ?>" href="<?= BASE_URL ?>/stock-report/index.php"><i class="bi bi-bar-chart me-2"></i>Stock Reports</a>
+
+    <?php if (function_exists('isAdmin') && isAdmin()): ?>
+    <div class="sidebar-section">Administration</div>
+    <a class="<?= navClass('user', $activePage) ?>" href="<?= BASE_URL ?>/user/index.php"><i class="bi bi-people me-2"></i>Users</a>
+    <?php endif; ?>
 
     <div class="sidebar-section">Account</div>
     <a class="<?= navClass('profile', $activePage) ?>" href="<?= BASE_URL ?>/profile.php"><i class="bi bi-person-circle me-2"></i>Profile</a>
