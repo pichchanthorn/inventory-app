@@ -17,6 +17,9 @@ prepared statements throughout for SQL-injection safety.
 | Module | What it does |
 |---|---|
 | **Auth** | Register, login (hashed passwords), logout, session-based access control |
+| **Roles** | Admin / User / Viewer — delete actions across Categories, Units, Suppliers, and Products are Admin-only |
+| **User management** | Admin-only page to create staff accounts (temporary password, chosen role), and change any user's role |
+| **Forced password reset** | Admin-created accounts can require a password change on first login before the rest of the app is accessible |
 | **Dashboard** | Live totals: products, units in stock, inventory value, low-stock alerts |
 | **Categories** | Full CRUD with search |
 | **Units** | Full CRUD with search |
@@ -26,7 +29,8 @@ prepared statements throughout for SQL-injection safety.
 | **Stock Out** | Multi-line issuing form; decreases stock with an availability check |
 | **Stock Adjustments** | Sets an exact stock count with a required reason (for physical counts / corrections) |
 | **Stock Reports** | Overview, full transaction log (filterable), by-product stock levels, CSV export |
-| **Profile** | Update name/email, change password, upload a profile photo |
+| **Profile** | Update name/email, change password, upload a profile photo, view role and member-since date |
+| **Theme** | Light/Dark toggle in the sidebar, saved per browser via `localStorage` |
 
 ---
 
@@ -54,7 +58,8 @@ prepared statements throughout for SQL-injection safety.
 
 ```
 roles              (id, name)
-users              (id, name, email, password, role_id, avatar, created_at)
+users              (id, name, email, password, role_id, avatar,
+                     must_change_password, created_at)
 categories         (id, name, slug, note, created_at)
 units              (id, name, note)
 suppliers          (id, name, phone, email, address, note)
@@ -82,6 +87,7 @@ inventory-app/
 ├── stock-out/            Stock Out form + logic
 ├── stock-adjustment/     Stock Adjustments form + logic
 ├── stock-report/         Reports (overview / log / by-product) + CSV export
+├── user/                 Admin-only user management (create staff, change roles)
 ├── includes/             Shared header, footer, auth guard
 ├── config/                DB connection + base-URL helper
 ├── database/             schema.sql (tables) + seed.sql (sample data)
@@ -113,6 +119,13 @@ inventory-app/
 - All queries use **PDO prepared statements** — no raw string concatenation.
 - Passwords are hashed with `password_hash()` / verified with `password_verify()`.
 - Every protected page checks `$_SESSION['user_id']` via `includes/auth_check.php`.
+- Delete actions (Categories, Units, Suppliers, Products) are gated server-side
+  by role, not just hidden in the UI — an `isAdmin()` check runs before every
+  delete query, so a non-admin can't delete by guessing the URL.
+- New staff accounts are only created by an Admin (via the Users page) with a
+  hashed temporary password; public self-registration (`auth/register.php`)
+  is still open for now but should be restricted once Admin-created accounts
+  are in use.
 - Uploaded profile photos are validated by MIME type and size before saving.
 
 ---
