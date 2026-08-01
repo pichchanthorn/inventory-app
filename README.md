@@ -84,7 +84,6 @@ inventory-app/
 ├── database/             schema.sql (tables) + seed.sql (sample data)
 ├── assets/               style.css (design system)
 ├── uploads/avatars/      Profile photo uploads
-├── screenshots/          README screenshots
 ├── profile.php
 ├── dashboard.php
 └── index.php
