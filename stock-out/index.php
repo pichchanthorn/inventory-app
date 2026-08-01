@@ -23,7 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (!$lines) {
-        $error = 'Add at least one product.';
+        $error = __('stockout_err_add_product');
     } else {
         // verify enough stock before committing anything
         foreach ($lines as $line) {
@@ -31,7 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([$line['product_id']]);
             $p = $stmt->fetch();
             if ($p && $line['qty'] > $p['current_stock']) {
-                $error = "Not enough stock for {$p['name']} (have {$p['current_stock']}, requested {$line['qty']}).";
+                $error = __('stockout_err_insufficient_prefix') . " {$p['name']} (" . __('stockout_err_insufficient_have') . " {$p['current_stock']}, " . __('stockout_err_insufficient_requested') . " {$line['qty']}).";
                 break;
             }
         }
@@ -53,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute([$line['qty'], $line['product_id']]);
             }
             $pdo->commit();
-            $success = "Recorded $reference successfully.";
+            $success = __('stockout_recorded_prefix') . " $reference " . __('stockout_recorded_suffix');
         }
     }
 }
@@ -67,7 +67,7 @@ $recent = $pdo->query("SELECT t.*, COUNT(i.id) items, SUM(i.qty) total_qty, SUM(
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
-<h4 class="mb-4">Stock Out</h4>
+<h4 class="mb-4"><?= __('nav_stock_out') ?></h4>
 <?php if ($success): ?><div class="alert alert-success"><?= htmlspecialchars($success) ?></div><?php endif; ?>
 <?php if ($error): ?><div class="alert alert-danger"><?= htmlspecialchars($error) ?></div><?php endif; ?>
 
@@ -75,44 +75,44 @@ require_once __DIR__ . '/../includes/header.php';
   <div class="col-lg-8">
     <form method="post">
       <div class="card p-3 mb-3">
-        <div class="bracket-label mb-3">TRANSACTION_DETAILS</div>
+        <div class="bracket-label mb-3"><?= __('common_transaction_details') ?></div>
         <div class="row">
           <div class="col-md-6 mb-3">
-            <label class="form-label">Transaction date</label>
+            <label class="form-label"><?= __('common_transaction_date') ?></label>
             <input type="date" name="transaction_date" class="form-control" value="<?= date('Y-m-d') ?>" required>
           </div>
           <div class="col-md-6 mb-3">
-            <label class="form-label">Note / Reference</label>
-            <input type="text" name="note" class="form-control" placeholder="e.g. Customer order #1234">
+            <label class="form-label"><?= __('stockout_note_label') ?></label>
+            <input type="text" name="note" class="form-control" placeholder="<?= __('stockout_note_placeholder') ?>">
           </div>
         </div>
       </div>
 
       <div class="card p-3">
         <div class="d-flex justify-content-between align-items-center mb-3">
-          <div class="bracket-label mb-0">LINE_ITEMS</div>
-          <button type="button" class="btn btn-sm btn-outline-primary" onclick="addRow()">+ Add product</button>
+          <div class="bracket-label mb-0"><?= __('common_line_items') ?></div>
+          <button type="button" class="btn btn-sm btn-outline-primary" onclick="addRow()"><?= __('common_add_product') ?></button>
         </div>
         <table class="table" id="lineTable">
-          <thead class="table-light"><tr><th>Product</th><th style="width:100px;">Qty</th><th style="width:130px;">Unit price</th><th style="width:40px;"></th></tr></thead>
+          <thead class="table-light"><tr><th><?= __('common_product') ?></th><th style="width:100px;"><?= __('common_qty') ?></th><th style="width:130px;"><?= __('stockout_unit_price') ?></th><th style="width:40px;"></th></tr></thead>
           <tbody id="lineBody"></tbody>
         </table>
-        <button class="btn text-white w-100 mt-2" style="background:var(--danger);"><i class="bi bi-upload"></i> Record Stock Out</button>
+        <button class="btn text-white w-100 mt-2" style="background:var(--danger);"><i class="bi bi-upload"></i> <?= __('stockout_submit_button') ?></button>
       </div>
     </form>
   </div>
 
   <div class="col-lg-4">
     <div class="card p-3">
-      <div class="bracket-label mb-3" style="color:var(--danger);">RECENT_STOCK_OUT</div>
-      <?php if (!$recent): ?><p class="text-secondary small">No transactions yet.</p><?php endif; ?>
+      <div class="bracket-label mb-3" style="color:var(--danger);"><?= __('stockout_recent_title') ?></div>
+      <?php if (!$recent): ?><p class="text-secondary small"><?= __('common_no_transactions') ?></p><?php endif; ?>
       <?php foreach ($recent as $t): ?>
         <div class="border-bottom pb-2 mb-2">
           <div class="d-flex justify-content-between small">
             <span class="mono" style="color:var(--danger);"><?= htmlspecialchars($t['reference']) ?></span>
             <span class="mono text-secondary"><?= $t['transaction_date'] ?></span>
           </div>
-          <div class="small mt-1"><?= $t['items'] ?> product(s) · <?= (int)$t['total_qty'] ?> units · <strong>$<?= number_format($t['total_value'], 2) ?></strong></div>
+          <div class="small mt-1"><?= $t['items'] ?> <?= __('common_products_word') ?> · <?= (int)$t['total_qty'] ?> <?= __('common_units_word') ?> · <strong>$<?= number_format($t['total_value'], 2) ?></strong></div>
         </div>
       <?php endforeach; ?>
     </div>
@@ -121,11 +121,14 @@ require_once __DIR__ . '/../includes/header.php';
 
 <script>
 const PRODUCTS = <?= json_encode($products) ?>;
+const T_CHOOSE_PRODUCT = <?= json_encode(__('common_choose_product_option')) ?>;
+const T_NOW = <?= json_encode(__('common_now_label')) ?>;
+const T_PCS = <?= json_encode(__('common_pcs')) ?>;
 
 function productOptions(selected) {
-  let html = '<option value="">— Choose product —</option>';
+  let html = `<option value="">${T_CHOOSE_PRODUCT}</option>`;
   PRODUCTS.forEach(p => {
-    html += `<option value="${p.id}" data-price="${p.sale_price}" ${String(p.id)===String(selected)?'selected':''}>${p.name} · ${p.sku} (now: ${p.current_stock} pcs)</option>`;
+    html += `<option value="${p.id}" data-price="${p.sale_price}" ${String(p.id)===String(selected)?'selected':''}>${p.name} · ${p.sku} (${T_NOW}: ${p.current_stock} ${T_PCS})</option>`;
   });
   return html;
 }

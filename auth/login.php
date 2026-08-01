@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/../config/base_url.php';
+require_once __DIR__ . '/../includes/lang.php';
 require_once __DIR__ . '/../config/db.php';
-session_start();
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -20,7 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: ' . BASE_URL . '/dashboard.php');
         exit;
     } else {
-        $error = 'Invalid email or password.';
+        $error = __('login_invalid');
     }
 }
 ?>
@@ -37,43 +37,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="<?= BASE_URL ?>/assets/style.css?v=<?= ASSET_VER ?>">
 </head>
-<body>
+<body lang="<?= $_SESSION['lang'] ?>">
 <script>
   if (document.documentElement.classList.contains('theme-light-pending')) {
     document.body.classList.add('theme-light');
   }
 </script>
+<a href="?lang=<?= $_SESSION['lang'] === 'km' ? 'en' : 'km' ?>" class="theme-toggle-btn text-decoration-none" style="position:absolute; top:20px; right:20px; width:auto; margin-bottom:0;">
+  <?= $_SESSION['lang'] === 'km' ? 'EN' : 'ខ្មែរ' ?>
+</a>
 <div class="auth-wrap">
   <div class="auth-left">
     <div>
-      <div class="bracket-label mb-2">ADVANCED_PHP_MYSQL</div>
+      <div class="bracket-label mb-2"><?= __('auth_tagline') ?></div>
       <span class="barcode"><i style="width:2px;height:60%"></i><i style="height:100%"></i><i style="width:2px;height:40%"></i><i style="height:80%"></i><i style="width:4px;height:55%"></i><i style="height:100%"></i><i style="width:2px;height:70%"></i></span>
     </div>
     <div>
-      <h1>Inventory that tracks every unit, in and out.</h1>
-      <p class="mt-3">Categories, suppliers, products and stock movements — one system, one source of truth.</p>
+      <h1><?= __('auth_hero_title') ?></h1>
+      <p class="mt-3"><?= __('auth_hero_subtitle') ?></p>
     </div>
     <div class="mono" style="color:#5C6584; font-size:.78rem;">127.0.0.1:9000</div>
   </div>
 
   <div class="auth-right">
     <div class="auth-form">
-      <h4 class="mb-4">Log in</h4>
+      <h4 class="mb-4"><?= __('login_title') ?></h4>
       <?php if (!empty($_GET['registered'])): ?>
-        <div class="alert alert-success py-2">Account created — please log in.</div>
+        <div class="alert alert-success py-2"><?= __('login_registered_success') ?></div>
       <?php endif; ?>
       <?php if ($error): ?><div class="alert alert-danger py-2"><?= htmlspecialchars($error) ?></div><?php endif; ?>
       <form method="post">
         <div class="mb-3">
-          <label class="form-label">Email</label>
+          <label class="form-label"><?= __('login_email') ?></label>
           <input type="email" name="email" class="form-control" required>
         </div>
         <div class="mb-3">
-          <label class="form-label">Password</label>
+          <label class="form-label"><?= __('login_password') ?></label>
           <input type="password" name="password" class="form-control" required>
         </div>
-        <button class="btn btn-primary w-100">Log in</button>
-        <p class="text-center mt-3 mb-0">Don't have an account? <a href="<?= BASE_URL ?>/auth/register.php">Register</a></p>
+        <button class="btn btn-primary w-100"><?= __('login_button') ?></button>
+        <p class="text-center mt-3 mb-0"><?= __('login_no_account') ?> <a href="<?= BASE_URL ?>/auth/register.php"><?= __('login_register_link') ?></a></p>
       </form>
     </div>
   </div>

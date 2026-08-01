@@ -27,32 +27,34 @@ $unitsOut = (int) $pdo->query("SELECT COALESCE(SUM(i.qty),0) FROM stock_transact
 $txCount  = (int) $pdo->query('SELECT COUNT(*) FROM stock_transactions')->fetchColumn();
 $byType   = $pdo->query('SELECT type, COUNT(*) c FROM stock_transactions GROUP BY type')->fetchAll(PDO::FETCH_KEY_PAIR);
 
+$typeLabels = ['in' => __('nav_stock_in'), 'out' => __('nav_stock_out'), 'adjustment' => __('common_adjustment_label')];
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
-  <h4 class="mb-0">Stock Reports</h4>
-  <a class="btn btn-primary" href="?export=csv"><i class="bi bi-download"></i> Export CSV</a>
+  <h4 class="mb-0"><?= __('nav_stock_reports') ?></h4>
+  <a class="btn btn-primary" href="?export=csv"><i class="bi bi-download"></i> <?= __('stockreport_export_button') ?></a>
 </div>
 
 <div class="row g-3 mb-4">
-  <div class="col-md-3"><div class="card p-3"><div class="bracket-label mb-2">UNITS_IN</div><div class="fs-4 mono fw-bold" style="color:var(--good);"><?= $unitsIn ?></div></div></div>
-  <div class="col-md-3"><div class="card p-3"><div class="bracket-label mb-2">UNITS_OUT</div><div class="fs-4 mono fw-bold" style="color:var(--danger);"><?= $unitsOut ?></div></div></div>
-  <div class="col-md-3"><div class="card p-3"><div class="bracket-label mb-2">NET_FLOW</div><div class="fs-4 mono fw-bold"><?= ($unitsIn - $unitsOut >= 0 ? '+' : '') . ($unitsIn - $unitsOut) ?></div></div></div>
-  <div class="col-md-3"><div class="card p-3"><div class="bracket-label mb-2">TRANSACTIONS</div><div class="fs-4 mono fw-bold"><?= $txCount ?></div></div></div>
+  <div class="col-md-3"><div class="card p-3"><div class="bracket-label mb-2"><?= __('stockreport_units_in') ?></div><div class="fs-4 mono fw-bold" style="color:var(--good);"><?= $unitsIn ?></div></div></div>
+  <div class="col-md-3"><div class="card p-3"><div class="bracket-label mb-2"><?= __('stockreport_units_out') ?></div><div class="fs-4 mono fw-bold" style="color:var(--danger);"><?= $unitsOut ?></div></div></div>
+  <div class="col-md-3"><div class="card p-3"><div class="bracket-label mb-2"><?= __('stockreport_net_flow') ?></div><div class="fs-4 mono fw-bold"><?= ($unitsIn - $unitsOut >= 0 ? '+' : '') . ($unitsIn - $unitsOut) ?></div></div></div>
+  <div class="col-md-3"><div class="card p-3"><div class="bracket-label mb-2"><?= __('stockreport_transactions') ?></div><div class="fs-4 mono fw-bold"><?= $txCount ?></div></div></div>
 </div>
 
 <ul class="nav nav-pills mb-3">
-  <li class="nav-item"><a class="nav-link <?= $tab==='overview'?'active':'' ?>" href="?tab=overview">Overview</a></li>
-  <li class="nav-item"><a class="nav-link <?= $tab==='log'?'active':'' ?>" href="?tab=log">Transaction Log</a></li>
-  <li class="nav-item"><a class="nav-link <?= $tab==='product'?'active':'' ?>" href="?tab=product">By Product</a></li>
+  <li class="nav-item"><a class="nav-link <?= $tab==='overview'?'active':'' ?>" href="?tab=overview"><?= __('stockreport_tab_overview') ?></a></li>
+  <li class="nav-item"><a class="nav-link <?= $tab==='log'?'active':'' ?>" href="?tab=log"><?= __('stockreport_tab_log') ?></a></li>
+  <li class="nav-item"><a class="nav-link <?= $tab==='product'?'active':'' ?>" href="?tab=product"><?= __('stockreport_tab_product') ?></a></li>
 </ul>
 
 <?php if ($tab === 'overview'): ?>
   <div class="card p-3">
-    <div class="bracket-label mb-3">TRANSACTIONS_BY_TYPE</div>
-    <?php if (!$byType): ?><p class="text-secondary small mb-0">No transactions yet.</p><?php endif; ?>
-    <?php foreach (['in' => 'Stock In', 'out' => 'Stock Out', 'adjustment' => 'Adjustments'] as $key => $label): ?>
+    <div class="bracket-label mb-3"><?= __('stockreport_by_type_title') ?></div>
+    <?php if (!$byType): ?><p class="text-secondary small mb-0"><?= __('common_no_transactions') ?></p><?php endif; ?>
+    <?php foreach (['in' => __('nav_stock_in'), 'out' => __('nav_stock_out'), 'adjustment' => __('stockreport_adjustments_label')] as $key => $label): ?>
       <div class="d-flex justify-content-between border-bottom py-2">
         <span class="text-secondary"><?= $label ?></span>
         <span class="mono fw-semibold"><?= $byType[$key] ?? 0 ?></span>
@@ -68,14 +70,14 @@ require_once __DIR__ . '/../includes/header.php';
 ?>
   <div class="card">
     <table class="table mb-0 align-middle">
-      <thead class="table-light"><tr><th>Reference</th><th>Date</th><th>Type</th><th>Products</th><th>Units</th><th>Value</th><th>Note</th></tr></thead>
+      <thead class="table-light"><tr><th><?= __('common_reference') ?></th><th><?= __('common_date') ?></th><th><?= __('common_type') ?></th><th><?= __('stockreport_col_products') ?></th><th><?= __('stockreport_col_units') ?></th><th><?= __('common_value') ?></th><th><?= __('common_note') ?></th></tr></thead>
       <tbody>
-        <?php if (!$rows): ?><tr><td colspan="7" class="text-center text-secondary py-4">No transactions yet.</td></tr><?php endif; ?>
+        <?php if (!$rows): ?><tr><td colspan="7" class="text-center text-secondary py-4"><?= __('common_no_transactions') ?></td></tr><?php endif; ?>
         <?php foreach ($rows as $r): ?>
         <tr>
           <td class="mono text-primary"><?= htmlspecialchars($r['reference']) ?></td>
           <td class="mono"><?= $r['transaction_date'] ?></td>
-          <td><span class="badge-stock <?= $r['type']==='out' ? 'badge-low' : 'badge-normal' ?>"><?= ucfirst($r['type']) ?></span></td>
+          <td><span class="badge-stock <?= $r['type']==='out' ? 'badge-low' : 'badge-normal' ?>"><?= htmlspecialchars($typeLabels[$r['type']] ?? $r['type']) ?></span></td>
           <td><?= $r['items'] ?></td>
           <td><?= (int) $r['qty'] ?></td>
           <td>$<?= number_format($r['value'], 2) ?></td>
@@ -91,15 +93,15 @@ require_once __DIR__ . '/../includes/header.php';
 ?>
   <div class="card">
     <table class="table mb-0 align-middle">
-      <thead class="table-light"><tr><th>Product</th><th>Category</th><th>Current Stock</th><th>Level</th></tr></thead>
+      <thead class="table-light"><tr><th><?= __('common_product') ?></th><th><?= __('common_category') ?></th><th><?= __('stockreport_col_current_stock') ?></th><th><?= __('stockreport_col_level') ?></th></tr></thead>
       <tbody>
-        <?php if (!$rows): ?><tr><td colspan="4" class="text-center text-secondary py-4">No products yet.</td></tr><?php endif; ?>
+        <?php if (!$rows): ?><tr><td colspan="4" class="text-center text-secondary py-4"><?= __('product_empty') ?></td></tr><?php endif; ?>
         <?php foreach ($rows as $p): $low = $p['current_stock'] <= $p['min_stock']; ?>
         <tr>
           <td class="fw-semibold"><?= htmlspecialchars($p['name']) ?></td>
           <td><?= $p['category_name'] ? htmlspecialchars($p['category_name']) : '<span class="text-secondary">—</span>' ?></td>
           <td><?= $p['current_stock'] ?></td>
-          <td><span class="badge-stock <?= $low ? 'badge-low' : 'badge-normal' ?>"><?= $low ? 'LOW' : 'NORMAL' ?></span></td>
+          <td><span class="badge-stock <?= $low ? 'badge-low' : 'badge-normal' ?>"><?= $low ? __('stockreport_badge_low') : __('stockreport_badge_normal') ?></span></td>
         </tr>
         <?php endforeach; ?>
       </tbody>

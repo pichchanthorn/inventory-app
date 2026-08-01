@@ -15,9 +15,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $date = $_POST['transaction_date'];
 
     if (!$productId) {
-        $error = 'Select a product.';
+        $error = __('stockadj_err_select_product');
     } elseif ($reason === '') {
-        $error = 'Reason is required.';
+        $error = __('stockadj_err_reason_required');
     } else {
         $stmt = $pdo->prepare('SELECT * FROM products WHERE id = ?');
         $stmt->execute([$productId]);
@@ -38,7 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute([$newQty, $productId]);
 
         $pdo->commit();
-        $success = "Applied $reference — {$product['name']}: {$product['current_stock']} → $newQty.";
+        $success = __('stockadj_applied_prefix') . " $reference — {$product['name']}: {$product['current_stock']} → $newQty.";
 
         // refresh products list so the dropdown shows the new stock
         $products = $pdo->query('SELECT * FROM products ORDER BY name')->fetchAll();
@@ -55,7 +55,7 @@ $recent = $pdo->query("SELECT t.*, p.name product_name, i.qty
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
-<h4 class="mb-4">Stock Adjustments</h4>
+<h4 class="mb-4"><?= __('nav_stock_adjustments') ?></h4>
 <?php if ($success): ?><div class="alert alert-success"><?= htmlspecialchars($success) ?></div><?php endif; ?>
 <?php if ($error): ?><div class="alert alert-danger"><?= htmlspecialchars($error) ?></div><?php endif; ?>
 
@@ -63,45 +63,45 @@ require_once __DIR__ . '/../includes/header.php';
   <div class="col-lg-8">
     <form method="post">
       <div class="card p-3 mb-3">
-        <div class="bracket-label mb-3">TRANSACTION_DETAILS</div>
+        <div class="bracket-label mb-3"><?= __('common_transaction_details') ?></div>
         <div class="row">
           <div class="col-md-6 mb-3">
-            <label class="form-label">Transaction date</label>
+            <label class="form-label"><?= __('common_transaction_date') ?></label>
             <input type="date" name="transaction_date" class="form-control" value="<?= date('Y-m-d') ?>" required>
           </div>
           <div class="col-md-6 mb-3">
-            <label class="form-label">Reason *</label>
-            <input type="text" name="reason" class="form-control" placeholder="e.g. Physical count correction" required>
+            <label class="form-label"><?= __('stockadj_reason_label') ?></label>
+            <input type="text" name="reason" class="form-control" placeholder="<?= __('stockadj_reason_placeholder') ?>" required>
           </div>
         </div>
       </div>
 
       <div class="card p-3">
-        <div class="bracket-label mb-3">ADJUSTMENT</div>
+        <div class="bracket-label mb-3"><?= __('stockadj_section_title') ?></div>
         <div class="mb-3">
-          <label class="form-label">Product</label>
+          <label class="form-label"><?= __('stockadj_product_label') ?></label>
           <select name="product_id" id="adjProduct" class="form-select" required onchange="updatePreview()">
-            <option value="">— Select product —</option>
+            <option value=""><?= __('stockadj_select_product') ?></option>
             <?php foreach ($products as $p): ?>
-            <option value="<?= $p['id'] ?>" data-stock="<?= $p['current_stock'] ?>"><?= htmlspecialchars($p['name']) ?> · <?= htmlspecialchars($p['sku']) ?> (now: <?= $p['current_stock'] ?> pcs)</option>
+            <option value="<?= $p['id'] ?>" data-stock="<?= $p['current_stock'] ?>"><?= htmlspecialchars($p['name']) ?> · <?= htmlspecialchars($p['sku']) ?> (<?= __('common_now_label') ?>: <?= $p['current_stock'] ?> <?= __('common_pcs') ?>)</option>
             <?php endforeach; ?>
           </select>
         </div>
         <div class="mb-3">
-          <label class="form-label">New stock quantity</label>
+          <label class="form-label"><?= __('stockadj_new_qty_label') ?></label>
           <input type="number" name="new_qty" id="adjQty" class="form-control" value="0" min="0" oninput="updatePreview()">
         </div>
-        <div id="adjPreview" class="small text-secondary mb-3">Select a product to preview the change.</div>
-        <div class="alert alert-warning small">Adjustments set the exact stock level and create a permanent audit record.</div>
-        <button class="btn btn-primary w-100"><i class="bi bi-arrow-repeat"></i> Apply Adjustment</button>
+        <div id="adjPreview" class="small text-secondary mb-3"><?= __('stockadj_preview_hint') ?></div>
+        <div class="alert alert-warning small"><?= __('stockadj_warning') ?></div>
+        <button class="btn btn-primary w-100"><i class="bi bi-arrow-repeat"></i> <?= __('stockadj_submit_button') ?></button>
       </div>
     </form>
   </div>
 
   <div class="col-lg-4">
     <div class="card p-3">
-      <div class="bracket-label mb-3">RECENT_ADJUSTMENTS</div>
-      <?php if (!$recent): ?><p class="text-secondary small">No adjustments yet.</p><?php endif; ?>
+      <div class="bracket-label mb-3"><?= __('stockadj_recent_title') ?></div>
+      <?php if (!$recent): ?><p class="text-secondary small"><?= __('stockadj_empty') ?></p><?php endif; ?>
       <?php foreach ($recent as $t): ?>
         <div class="border-bottom pb-2 mb-2">
           <div class="d-flex justify-content-between small">
@@ -117,15 +117,18 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <script>
+const T_SELECT_PREVIEW = <?= json_encode(__('stockadj_preview_hint')) ?>;
+const T_UNITS = <?= json_encode(__('common_units_word')) ?>;
+
 function updatePreview() {
   const sel = document.getElementById('adjProduct');
   const opt = sel.selectedOptions[0];
   const preview = document.getElementById('adjPreview');
-  if (!opt || !opt.value) { preview.textContent = 'Select a product to preview the change.'; return; }
+  if (!opt || !opt.value) { preview.textContent = T_SELECT_PREVIEW; return; }
   const current = Number(opt.dataset.stock);
   const next = Number(document.getElementById('adjQty').value) || 0;
   const diff = next - current;
-  preview.innerHTML = `${current} → <strong>${next}</strong> (${diff >= 0 ? '+' : ''}${diff} units)`;
+  preview.innerHTML = `${current} → <strong>${next}</strong> (${diff >= 0 ? '+' : ''}${diff} ${T_UNITS})`;
 }
 </script>
 

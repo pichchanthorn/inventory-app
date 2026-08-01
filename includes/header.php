@@ -25,7 +25,7 @@ function navClass($page, $active) {
   .sidebar .nav-link { padding:.5rem 1rem; margin-bottom:2px; }
 </style>
 </head>
-<body>
+<body lang="<?= $_SESSION['lang'] ?>">
 <script>
   if (document.documentElement.classList.contains('theme-light-pending')) {
     document.body.classList.add('theme-light');
@@ -39,34 +39,37 @@ function navClass($page, $active) {
       <span class="fs-5 fw-bold">Inventory</span>
     </div>
 
-    <div class="sidebar-section">Overview</div>
-    <a class="<?= navClass('dashboard', $activePage) ?>" href="<?= BASE_URL ?>/dashboard.php"><i class="bi bi-speedometer2 me-2"></i>Dashboard</a>
+    <div class="sidebar-section"><?= __('nav_overview') ?></div>
+    <a class="<?= navClass('dashboard', $activePage) ?>" href="<?= BASE_URL ?>/dashboard.php"><i class="bi bi-speedometer2 me-2"></i><?= __('nav_dashboard') ?></a>
 
-    <div class="sidebar-section">Catalog</div>
-    <a class="<?= navClass('product', $activePage) ?>" href="<?= BASE_URL ?>/product/index.php"><i class="bi bi-box me-2"></i>Products</a>
-    <a class="<?= navClass('category', $activePage) ?>" href="<?= BASE_URL ?>/category/index.php"><i class="bi bi-tags me-2"></i>Categories</a>
-    <a class="<?= navClass('unit', $activePage) ?>" href="<?= BASE_URL ?>/unit/index.php"><i class="bi bi-rulers me-2"></i>Units</a>
-    <a class="<?= navClass('supplier', $activePage) ?>" href="<?= BASE_URL ?>/supplier/index.php"><i class="bi bi-truck me-2"></i>Suppliers</a>
+    <div class="sidebar-section"><?= __('nav_catalog') ?></div>
+    <a class="<?= navClass('product', $activePage) ?>" href="<?= BASE_URL ?>/product/index.php"><i class="bi bi-box me-2"></i><?= __('nav_products') ?></a>
+    <a class="<?= navClass('category', $activePage) ?>" href="<?= BASE_URL ?>/category/index.php"><i class="bi bi-tags me-2"></i><?= __('nav_categories') ?></a>
+    <a class="<?= navClass('unit', $activePage) ?>" href="<?= BASE_URL ?>/unit/index.php"><i class="bi bi-rulers me-2"></i><?= __('nav_units') ?></a>
+    <a class="<?= navClass('supplier', $activePage) ?>" href="<?= BASE_URL ?>/supplier/index.php"><i class="bi bi-truck me-2"></i><?= __('nav_suppliers') ?></a>
 
-    <div class="sidebar-section">Operation</div>
-    <a class="<?= navClass('stock-in', $activePage) ?>" href="<?= BASE_URL ?>/stock-in/index.php"><i class="bi bi-download me-2"></i>Stock In</a>
-    <a class="<?= navClass('stock-out', $activePage) ?>" href="<?= BASE_URL ?>/stock-out/index.php"><i class="bi bi-upload me-2"></i>Stock Out</a>
-    <a class="<?= navClass('stock-adjustment', $activePage) ?>" href="<?= BASE_URL ?>/stock-adjustment/index.php"><i class="bi bi-arrow-repeat me-2"></i>Stock Adjustments</a>
+    <div class="sidebar-section"><?= __('nav_operation') ?></div>
+    <a class="<?= navClass('stock-in', $activePage) ?>" href="<?= BASE_URL ?>/stock-in/index.php"><i class="bi bi-download me-2"></i><?= __('nav_stock_in') ?></a>
+    <a class="<?= navClass('stock-out', $activePage) ?>" href="<?= BASE_URL ?>/stock-out/index.php"><i class="bi bi-upload me-2"></i><?= __('nav_stock_out') ?></a>
+    <a class="<?= navClass('stock-adjustment', $activePage) ?>" href="<?= BASE_URL ?>/stock-adjustment/index.php"><i class="bi bi-arrow-repeat me-2"></i><?= __('nav_stock_adjustments') ?></a>
 
-    <div class="sidebar-section">Reports</div>
-    <a class="<?= navClass('stock-report', $activePage) ?>" href="<?= BASE_URL ?>/stock-report/index.php"><i class="bi bi-bar-chart me-2"></i>Stock Reports</a>
+    <div class="sidebar-section"><?= __('nav_reports') ?></div>
+    <a class="<?= navClass('stock-report', $activePage) ?>" href="<?= BASE_URL ?>/stock-report/index.php"><i class="bi bi-bar-chart me-2"></i><?= __('nav_stock_reports') ?></a>
 
     <?php if (function_exists('isAdmin') && isAdmin()): ?>
-    <div class="sidebar-section">Administration</div>
-    <a class="<?= navClass('user', $activePage) ?>" href="<?= BASE_URL ?>/user/index.php"><i class="bi bi-people me-2"></i>Users</a>
+    <div class="sidebar-section"><?= __('nav_administration') ?></div>
+    <a class="<?= navClass('user', $activePage) ?>" href="<?= BASE_URL ?>/user/index.php"><i class="bi bi-people me-2"></i><?= __('nav_users') ?></a>
     <?php endif; ?>
 
-    <div class="sidebar-section">Account</div>
-    <a class="<?= navClass('profile', $activePage) ?>" href="<?= BASE_URL ?>/profile.php"><i class="bi bi-person-circle me-2"></i>Profile</a>
+    <div class="sidebar-section"><?= __('nav_account') ?></div>
+    <a class="<?= navClass('profile', $activePage) ?>" href="<?= BASE_URL ?>/profile.php"><i class="bi bi-person-circle me-2"></i><?= __('nav_profile') ?></a>
     <button type="button" class="theme-toggle-btn" onclick="toggleTheme()">
       <i class="bi bi-circle-half"></i> <span id="themeToggleLabel">Dark</span>
     </button>
-    <a class="nav-link text-secondary" href="<?= BASE_URL ?>/auth/logout.php"><i class="bi bi-box-arrow-left me-2"></i>Sign out</a>
+    <a href="?lang=<?= $_SESSION['lang'] === 'km' ? 'en' : 'km' ?>" class="theme-toggle-btn text-decoration-none d-block text-center">
+      <?= $_SESSION['lang'] === 'km' ? 'EN' : 'ខ្មែរ' ?>
+    </a>
+    <a class="nav-link text-secondary" href="<?= BASE_URL ?>/auth/logout.php"><i class="bi bi-box-arrow-left me-2"></i><?= __('nav_sign_out') ?></a>
   </nav>
 
   <!-- MAIN CONTENT -->

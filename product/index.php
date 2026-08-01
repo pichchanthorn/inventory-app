@@ -15,12 +15,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'create') {
     $name = trim($_POST['name']);
     $sku  = trim($_POST['sku']);
     if ($name === '' || $sku === '') {
-        $error = 'Name and SKU are required.';
+        $error = __('product_err_required');
     } else {
         $stmt = $pdo->prepare('SELECT id FROM products WHERE sku = ?');
         $stmt->execute([$sku]);
         if ($stmt->fetch()) {
-            $error = 'This SKU already exists.';
+            $error = __('product_err_sku_exists');
         } else {
             $stmt = $pdo->prepare('INSERT INTO products
                 (name, sku, barcode, category_id, supplier_id, unit_id, note, cost_price, sale_price, min_stock, current_stock)
@@ -73,25 +73,25 @@ require_once __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <h4 class="mb-0">Products</h4>
+  <h4 class="mb-0"><?= __('product_title') ?></h4>
   <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createModal">
-    <i class="bi bi-plus-lg"></i> Add
+    <i class="bi bi-plus-lg"></i> <?= __('common_add') ?>
   </button>
 </div>
 
 <form class="mb-3" method="get">
   <input type="text" name="q" class="form-control" style="max-width:300px"
-         placeholder="Search products or SKU..." value="<?= htmlspecialchars($search) ?>">
+         placeholder="<?= __('product_search_placeholder') ?>" value="<?= htmlspecialchars($search) ?>">
 </form>
 
 <div class="card">
   <table class="table mb-0 align-middle">
     <thead class="table-light">
-      <tr><th>#</th><th>Product</th><th>Category</th><th>Supplier</th><th>Cost</th><th>Price</th><th>Margin</th><th>Stock</th><th class="text-end">Actions</th></tr>
+      <tr><th>#</th><th><?= __('common_product') ?></th><th><?= __('common_category') ?></th><th><?= __('common_supplier') ?></th><th><?= __('product_col_cost') ?></th><th><?= __('product_col_price') ?></th><th><?= __('product_col_margin') ?></th><th><?= __('product_col_stock') ?></th><th class="text-end"><?= __('common_actions') ?></th></tr>
     </thead>
     <tbody>
       <?php if (!$products): ?>
-        <tr><td colspan="9" class="text-center text-secondary py-4">No products yet.</td></tr>
+        <tr><td colspan="9" class="text-center text-secondary py-4"><?= __('product_empty') ?></td></tr>
       <?php endif; ?>
       <?php foreach ($products as $i => $p):
         $margin = $p['sale_price'] > 0 ? round((($p['sale_price'] - $p['cost_price']) / $p['sale_price']) * 100) : 0;
@@ -108,7 +108,7 @@ require_once __DIR__ . '/../includes/header.php';
         <td>$<?= number_format($p['cost_price'], 2) ?></td>
         <td>$<?= number_format($p['sale_price'], 2) ?></td>
         <td style="color:<?= $margin >= 30 ? 'var(--good)' : ($margin >= 15 ? 'var(--warn)' : 'var(--danger)') ?>;"><?= $margin ?>%</td>
-        <td><span class="badge-stock <?= $low ? 'badge-low' : 'badge-normal' ?>"><?= $p['current_stock'] ?> pcs</span></td>
+        <td><span class="badge-stock <?= $low ? 'badge-low' : 'badge-normal' ?>"><?= $p['current_stock'] ?> <?= __('common_pcs') ?></span></td>
         <td class="text-end">
           <button class="btn btn-sm btn-outline-primary"
                   data-bs-toggle="modal" data-bs-target="#editModal<?= $p['id'] ?>">
@@ -117,7 +117,7 @@ require_once __DIR__ . '/../includes/header.php';
           <?php if (isAdmin()): ?>
           <a class="btn btn-sm btn-outline-danger"
              href="?delete=<?= $p['id'] ?>"
-             onclick="return confirm('Delete this product?')">
+             onclick="return confirm('<?= __('product_delete_confirm') ?>')">
             <i class="bi bi-trash"></i>
           </a>
           <?php endif; ?>
@@ -131,55 +131,55 @@ require_once __DIR__ . '/../includes/header.php';
               <input type="hidden" name="action" value="update">
               <input type="hidden" name="id" value="<?= $p['id'] ?>">
               <div class="modal-header">
-                <h5 class="modal-title">Edit product</h5>
+                <h5 class="modal-title"><?= __('product_edit_title') ?></h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
               </div>
               <div class="modal-body">
-                <div class="mb-3"><label class="form-label">Name</label>
+                <div class="mb-3"><label class="form-label"><?= __('common_name') ?></label>
                   <input type="text" name="name" class="form-control" value="<?= htmlspecialchars($p['name']) ?>" required></div>
                 <div class="row">
-                  <div class="col-6 mb-3"><label class="form-label">SKU</label>
+                  <div class="col-6 mb-3"><label class="form-label"><?= __('product_sku') ?></label>
                     <input type="text" name="sku" class="form-control" value="<?= htmlspecialchars($p['sku']) ?>" required></div>
-                  <div class="col-6 mb-3"><label class="form-label">Barcode</label>
+                  <div class="col-6 mb-3"><label class="form-label"><?= __('product_barcode') ?></label>
                     <input type="text" name="barcode" class="form-control" value="<?= htmlspecialchars($p['barcode']) ?>"></div>
                 </div>
                 <div class="row">
-                  <div class="col-4 mb-3"><label class="form-label">Category</label>
+                  <div class="col-4 mb-3"><label class="form-label"><?= __('common_category') ?></label>
                     <select name="category_id" class="form-select">
-                      <option value="">— None —</option>
+                      <option value=""><?= __('common_none_option') ?></option>
                       <?php foreach ($categories as $c): ?>
                       <option value="<?= $c['id'] ?>" <?= $c['id']==$p['category_id']?'selected':'' ?>><?= htmlspecialchars($c['name']) ?></option>
                       <?php endforeach; ?>
                     </select></div>
-                  <div class="col-4 mb-3"><label class="form-label">Supplier</label>
+                  <div class="col-4 mb-3"><label class="form-label"><?= __('common_supplier') ?></label>
                     <select name="supplier_id" class="form-select">
-                      <option value="">— None —</option>
+                      <option value=""><?= __('common_none_option') ?></option>
                       <?php foreach ($suppliers as $s): ?>
                       <option value="<?= $s['id'] ?>" <?= $s['id']==$p['supplier_id']?'selected':'' ?>><?= htmlspecialchars($s['name']) ?></option>
                       <?php endforeach; ?>
                     </select></div>
-                  <div class="col-4 mb-3"><label class="form-label">Unit</label>
+                  <div class="col-4 mb-3"><label class="form-label"><?= __('common_unit') ?></label>
                     <select name="unit_id" class="form-select">
-                      <option value="">— None —</option>
+                      <option value=""><?= __('common_none_option') ?></option>
                       <?php foreach ($units as $u): ?>
                       <option value="<?= $u['id'] ?>" <?= $u['id']==$p['unit_id']?'selected':'' ?>><?= htmlspecialchars($u['name']) ?></option>
                       <?php endforeach; ?>
                     </select></div>
                 </div>
                 <div class="row">
-                  <div class="col-4 mb-3"><label class="form-label">Cost price</label>
+                  <div class="col-4 mb-3"><label class="form-label"><?= __('product_cost_price') ?></label>
                     <input type="number" step="0.01" name="cost_price" class="form-control" value="<?= $p['cost_price'] ?>"></div>
-                  <div class="col-4 mb-3"><label class="form-label">Sale price</label>
+                  <div class="col-4 mb-3"><label class="form-label"><?= __('product_sale_price') ?></label>
                     <input type="number" step="0.01" name="sale_price" class="form-control" value="<?= $p['sale_price'] ?>"></div>
-                  <div class="col-4 mb-3"><label class="form-label">Min stock</label>
+                  <div class="col-4 mb-3"><label class="form-label"><?= __('product_min_stock') ?></label>
                     <input type="number" name="min_stock" class="form-control" value="<?= $p['min_stock'] ?>"></div>
                 </div>
-                <div class="mb-3"><label class="form-label">Note</label>
+                <div class="mb-3"><label class="form-label"><?= __('common_note') ?></label>
                   <textarea name="note" class="form-control"><?= htmlspecialchars($p['note']) ?></textarea></div>
               </div>
               <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button class="btn btn-primary">Save</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><?= __('common_cancel') ?></button>
+                <button class="btn btn-primary"><?= __('common_save') ?></button>
               </div>
             </form>
           </div>
@@ -196,57 +196,57 @@ require_once __DIR__ . '/../includes/header.php';
       <form method="post">
         <input type="hidden" name="action" value="create">
         <div class="modal-header">
-          <h5 class="modal-title">Create product</h5>
+          <h5 class="modal-title"><?= __('product_create_title') ?></h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
           <?php if ($error): ?><div class="alert alert-danger py-2"><?= htmlspecialchars($error) ?></div><?php endif; ?>
-          <div class="mb-3"><label class="form-label">Name</label>
+          <div class="mb-3"><label class="form-label"><?= __('common_name') ?></label>
             <input type="text" name="name" class="form-control" required></div>
           <div class="row">
-            <div class="col-6 mb-3"><label class="form-label">SKU</label>
+            <div class="col-6 mb-3"><label class="form-label"><?= __('product_sku') ?></label>
               <input type="text" name="sku" class="form-control" required></div>
-            <div class="col-6 mb-3"><label class="form-label">Barcode</label>
+            <div class="col-6 mb-3"><label class="form-label"><?= __('product_barcode') ?></label>
               <input type="text" name="barcode" class="form-control"></div>
           </div>
           <div class="row">
-            <div class="col-4 mb-3"><label class="form-label">Category</label>
+            <div class="col-4 mb-3"><label class="form-label"><?= __('common_category') ?></label>
               <select name="category_id" class="form-select">
-                <option value="">— None —</option>
+                <option value=""><?= __('common_none_option') ?></option>
                 <?php foreach ($categories as $c): ?>
                 <option value="<?= $c['id'] ?>"><?= htmlspecialchars($c['name']) ?></option>
                 <?php endforeach; ?>
               </select></div>
-            <div class="col-4 mb-3"><label class="form-label">Supplier</label>
+            <div class="col-4 mb-3"><label class="form-label"><?= __('common_supplier') ?></label>
               <select name="supplier_id" class="form-select">
-                <option value="">— None —</option>
+                <option value=""><?= __('common_none_option') ?></option>
                 <?php foreach ($suppliers as $s): ?>
                 <option value="<?= $s['id'] ?>"><?= htmlspecialchars($s['name']) ?></option>
                 <?php endforeach; ?>
               </select></div>
-            <div class="col-4 mb-3"><label class="form-label">Unit</label>
+            <div class="col-4 mb-3"><label class="form-label"><?= __('common_unit') ?></label>
               <select name="unit_id" class="form-select">
-                <option value="">— None —</option>
+                <option value=""><?= __('common_none_option') ?></option>
                 <?php foreach ($units as $u): ?>
                 <option value="<?= $u['id'] ?>"><?= htmlspecialchars($u['name']) ?></option>
                 <?php endforeach; ?>
               </select></div>
           </div>
           <div class="row">
-            <div class="col-4 mb-3"><label class="form-label">Cost price</label>
+            <div class="col-4 mb-3"><label class="form-label"><?= __('product_cost_price') ?></label>
               <input type="number" step="0.01" name="cost_price" class="form-control" value="0"></div>
-            <div class="col-4 mb-3"><label class="form-label">Sale price</label>
+            <div class="col-4 mb-3"><label class="form-label"><?= __('product_sale_price') ?></label>
               <input type="number" step="0.01" name="sale_price" class="form-control" value="0"></div>
-            <div class="col-4 mb-3"><label class="form-label">Min stock</label>
+            <div class="col-4 mb-3"><label class="form-label"><?= __('product_min_stock') ?></label>
               <input type="number" name="min_stock" class="form-control" value="0"></div>
           </div>
-          <div class="mb-3"><label class="form-label">Note</label>
+          <div class="mb-3"><label class="form-label"><?= __('common_note') ?></label>
             <textarea name="note" class="form-control"></textarea></div>
-          <p class="text-secondary small mb-0">Stock starts at 0 — add quantity via Stock In.</p>
+          <p class="text-secondary small mb-0"><?= __('product_stock_hint') ?></p>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button class="btn btn-primary">Save</button>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><?= __('common_cancel') ?></button>
+          <button class="btn btn-primary"><?= __('common_save') ?></button>
         </div>
       </form>
     </div>
