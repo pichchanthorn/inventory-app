@@ -48,9 +48,13 @@ prepared statements throughout for SQL-injection safety.
 |---|---|
 | ![Stock In](screenshots/stock-in.png) | ![Stock Out](screenshots/stock-out.png) |
 
-| Stock Reports | Profile |
+| Stock Reports | Profile (Admin) |
 |---|---|
-| ![Stock Reports](screenshots/stock-report.png) | ![Profile](screenshots/profile.png) |
+| ![Stock Reports](screenshots/stock-report.png) | ![Profile](screenshots/chanthorn_admin.png) |
+
+| Profile (Staff) | User Management (Admin) |
+|---|---|
+| ![Staff Profile](screenshots/chandara_user.png) | ![User Management](screenshots/User_Administration.png) |
 
 ---
 
