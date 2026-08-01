@@ -9,6 +9,11 @@ function navClass($page, $active) {
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script>
+  if (localStorage.getItem('theme') === 'light') {
+    document.documentElement.classList.add('theme-light-pending');
+  }
+</script>
 <meta charset="UTF-8">
 <title>Inventory</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -21,6 +26,11 @@ function navClass($page, $active) {
 </style>
 </head>
 <body>
+<script>
+  if (document.documentElement.classList.contains('theme-light-pending')) {
+    document.body.classList.add('theme-light');
+  }
+</script>
 <div class="d-flex">
   <!-- SIDEBAR -->
   <nav class="sidebar p-3" style="width:230px;">
@@ -48,6 +58,9 @@ function navClass($page, $active) {
 
     <div class="sidebar-section">Account</div>
     <a class="<?= navClass('profile', $activePage) ?>" href="<?= BASE_URL ?>/profile.php"><i class="bi bi-person-circle me-2"></i>Profile</a>
+    <button type="button" class="theme-toggle-btn" onclick="toggleTheme()">
+      <i class="bi bi-circle-half"></i> <span id="themeToggleLabel">Dark</span>
+    </button>
     <a class="nav-link text-secondary" href="<?= BASE_URL ?>/auth/logout.php"><i class="bi bi-box-arrow-left me-2"></i>Sign out</a>
   </nav>
 

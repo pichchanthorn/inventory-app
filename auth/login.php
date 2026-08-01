@@ -26,12 +26,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script>
+  if (localStorage.getItem('theme') === 'light') {
+    document.documentElement.classList.add('theme-light-pending');
+  }
+</script>
 <meta charset="UTF-8">
 <title>Log in — Inventory</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="<?= BASE_URL ?>/assets/style.css">
 </head>
 <body>
+<script>
+  if (document.documentElement.classList.contains('theme-light-pending')) {
+    document.body.classList.add('theme-light');
+  }
+</script>
 <div class="auth-wrap">
   <div class="auth-left">
     <div>
