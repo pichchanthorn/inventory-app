@@ -118,6 +118,22 @@ inventory-app/
 
 ---
 
+## 🐳 Running with Docker
+
+As an alternative to the XAMPP setup above, this project also includes a
+Docker Compose setup (PHP-FPM + Nginx + MySQL) — either approach works
+independently, pick whichever you prefer.
+
+1. Make sure **Docker Desktop** is installed and running.
+2. From the project root, run `docker-up.cmd` (Windows), or run
+   `docker-compose up -d` directly from any OS.
+3. On the first run, wait a moment for MySQL to finish initializing — it
+   automatically imports `database/schema.sql` (and `database/seed.sql`
+   if present) the first time its container starts.
+4. Visit `http://localhost:9091` → **Register** an account → **Log in**.
+
+---
+
 ## 🔒 Security notes
 
 - All queries use **PDO prepared statements** — no raw string concatenation.

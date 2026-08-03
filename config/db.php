@@ -3,10 +3,10 @@
 // Database connection (PDO + prepared statements)
 // Edit these 4 values to match your own XAMPP/Laragon setup
 // ================================================
-$host    = '127.0.0.1';
-$db      = 'inventory_db';
-$user    = 'root';
-$pass    = '';        // default XAMPP password is usually empty
+$host    = getenv('DB_HOST') ?: '127.0.0.1';
+$db      = getenv('DB_DATABASE') ?: 'inventory_db';
+$user    = getenv('DB_USERNAME') ?: 'root';
+$pass    = getenv('DB_PASSWORD') ?: '';
 $charset = 'utf8mb4';
 
 $dsn = "mysql:host=$host;dbname=$db;charset=$charset";

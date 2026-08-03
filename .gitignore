@@ -1,2 +1,3 @@
 uploads/avatars/*
 !uploads/avatars/.gitkeep
+.DS_Store
