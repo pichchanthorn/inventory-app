@@ -137,3 +137,4 @@ inventory-app/
 ## 👤 Author
 
 Built by **[Pich Chan Thorn]** — BBU, Year 3 Semester 1, Advanced PHP & MySQL.
+Class: **Monday**
