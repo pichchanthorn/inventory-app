@@ -1,5 +1,7 @@
 <img src="assets/bbu-logo.png" width="70" align="right" alt="Build Bright University" />
 
+**🌐 Language:** English · [ភាសាខ្មែរ](README.km.md)
+
 # 📦 Inventory Management System
 
 **University:** Build Bright University (BBU)
