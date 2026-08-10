@@ -106,31 +106,152 @@ inventory-app/
 
 ## ⚙️ Setup & Installation
 
-1. Install **XAMPP** (or a similar Apache + MySQL + PHP stack) and start
-   **Apache** and **MySQL**.
-2. Copy the `inventory-app` folder into `C:\xampp\htdocs\`.
-3. Open `http://localhost/phpmyadmin` → **Import** → select
-   `database/schema.sql` → **Go**. This creates the `inventory_db` database
-   and all tables.
-4. *(Optional)* Import `database/seed.sql` the same way to load sample data.
-5. If your MySQL root user has a password, edit `config/db.php` and set `$pass`.
-6. Visit `http://localhost/inventory-app/` → **Register** an account → **Log in**.
+There are **two ways** to run this project. You only need to pick **one** —
+you don't need to do both. If you're not sure which one to choose, read the
+"Which one should I pick?" box below.
+
+> **Which one should I pick?**
+> - **Never touched a local server before, want the simplest path** → go with
+>   **Option 1 (XAMPP)**.
+> - **Already have Docker Desktop installed, or want a cleaner one-command
+>   setup** → go with **Option 2 (Docker)**.
 
 ---
 
-## 🐳 Running with Docker
+### 🔹 Option 1 — Run with XAMPP (easiest for beginners)
 
-As an alternative to the XAMPP setup above, this project also includes a
-Docker Compose setup (PHP-FPM + Nginx + MySQL) — either approach works
-independently, pick whichever you prefer.
+This option uses **XAMPP**, a free all-in-one package that gives you Apache
+(web server), MySQL (database), and PHP together, with a simple control
+panel — no command line needed.
 
-1. Make sure **Docker Desktop** is installed and running.
-2. From the project root, run `docker-up.cmd` (Windows), or run
-   `docker-compose up -d` directly from any OS.
-3. On the first run, wait a moment for MySQL to finish initializing — it
-   automatically imports `database/schema.sql` (and `database/seed.sql`
-   if present) the first time its container starts.
-4. Visit `http://localhost:9091` → **Register** an account → **Log in**.
+**Step 1 — Download and install XAMPP**
+
+1. Go to [https://www.apachefriends.org](https://www.apachefriends.org) and
+   download the version for your operating system (Windows/Mac/Linux).
+2. Run the installer and accept the default options. When it finishes,
+   it installs to `C:\xampp` (Windows) by default — keep that default path.
+3. Open **XAMPP Control Panel** from your Start Menu / Applications folder.
+4. Click **Start** next to both **Apache** and **MySQL**. Both rows should
+   turn green. If a row turns red instead, see the Troubleshooting section
+   below.
+
+**Step 2 — Download this project**
+
+1. On this GitHub page, click the green **Code** button → **Download ZIP**.
+2. Extract the ZIP file. You'll get a folder — rename it to `inventory-app`
+   if it isn't already named that.
+3. Move that whole `inventory-app` folder into XAMPP's `htdocs` folder:
+   - Windows: `C:\xampp\htdocs\inventory-app`
+   - Mac: `/Applications/XAMPP/htdocs/inventory-app`
+   - Linux: `/opt/lampp/htdocs/inventory-app`
+
+**Step 3 — Create the database**
+
+1. Open your browser and go to `http://localhost/phpmyadmin`.
+2. Click the **Import** tab at the top.
+3. Click **Choose File**, then select `database/schema.sql` from inside the
+   `inventory-app` folder you just copied.
+4. Scroll down and click the **Go** button. You should see a success
+   message — this creates the `inventory_db` database and all its tables.
+5. *(Optional but recommended)* Repeat the same Import steps with
+   `database/seed.sql` to load some sample categories, suppliers, and
+   products, so the app isn't completely empty when you first log in.
+
+**Step 4 — Adjust the database password (only if needed)**
+
+Most fresh XAMPP installs have **no password** on the MySQL `root` user, so
+you can usually skip this step. If phpMyAdmin asked you for a password when
+you logged in, open `config/db.php` in a text editor and change this line:
+
+```php
+$pass    = getenv('DB_PASSWORD') ?: '';   // put your MySQL password between the quotes
+```
+
+**Step 5 — Open the app**
+
+1. Go to `http://localhost/inventory-app/` in your browser.
+2. Click **Register** and create your first account.
+3. Log in with that account and start exploring.
+
+> **Note:** the very first account you register through the public
+> **Register** page is a regular **User**, not an **Admin**. To unlock
+> Admin-only features (like the Users page), open phpMyAdmin, go to the
+> `users` table, find your row, and change `role_id` to `1` (Admin).
+
+**XAMPP Troubleshooting**
+
+| Problem | Likely cause & fix |
+|---|---|
+| Apache row turns red / won't start | Something else on your computer (often Skype, IIS, or another web server) is already using port 80. Close it, or change Apache's port in XAMPP's config. |
+| MySQL row turns red / won't start | Another MySQL/MariaDB service (e.g. from Laragon or WAMP) is already running. Stop that other service first, then start XAMPP's MySQL. |
+| Page shows "Database connection failed" | MySQL isn't running — go back to XAMPP Control Panel and check it's green. |
+| Blank white page | Open XAMPP Control Panel → Apache row → **Logs** → **PHP error log**, to see the actual error message. |
+
+---
+
+### 🔹 Option 2 — Run with Docker (fastest, no XAMPP install)
+
+This option uses **Docker**, which packages the web server, PHP, and MySQL
+into ready-made containers, so you don't install or configure any of them
+by hand — one command starts everything.
+
+**Step 1 — Install Docker Desktop**
+
+1. Go to [https://www.docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop)
+   and download it for your operating system.
+2. Install it, then open **Docker Desktop** and wait until it says it's
+   running (the whale icon in your system tray/menu bar should be steady,
+   not animating).
+
+**Step 2 — Download this project**
+
+1. On this GitHub page, click the green **Code** button → **Download ZIP**.
+2. Extract the ZIP anywhere you like (it does **not** need to go inside
+   XAMPP's `htdocs` for this option — Docker doesn't use XAMPP at all).
+
+**Step 3 — Start the app**
+
+- **Windows:** open the extracted `inventory-app` folder and double-click
+  `docker-up.cmd`. A black terminal window will open and do everything for
+  you — just wait for it to finish.
+- **Mac / Linux:** open a terminal, `cd` into the `inventory-app` folder,
+  and run:
+  ```
+  docker-compose up -d
+  ```
+
+The first time you run this, Docker needs to download some images and set
+up the database, so it can take a minute or two. Every time after that, it
+starts in just a few seconds.
+
+**Step 4 — Open the app**
+
+1. Go to `http://localhost:9091` in your browser.
+2. Click **Register** and create your first account.
+3. Log in with that account and start exploring.
+
+> **Note:** just like with XAMPP, the first account you register is a
+> regular **User**. To make yourself an Admin, you'll need a MySQL client
+> (like phpMyAdmin, TablePlus, or DBeaver) connected to `127.0.0.1:3307`
+> (see `docker-compose.yml`), user `root`, password `1234` — then update
+> `role_id` to `1` in the `users` table. If you have `database/seed.sql`
+> in the project, it may already include a ready-made Admin account —
+> check that file first before doing this manually.
+
+**Stopping / restarting Docker**
+
+- To stop the app: run `docker-compose down` from the project folder.
+- To start it again later: run `docker-compose up -d` (or `docker-up.cmd`
+  on Windows) again — your data is kept between restarts.
+
+**Docker Troubleshooting**
+
+| Problem | Likely cause & fix |
+|---|---|
+| `http://localhost:9091` doesn't load | Docker Desktop isn't running, or the containers haven't finished starting — check Docker Desktop's dashboard for a red/error status. |
+| "Port is already allocated" error | Something else on your computer is already using port `9091` or `3307`. Close that other program, or edit the port numbers in `docker-compose.yml`. |
+| Site loads but shows a database error | MySQL was still initializing when you opened the page — wait 20–30 seconds and refresh. |
+| Changes to `.php` files don't show up | Make sure you edited the files inside the same folder you ran `docker-compose up -d` from — the container mounts that folder directly. |
 
 ---
 
