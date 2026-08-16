@@ -30,7 +30,7 @@ h1,h2,h3,h4,h5{ font-family:'Rajdhani',sans-serif; font-weight:700; color:#fff; 
 .sidebar .nav-link.active{ background:var(--panel-alt) !important; color:var(--accent) !important; border-left-color:var(--accent); }
 
 /* buttons */
-.btn-primary{ background:var(--accent) !important; border-color:var(--accent) !important; color:#03181C !important; font-weight:600; }
+.btn-primary{ background:var(--accent) !important; border-color:var(--accent) !important; color:#03181C !important; font-weight:600; transition:filter .15s ease; }
 .btn-primary:hover{ filter:brightness(1.1); }
 .btn-outline-primary{ color:var(--accent) !important; border-color:var(--accent) !important; }
 .btn-outline-primary:hover{ background:var(--accent) !important; color:#03181C !important; }
@@ -45,12 +45,21 @@ label.form-label{ font-family:'JetBrains Mono',monospace; font-size:.72rem; lett
 
 /* cards + tables */
 .card{ background:var(--panel) !important; border:1px solid var(--line) !important; border-radius:8px !important; box-shadow:none !important; color:#E7EDF3; }
-table{ color:#D6DEE7 !important; }
+/* Bootstrap 5.3 sets --bs-table-bg: var(--bs-body-bg) on .table, and every
+   td/th paints background-color: var(--bs-table-bg) — since this app never
+   defines --bs-body-bg or data-bs-theme, that resolves to Bootstrap's
+   default white and paints every cell solid white regardless of theme.
+   Force it transparent so cells show the surrounding .card's panel color. */
+/* Bootstrap also paints cell text via color:var(--bs-table-color), which
+   defaults to --bs-emphasis-color (#000) with no dark theme declared — that
+   rule targets td/th directly so it silently wins over inherited color even
+   with !important here, unless the variable itself is forced too. */
+table{ color:#D6DEE7 !important; --bs-table-bg:transparent !important; --bs-table-color:#D6DEE7 !important; }
 table thead.table-light th{
   background:var(--panel) !important; text-transform:uppercase; letter-spacing:.06em; font-family:'JetBrains Mono',monospace;
   font-size:.68rem; color:var(--muted) !important; border-bottom:1px solid var(--line) !important; font-weight:500;
 }
-table tbody tr{ border-color:var(--line) !important; }
+table tbody tr{ border-color:var(--line) !important; transition:background-color .12s ease; }
 table tbody tr:hover{ background:var(--panel-alt) !important; }
 table td, table th{ border-color:var(--line) !important; }
 .slug-pill{ font-family:'JetBrains Mono',monospace; font-size:.76rem; background:var(--bg); border:1px solid var(--line); color:var(--accent); padding:3px 8px; border-radius:3px; }
@@ -77,6 +86,12 @@ table td, table th{ border-color:var(--line) !important; }
 .badge-stock{ font-family:'JetBrains Mono',monospace; font-size:.76rem; padding:2px 8px; border-radius:3px; font-weight:500; border:1px solid; display:inline-block; }
 .badge-normal{ background:var(--good-tint); color:var(--good); border-color:var(--good); }
 .badge-low{ background:var(--danger-tint); color:var(--danger); border-color:var(--danger); }
+
+/* role badges (user list + profile) - same tinted recipe as badge-stock */
+.badge-role{ font-family:'JetBrains Mono',monospace; font-size:.76rem; padding:2px 8px; border-radius:3px; font-weight:500; border:1px solid; display:inline-block; }
+.badge-role-admin{ background:var(--accent-tint); color:var(--accent); border-color:var(--accent); }
+.badge-role-user{ background:var(--good-tint); color:var(--good); border-color:var(--good); }
+.badge-role-viewer{ background:var(--panel-alt); color:var(--muted); border-color:var(--line); }
 
 /* profile page */
 .profile-avatar{
@@ -113,6 +128,10 @@ body.theme-light .modal-content,
 body.theme-light .card,
 body.theme-light table,
 body.theme-light .form-check-label { color: #0B1220 !important; }
+/* --bs-table-color is read directly by Bootstrap's per-cell rule, so the
+   plain `color` override above doesn't reach td/th text — override the
+   variable itself too, same as the dark-mode fix in the base table{} rule. */
+body.theme-light table { --bs-table-color:#0B1220 !important; }
 body.theme-light .form-control,
 body.theme-light .form-select { color: #0B1220 !important; }
 body.theme-light .form-control::placeholder { color: #8792A0; }

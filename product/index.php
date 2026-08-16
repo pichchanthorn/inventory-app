@@ -91,7 +91,7 @@ require_once __DIR__ . '/../includes/header.php';
     </thead>
     <tbody>
       <?php if (!$products): ?>
-        <tr><td colspan="9" class="text-center text-secondary py-4"><?= __('product_empty') ?></td></tr>
+        <tr><td colspan="9" class="text-center text-secondary py-4"><i class="bi bi-inbox fs-3 d-block mb-2"></i><?= __('product_empty') ?></td></tr>
       <?php endif; ?>
       <?php foreach ($products as $i => $p):
         $margin = $p['sale_price'] > 0 ? round((($p['sale_price'] - $p['cost_price']) / $p['sale_price']) * 100) : 0;

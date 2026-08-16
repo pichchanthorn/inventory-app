@@ -66,7 +66,7 @@ require_once __DIR__ . '/../includes/header.php';
     </thead>
     <tbody>
       <?php if (!$units): ?>
-        <tr><td colspan="4" class="text-center text-secondary py-4"><?= __('unit_empty') ?></td></tr>
+        <tr><td colspan="4" class="text-center text-secondary py-4"><i class="bi bi-inbox fs-3 d-block mb-2"></i><?= __('unit_empty') ?></td></tr>
       <?php endif; ?>
       <?php foreach ($units as $i => $u): ?>
       <tr>

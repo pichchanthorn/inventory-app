@@ -75,7 +75,7 @@ require_once __DIR__ . '/../includes/header.php';
     </thead>
     <tbody>
       <?php if (!$categories): ?>
-        <tr><td colspan="5" class="text-center text-secondary py-4"><?= __('category_empty') ?></td></tr>
+        <tr><td colspan="5" class="text-center text-secondary py-4"><i class="bi bi-inbox fs-3 d-block mb-2"></i><?= __('category_empty') ?></td></tr>
       <?php endif; ?>
       <?php foreach ($categories as $i => $cat): ?>
       <tr>

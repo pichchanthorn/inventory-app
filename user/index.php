@@ -61,6 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'update_role')
 
 $roles = $pdo->query('SELECT * FROM roles ORDER BY id')->fetchAll();
 $roleLabels = ['Admin' => __('role_admin'), 'User' => __('role_user'), 'Viewer' => __('role_viewer')];
+$roleBadgeClass = ['Admin' => 'badge-role-admin', 'User' => 'badge-role-user', 'Viewer' => 'badge-role-viewer'];
 
 $search = trim($_GET['q'] ?? '');
 $sql = 'SELECT users.*, roles.name AS role_name
@@ -107,14 +108,14 @@ require_once __DIR__ . '/../includes/header.php';
     </thead>
     <tbody>
       <?php if (!$users): ?>
-        <tr><td colspan="5" class="text-center text-secondary py-4"><?= __('user_empty') ?></td></tr>
+        <tr><td colspan="5" class="text-center text-secondary py-4"><i class="bi bi-inbox fs-3 d-block mb-2"></i><?= __('user_empty') ?></td></tr>
       <?php endif; ?>
       <?php foreach ($users as $i => $u): ?>
       <tr>
         <td><?= $i + 1 ?></td>
         <td><?= htmlspecialchars($u['name']) ?></td>
         <td><?= htmlspecialchars($u['email']) ?></td>
-        <td><span class="slug-pill"><?= htmlspecialchars($roleLabels[$u['role_name']] ?? $u['role_name']) ?></span></td>
+        <td><span class="badge-role <?= $roleBadgeClass[$u['role_name']] ?? 'badge-role-viewer' ?>"><?= htmlspecialchars($roleLabels[$u['role_name']] ?? $u['role_name']) ?></span></td>
         <td>
           <?php if ($u['id'] === (int) $_SESSION['user_id']): ?>
             <span class="text-secondary small"><?= __('user_this_is_you') ?></span>

@@ -105,7 +105,7 @@ require_once __DIR__ . '/../includes/header.php';
   <div class="col-lg-4">
     <div class="card p-3">
       <div class="bracket-label mb-3" style="color:var(--danger);"><?= __('stockout_recent_title') ?></div>
-      <?php if (!$recent): ?><p class="text-secondary small"><?= __('common_no_transactions') ?></p><?php endif; ?>
+      <?php if (!$recent): ?><p class="text-secondary small text-center py-3"><i class="bi bi-inbox fs-4 d-block mb-2"></i><?= __('common_no_transactions') ?></p><?php endif; ?>
       <?php foreach ($recent as $t): ?>
         <div class="border-bottom pb-2 mb-2">
           <div class="d-flex justify-content-between small">

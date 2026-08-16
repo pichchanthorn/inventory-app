@@ -67,7 +67,7 @@ require_once __DIR__ . '/../includes/header.php';
     </thead>
     <tbody>
       <?php if (!$suppliers): ?>
-        <tr><td colspan="7" class="text-center text-secondary py-4"><?= __('supplier_empty') ?></td></tr>
+        <tr><td colspan="7" class="text-center text-secondary py-4"><i class="bi bi-inbox fs-3 d-block mb-2"></i><?= __('supplier_empty') ?></td></tr>
       <?php endif; ?>
       <?php foreach ($suppliers as $i => $s): ?>
       <tr>

@@ -72,7 +72,7 @@ require_once __DIR__ . '/../includes/header.php';
     <table class="table mb-0 align-middle">
       <thead class="table-light"><tr><th><?= __('common_reference') ?></th><th><?= __('common_date') ?></th><th><?= __('common_type') ?></th><th><?= __('stockreport_col_products') ?></th><th><?= __('stockreport_col_units') ?></th><th><?= __('common_value') ?></th><th><?= __('common_note') ?></th></tr></thead>
       <tbody>
-        <?php if (!$rows): ?><tr><td colspan="7" class="text-center text-secondary py-4"><?= __('common_no_transactions') ?></td></tr><?php endif; ?>
+        <?php if (!$rows): ?><tr><td colspan="7" class="text-center text-secondary py-4"><i class="bi bi-inbox fs-3 d-block mb-2"></i><?= __('common_no_transactions') ?></td></tr><?php endif; ?>
         <?php foreach ($rows as $r): ?>
         <tr>
           <td class="mono text-primary"><?= htmlspecialchars($r['reference']) ?></td>
@@ -95,7 +95,7 @@ require_once __DIR__ . '/../includes/header.php';
     <table class="table mb-0 align-middle">
       <thead class="table-light"><tr><th><?= __('common_product') ?></th><th><?= __('common_category') ?></th><th><?= __('stockreport_col_current_stock') ?></th><th><?= __('stockreport_col_level') ?></th></tr></thead>
       <tbody>
-        <?php if (!$rows): ?><tr><td colspan="4" class="text-center text-secondary py-4"><?= __('product_empty') ?></td></tr><?php endif; ?>
+        <?php if (!$rows): ?><tr><td colspan="4" class="text-center text-secondary py-4"><i class="bi bi-inbox fs-3 d-block mb-2"></i><?= __('product_empty') ?></td></tr><?php endif; ?>
         <?php foreach ($rows as $p): $low = $p['current_stock'] <= $p['min_stock']; ?>
         <tr>
           <td class="fw-semibold"><?= htmlspecialchars($p['name']) ?></td>
