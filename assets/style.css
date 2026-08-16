@@ -25,6 +25,10 @@ h1,h2,h3,h4,h5{ font-family:'Rajdhani','Kantumruy Pro',sans-serif; font-weight:7
 .sidebar{ background:var(--panel) !important; border-right:1px solid var(--line) !important; }
 .sidebar .fs-5{ color:#fff; }
 .sidebar-section{ color:#3E4C5E !important; font-family:'JetBrains Mono','Kantumruy Pro',monospace; font-size:.64rem; letter-spacing:.1em; }
+/* Khmer script needs more size/contrast than the compact Latin eyebrow style
+   to stay legible — subscript consonants and diacritics get lost at .64rem
+   with dim color and wide tracking. Bump both for lang=km only. */
+body[lang="km"] .sidebar-section{ font-size:.74rem; color:var(--muted) !important; letter-spacing:.02em; }
 .sidebar .nav-link{ color:#8B9AAE !important; font-family:'JetBrains Mono','Kantumruy Pro',monospace; font-size:.78rem; text-transform:uppercase; letter-spacing:.03em; border-left:2px solid transparent; border-radius:0; }
 .sidebar .nav-link:hover{ background:var(--panel-alt); color:#fff !important; }
 .sidebar .nav-link.active{ background:var(--panel-alt) !important; color:var(--accent) !important; border-left-color:var(--accent); }
