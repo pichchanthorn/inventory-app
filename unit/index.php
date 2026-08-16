@@ -6,26 +6,34 @@ $activePage = 'unit';
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'create') {
-    $name = trim($_POST['name']);
-    $note = trim($_POST['note']);
-    if ($name === '') {
-        $error = __('common_err_name_required');
+    if (!canWrite()) {
+        $error = __('common_err_forbidden');
     } else {
-        $stmt = $pdo->prepare('INSERT INTO units (name, note) VALUES (?, ?)');
-        $stmt->execute([$name, $note]);
-        header('Location: ' . BASE_URL . '/unit/index.php');
-        exit;
+        $name = trim($_POST['name']);
+        $note = trim($_POST['note']);
+        if ($name === '') {
+            $error = __('common_err_name_required');
+        } else {
+            $stmt = $pdo->prepare('INSERT INTO units (name, note) VALUES (?, ?)');
+            $stmt->execute([$name, $note]);
+            header('Location: ' . BASE_URL . '/unit/index.php');
+            exit;
+        }
     }
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'update') {
-    $id   = (int) $_POST['id'];
-    $name = trim($_POST['name']);
-    $note = trim($_POST['note']);
-    $stmt = $pdo->prepare('UPDATE units SET name = ?, note = ? WHERE id = ?');
-    $stmt->execute([$name, $note, $id]);
-    header('Location: ' . BASE_URL . '/unit/index.php');
-    exit;
+    if (!canWrite()) {
+        $error = __('common_err_forbidden');
+    } else {
+        $id   = (int) $_POST['id'];
+        $name = trim($_POST['name']);
+        $note = trim($_POST['note']);
+        $stmt = $pdo->prepare('UPDATE units SET name = ?, note = ? WHERE id = ?');
+        $stmt->execute([$name, $note, $id]);
+        header('Location: ' . BASE_URL . '/unit/index.php');
+        exit;
+    }
 }
 
 if (isset($_GET['delete']) && isAdmin()) {
@@ -49,9 +57,11 @@ require_once __DIR__ . '/../includes/header.php';
 
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h4 class="mb-0"><?= __('unit_title') ?></h4>
+  <?php if (canWrite()): ?>
   <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createModal">
     <i class="bi bi-plus-lg"></i> <?= __('common_add') ?>
   </button>
+  <?php endif; ?>
 </div>
 
 <form class="mb-3" method="get">
@@ -74,10 +84,12 @@ require_once __DIR__ . '/../includes/header.php';
         <td><?= htmlspecialchars($u['name']) ?></td>
         <td><?= htmlspecialchars($u['note']) ?></td>
         <td class="text-end">
+          <?php if (canWrite()): ?>
           <button class="btn btn-sm btn-outline-primary"
                   data-bs-toggle="modal" data-bs-target="#editModal<?= $u['id'] ?>">
             <i class="bi bi-pencil"></i>
           </button>
+          <?php endif; ?>
           <?php if (isAdmin()): ?>
           <a class="btn btn-sm btn-outline-danger"
              href="?delete=<?= $u['id'] ?>"

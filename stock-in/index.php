@@ -10,40 +10,44 @@ $suppliers = $pdo->query('SELECT * FROM suppliers ORDER BY name')->fetchAll();
 $products  = $pdo->query('SELECT * FROM products ORDER BY name')->fetchAll();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $supplierId = $_POST['supplier_id'] !== '' ? (int) $_POST['supplier_id'] : null;
-    $date = $_POST['transaction_date'];
-    $note = trim($_POST['note']);
-    $productIds = $_POST['product_id'] ?? [];
-    $qtys = $_POST['qty'] ?? [];
-    $costs = $_POST['unit_cost'] ?? [];
-
-    $lines = [];
-    foreach ($productIds as $i => $pid) {
-        if ($pid !== '' && (float) $qtys[$i] > 0) {
-            $lines[] = ['product_id' => (int) $pid, 'qty' => (float) $qtys[$i], 'cost' => (float) $costs[$i]];
-        }
-    }
-
-    if (!$lines) {
-        $error = __('stockin_err_add_product');
+    if (!canWrite()) {
+        $error = __('common_err_forbidden');
     } else {
-        $pdo->beginTransaction();
-        $reference = 'STI-' . str_pad((string) ($pdo->query('SELECT COUNT(*) FROM stock_transactions')->fetchColumn() + 1), 6, '0', STR_PAD_LEFT);
+        $supplierId = $_POST['supplier_id'] !== '' ? (int) $_POST['supplier_id'] : null;
+        $date = $_POST['transaction_date'];
+        $note = trim($_POST['note']);
+        $productIds = $_POST['product_id'] ?? [];
+        $qtys = $_POST['qty'] ?? [];
+        $costs = $_POST['unit_cost'] ?? [];
 
-        $stmt = $pdo->prepare('INSERT INTO stock_transactions (reference, type, transaction_date, note, supplier_id, user_id) VALUES (?,?,?,?,?,?)');
-        $stmt->execute([$reference, 'in', $date, $note, $supplierId, $_SESSION['user_id']]);
-        $txId = $pdo->lastInsertId();
-
-        foreach ($lines as $line) {
-            $subtotal = $line['qty'] * $line['cost'];
-            $stmt = $pdo->prepare('INSERT INTO stock_transaction_items (transaction_id, product_id, qty, unit_price, subtotal) VALUES (?,?,?,?,?)');
-            $stmt->execute([$txId, $line['product_id'], $line['qty'], $line['cost'], $subtotal]);
-
-            $stmt = $pdo->prepare('UPDATE products SET current_stock = current_stock + ? WHERE id = ?');
-            $stmt->execute([$line['qty'], $line['product_id']]);
+        $lines = [];
+        foreach ($productIds as $i => $pid) {
+            if ($pid !== '' && (float) $qtys[$i] > 0) {
+                $lines[] = ['product_id' => (int) $pid, 'qty' => (float) $qtys[$i], 'cost' => (float) $costs[$i]];
+            }
         }
-        $pdo->commit();
-        $success = __('stockin_recorded_prefix') . " $reference " . __('stockin_recorded_suffix');
+
+        if (!$lines) {
+            $error = __('stockin_err_add_product');
+        } else {
+            $pdo->beginTransaction();
+            $reference = 'STI-' . str_pad((string) ($pdo->query('SELECT COUNT(*) FROM stock_transactions')->fetchColumn() + 1), 6, '0', STR_PAD_LEFT);
+
+            $stmt = $pdo->prepare('INSERT INTO stock_transactions (reference, type, transaction_date, note, supplier_id, user_id) VALUES (?,?,?,?,?,?)');
+            $stmt->execute([$reference, 'in', $date, $note, $supplierId, $_SESSION['user_id']]);
+            $txId = $pdo->lastInsertId();
+
+            foreach ($lines as $line) {
+                $subtotal = $line['qty'] * $line['cost'];
+                $stmt = $pdo->prepare('INSERT INTO stock_transaction_items (transaction_id, product_id, qty, unit_price, subtotal) VALUES (?,?,?,?,?)');
+                $stmt->execute([$txId, $line['product_id'], $line['qty'], $line['cost'], $subtotal]);
+
+                $stmt = $pdo->prepare('UPDATE products SET current_stock = current_stock + ? WHERE id = ?');
+                $stmt->execute([$line['qty'], $line['product_id']]);
+            }
+            $pdo->commit();
+            $success = __('stockin_recorded_prefix') . " $reference " . __('stockin_recorded_suffix');
+        }
     }
 }
 

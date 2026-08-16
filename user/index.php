@@ -59,6 +59,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'update_role')
     }
 }
 
+// ---------- RESET PASSWORD (Admin sets a new temp password for an existing user) ----------
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'reset_password') {
+    $id          = (int) $_POST['id'];
+    $newPassword = $_POST['new_password'];
+    $mustChange  = isset($_POST['must_change_password']) ? 1 : 0;
+
+    if ($id === (int) $_SESSION['user_id']) {
+        $error = __('user_err_self_reset');
+    } elseif (strlen($newPassword) < 6) {
+        $error = __('user_err_password_short');
+    } else {
+        $stmt = $pdo->prepare('SELECT name, email FROM users WHERE id = ?');
+        $stmt->execute([$id]);
+        $target = $stmt->fetch();
+
+        if ($target) {
+            $hashed = password_hash($newPassword, PASSWORD_DEFAULT);
+            $stmt = $pdo->prepare('UPDATE users SET password = ?, must_change_password = ? WHERE id = ?');
+            $stmt->execute([$hashed, $mustChange, $id]);
+
+            // Same one-time flash pattern as account creation — plaintext
+            // password is shown once so the Admin can copy it, never stored.
+            $_SESSION['password_reset_credentials'] = ['name' => $target['name'], 'email' => $target['email'], 'password' => $newPassword];
+            header('Location: ' . BASE_URL . '/user/index.php');
+            exit;
+        }
+    }
+}
+
+$passwordResetCredentials = $_SESSION['password_reset_credentials'] ?? null;
+unset($_SESSION['password_reset_credentials']);
+
 $roles = $pdo->query('SELECT * FROM roles ORDER BY id')->fetchAll();
 $roleLabels = ['Admin' => __('role_admin'), 'User' => __('role_user'), 'Viewer' => __('role_viewer')];
 $roleBadgeClass = ['Admin' => 'badge-role-admin', 'User' => 'badge-role-user', 'Viewer' => 'badge-role-viewer'];
@@ -96,6 +128,17 @@ require_once __DIR__ . '/../includes/header.php';
   </div>
 <?php endif; ?>
 
+<?php if ($passwordResetCredentials): ?>
+  <div class="alert alert-success">
+    <div class="fw-semibold mb-2"><?= __('user_password_reset_banner_title') ?></div>
+    <div class="mono" style="font-size:.85rem;">
+      <?= __('common_name') ?>:&nbsp;<?= htmlspecialchars($passwordResetCredentials['name']) ?><br>
+      <?= __('common_email') ?>:&nbsp;<?= htmlspecialchars($passwordResetCredentials['email']) ?><br>
+      <?= __('user_temp_password_display') ?>&nbsp;<strong><?= htmlspecialchars($passwordResetCredentials['password']) ?></strong>
+    </div>
+  </div>
+<?php endif; ?>
+
 <form class="mb-3" method="get">
   <input type="text" name="q" class="form-control" style="max-width:300px"
          placeholder="<?= __('user_search_placeholder') ?>" value="<?= htmlspecialchars($search) ?>">
@@ -104,11 +147,11 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="card">
   <table class="table mb-0 align-middle">
     <thead class="table-light">
-      <tr><th>#</th><th><?= __('common_name') ?></th><th><?= __('common_email') ?></th><th><?= __('user_col_role') ?></th><th style="width:260px;"><?= __('user_col_change_role') ?></th></tr>
+      <tr><th>#</th><th><?= __('common_name') ?></th><th><?= __('common_email') ?></th><th><?= __('user_col_role') ?></th><th style="width:260px;"><?= __('user_col_change_role') ?></th><th style="width:170px;"><?= __('common_actions') ?></th></tr>
     </thead>
     <tbody>
       <?php if (!$users): ?>
-        <tr><td colspan="5" class="text-center text-secondary py-4"><i class="bi bi-inbox fs-3 d-block mb-2"></i><?= __('user_empty') ?></td></tr>
+        <tr><td colspan="6" class="text-center text-secondary py-4"><i class="bi bi-inbox fs-3 d-block mb-2"></i><?= __('user_empty') ?></td></tr>
       <?php endif; ?>
       <?php foreach ($users as $i => $u): ?>
       <tr>
@@ -132,7 +175,47 @@ require_once __DIR__ . '/../includes/header.php';
             </form>
           <?php endif; ?>
         </td>
+        <td>
+          <?php if ($u['id'] !== (int) $_SESSION['user_id']): ?>
+            <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#resetPwModal<?= $u['id'] ?>">
+              <i class="bi bi-key"></i> <?= __('user_reset_password_button') ?>
+            </button>
+          <?php endif; ?>
+        </td>
       </tr>
+
+      <!-- Reset password modal for this user -->
+      <?php if ($u['id'] !== (int) $_SESSION['user_id']): ?>
+      <div class="modal fade" id="resetPwModal<?= $u['id'] ?>" tabindex="-1">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <form method="post">
+              <input type="hidden" name="action" value="reset_password">
+              <input type="hidden" name="id" value="<?= $u['id'] ?>">
+              <div class="modal-header">
+                <h5 class="modal-title"><?= __('user_reset_password_modal_title') ?> — <?= htmlspecialchars($u['name']) ?></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+              </div>
+              <div class="modal-body">
+                <div class="mb-3">
+                  <label class="form-label"><?= __('user_temp_password_label') ?></label>
+                  <input type="text" name="new_password" class="form-control" required minlength="6">
+                  <div style="font-size:.72rem; color:var(--muted); margin-top:6px;"><?= __('user_temp_password_hint') ?></div>
+                </div>
+                <div class="form-check">
+                  <input type="checkbox" class="form-check-input" name="must_change_password" id="resetMustChange<?= $u['id'] ?>" checked>
+                  <label class="form-check-label" for="resetMustChange<?= $u['id'] ?>"><?= __('user_force_reset_label') ?></label>
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><?= __('common_cancel') ?></button>
+                <button class="btn btn-primary"><?= __('user_reset_password_submit') ?></button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      <?php endif; ?>
       <?php endforeach; ?>
     </tbody>
   </table>

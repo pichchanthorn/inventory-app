@@ -22,3 +22,13 @@ if (!empty($_SESSION['must_change_password']) && basename($_SERVER['SCRIPT_NAME'
 function isAdmin() {
     return ($_SESSION['role_id'] ?? null) == 1;
 }
+
+function isViewer() {
+    return ($_SESSION['role_id'] ?? null) == 3;
+}
+
+// Viewers get read-only access everywhere — every create/update action
+// should check this before touching the database.
+function canWrite() {
+    return !isViewer();
+}

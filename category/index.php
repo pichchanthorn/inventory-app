@@ -7,31 +7,39 @@ $error = '';
 
 // ---------- CREATE ----------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'create') {
-    $name = trim($_POST['name']);
-    $slug = trim($_POST['slug']);
-    $note = trim($_POST['note']);
-
-    if ($name === '' || $slug === '') {
-        $error = __('category_err_required');
+    if (!canWrite()) {
+        $error = __('common_err_forbidden');
     } else {
-        $stmt = $pdo->prepare('INSERT INTO categories (name, slug, note) VALUES (?, ?, ?)');
-        $stmt->execute([$name, $slug, $note]);
-        header('Location: ' . BASE_URL . '/category/index.php');
-        exit;
+        $name = trim($_POST['name']);
+        $slug = trim($_POST['slug']);
+        $note = trim($_POST['note']);
+
+        if ($name === '' || $slug === '') {
+            $error = __('category_err_required');
+        } else {
+            $stmt = $pdo->prepare('INSERT INTO categories (name, slug, note) VALUES (?, ?, ?)');
+            $stmt->execute([$name, $slug, $note]);
+            header('Location: ' . BASE_URL . '/category/index.php');
+            exit;
+        }
     }
 }
 
 // ---------- UPDATE ----------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'update') {
-    $id   = (int) $_POST['id'];
-    $name = trim($_POST['name']);
-    $slug = trim($_POST['slug']);
-    $note = trim($_POST['note']);
+    if (!canWrite()) {
+        $error = __('common_err_forbidden');
+    } else {
+        $id   = (int) $_POST['id'];
+        $name = trim($_POST['name']);
+        $slug = trim($_POST['slug']);
+        $note = trim($_POST['note']);
 
-    $stmt = $pdo->prepare('UPDATE categories SET name = ?, slug = ?, note = ? WHERE id = ?');
-    $stmt->execute([$name, $slug, $note, $id]);
-    header('Location: ' . BASE_URL . '/category/index.php');
-    exit;
+        $stmt = $pdo->prepare('UPDATE categories SET name = ?, slug = ?, note = ? WHERE id = ?');
+        $stmt->execute([$name, $slug, $note, $id]);
+        header('Location: ' . BASE_URL . '/category/index.php');
+        exit;
+    }
 }
 
 // ---------- DELETE (Admin only) ----------
@@ -58,9 +66,11 @@ require_once __DIR__ . '/../includes/header.php';
 
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h4 class="mb-0"><?= __('category_title') ?></h4>
+  <?php if (canWrite()): ?>
   <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createModal">
     <i class="bi bi-plus-lg"></i> <?= __('common_add') ?>
   </button>
+  <?php endif; ?>
 </div>
 
 <form class="mb-3" method="get">
@@ -84,10 +94,12 @@ require_once __DIR__ . '/../includes/header.php';
         <td><span class="slug-pill"><?= htmlspecialchars($cat['slug']) ?></span></td>
         <td><?= htmlspecialchars($cat['note']) ?></td>
         <td class="text-end">
+          <?php if (canWrite()): ?>
           <button class="btn btn-sm btn-outline-primary"
                   data-bs-toggle="modal" data-bs-target="#editModal<?= $cat['id'] ?>">
             <i class="bi bi-pencil"></i>
           </button>
+          <?php endif; ?>
           <?php if (isAdmin()): ?>
           <a class="btn btn-sm btn-outline-danger"
              href="?delete=<?= $cat['id'] ?>"

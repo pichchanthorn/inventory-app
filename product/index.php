@@ -12,43 +12,51 @@ $units      = $pdo->query('SELECT * FROM units ORDER BY name')->fetchAll();
 function nullableInt($v) { return $v === '' ? null : (int) $v; }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'create') {
-    $name = trim($_POST['name']);
-    $sku  = trim($_POST['sku']);
-    if ($name === '' || $sku === '') {
-        $error = __('product_err_required');
+    if (!canWrite()) {
+        $error = __('common_err_forbidden');
     } else {
-        $stmt = $pdo->prepare('SELECT id FROM products WHERE sku = ?');
-        $stmt->execute([$sku]);
-        if ($stmt->fetch()) {
-            $error = __('product_err_sku_exists');
+        $name = trim($_POST['name']);
+        $sku  = trim($_POST['sku']);
+        if ($name === '' || $sku === '') {
+            $error = __('product_err_required');
         } else {
-            $stmt = $pdo->prepare('INSERT INTO products
-                (name, sku, barcode, category_id, supplier_id, unit_id, note, cost_price, sale_price, min_stock, current_stock)
-                VALUES (?,?,?,?,?,?,?,?,?,?,0)');
-            $stmt->execute([
-                $name, $sku, trim($_POST['barcode']),
-                nullableInt($_POST['category_id']), nullableInt($_POST['supplier_id']), nullableInt($_POST['unit_id']),
-                trim($_POST['note']), (float) $_POST['cost_price'], (float) $_POST['sale_price'], (int) $_POST['min_stock'],
-            ]);
-            header('Location: ' . BASE_URL . '/product/index.php');
-            exit;
+            $stmt = $pdo->prepare('SELECT id FROM products WHERE sku = ?');
+            $stmt->execute([$sku]);
+            if ($stmt->fetch()) {
+                $error = __('product_err_sku_exists');
+            } else {
+                $stmt = $pdo->prepare('INSERT INTO products
+                    (name, sku, barcode, category_id, supplier_id, unit_id, note, cost_price, sale_price, min_stock, current_stock)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,0)');
+                $stmt->execute([
+                    $name, $sku, trim($_POST['barcode']),
+                    nullableInt($_POST['category_id']), nullableInt($_POST['supplier_id']), nullableInt($_POST['unit_id']),
+                    trim($_POST['note']), (float) $_POST['cost_price'], (float) $_POST['sale_price'], (int) $_POST['min_stock'],
+                ]);
+                header('Location: ' . BASE_URL . '/product/index.php');
+                exit;
+            }
         }
     }
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'update') {
-    $id = (int) $_POST['id'];
-    $stmt = $pdo->prepare('UPDATE products SET
-        name=?, sku=?, barcode=?, category_id=?, supplier_id=?, unit_id=?, note=?, cost_price=?, sale_price=?, min_stock=?
-        WHERE id=?');
-    $stmt->execute([
-        trim($_POST['name']), trim($_POST['sku']), trim($_POST['barcode']),
-        nullableInt($_POST['category_id']), nullableInt($_POST['supplier_id']), nullableInt($_POST['unit_id']),
-        trim($_POST['note']), (float) $_POST['cost_price'], (float) $_POST['sale_price'], (int) $_POST['min_stock'],
-        $id,
-    ]);
-    header('Location: ' . BASE_URL . '/product/index.php');
-    exit;
+    if (!canWrite()) {
+        $error = __('common_err_forbidden');
+    } else {
+        $id = (int) $_POST['id'];
+        $stmt = $pdo->prepare('UPDATE products SET
+            name=?, sku=?, barcode=?, category_id=?, supplier_id=?, unit_id=?, note=?, cost_price=?, sale_price=?, min_stock=?
+            WHERE id=?');
+        $stmt->execute([
+            trim($_POST['name']), trim($_POST['sku']), trim($_POST['barcode']),
+            nullableInt($_POST['category_id']), nullableInt($_POST['supplier_id']), nullableInt($_POST['unit_id']),
+            trim($_POST['note']), (float) $_POST['cost_price'], (float) $_POST['sale_price'], (int) $_POST['min_stock'],
+            $id,
+        ]);
+        header('Location: ' . BASE_URL . '/product/index.php');
+        exit;
+    }
 }
 
 if (isset($_GET['delete']) && isAdmin()) {
@@ -74,9 +82,11 @@ require_once __DIR__ . '/../includes/header.php';
 
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h4 class="mb-0"><?= __('product_title') ?></h4>
+  <?php if (canWrite()): ?>
   <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createModal">
     <i class="bi bi-plus-lg"></i> <?= __('common_add') ?>
   </button>
+  <?php endif; ?>
 </div>
 
 <form class="mb-3" method="get">
@@ -110,10 +120,12 @@ require_once __DIR__ . '/../includes/header.php';
         <td style="color:<?= $margin >= 30 ? 'var(--good)' : ($margin >= 15 ? 'var(--warn)' : 'var(--danger)') ?>;"><?= $margin ?>%</td>
         <td><span class="badge-stock <?= $low ? 'badge-low' : 'badge-normal' ?>"><?= $p['current_stock'] ?> <?= __('common_pcs') ?></span></td>
         <td class="text-end">
+          <?php if (canWrite()): ?>
           <button class="btn btn-sm btn-outline-primary"
                   data-bs-toggle="modal" data-bs-target="#editModal<?= $p['id'] ?>">
             <i class="bi bi-pencil"></i>
           </button>
+          <?php endif; ?>
           <?php if (isAdmin()): ?>
           <a class="btn btn-sm btn-outline-danger"
              href="?delete=<?= $p['id'] ?>"

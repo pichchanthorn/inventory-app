@@ -54,6 +54,7 @@ return [
     'common_choose_product_option' => '— ជ្រើសរើសផលិតផល —',
     'common_err_email_taken' => 'អ៊ីមែលនេះបានចុះឈ្មោះរួចហើយ។',
     'common_err_name_required' => 'ត្រូវការឈ្មោះ។',
+    'common_err_forbidden' => 'អ្នកមិនមានសិទ្ធិធ្វើសកម្មភាពនេះទេ។',
     'common_adjustment_label' => 'កែតម្រូវ',
 
     // Roles
@@ -235,4 +236,9 @@ return [
     'user_err_required' => 'ត្រូវការឈ្មោះ អ៊ីមែល និងពាក្យសម្ងាត់បណ្តោះអាសន្ន។',
     'user_err_password_short' => 'ពាក្យសម្ងាត់បណ្តោះអាសន្នត្រូវមានយ៉ាងតិច 6 តួអក្សរ។',
     'user_err_self_role' => 'អ្នកមិនអាចផ្លាស់ប្តូរតួនាទីខ្លួនឯងបានទេ។',
+    'user_reset_password_button' => 'កំណត់ពាក្យសម្ងាត់ឡើងវិញ',
+    'user_reset_password_modal_title' => 'កំណត់ពាក្យសម្ងាត់ឡើងវិញ',
+    'user_reset_password_submit' => 'កំណត់ពាក្យសម្ងាត់ឡើងវិញ',
+    'user_password_reset_banner_title' => 'ពាក្យសម្ងាត់ត្រូវបានកំណត់ឡើងវិញ — សូមចែករំលែកពាក្យសម្ងាត់ថ្មីនេះទៅបុគ្គលិក៖',
+    'user_err_self_reset' => 'សូមប្រើទំព័រប្រវត្តិរូបដើម្បីផ្លាស់ប្តូរពាក្យសម្ងាត់ខ្លួនឯង។',
 ];

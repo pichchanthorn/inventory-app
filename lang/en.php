@@ -54,6 +54,7 @@ return [
     'common_choose_product_option' => '— Choose product —',
     'common_err_email_taken' => 'This email is already registered.',
     'common_err_name_required' => 'Name is required.',
+    'common_err_forbidden' => 'You do not have permission to perform this action.',
     'common_adjustment_label' => 'Adjustment',
 
     // Roles
@@ -235,4 +236,9 @@ return [
     'user_err_required' => 'Name, email, and temporary password are required.',
     'user_err_password_short' => 'Temporary password must be at least 6 characters.',
     'user_err_self_role' => 'You cannot change your own role.',
+    'user_reset_password_button' => 'Reset password',
+    'user_reset_password_modal_title' => 'Reset password',
+    'user_reset_password_submit' => 'Reset password',
+    'user_password_reset_banner_title' => 'Password reset — share this new password with the staff member:',
+    'user_err_self_reset' => 'Use the profile page to change your own password.',
 ];

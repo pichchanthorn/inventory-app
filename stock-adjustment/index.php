@@ -9,39 +9,43 @@ $success = '';
 $products = $pdo->query('SELECT * FROM products ORDER BY name')->fetchAll();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $productId = (int) $_POST['product_id'];
-    $newQty = (float) $_POST['new_qty'];
-    $reason = trim($_POST['reason']);
-    $date = $_POST['transaction_date'];
-
-    if (!$productId) {
-        $error = __('stockadj_err_select_product');
-    } elseif ($reason === '') {
-        $error = __('stockadj_err_reason_required');
+    if (!canWrite()) {
+        $error = __('common_err_forbidden');
     } else {
-        $stmt = $pdo->prepare('SELECT * FROM products WHERE id = ?');
-        $stmt->execute([$productId]);
-        $product = $stmt->fetch();
+        $productId = (int) $_POST['product_id'];
+        $newQty = (float) $_POST['new_qty'];
+        $reason = trim($_POST['reason']);
+        $date = $_POST['transaction_date'];
 
-        $pdo->beginTransaction();
-        $reference = 'ADJ-' . str_pad((string) ($pdo->query('SELECT COUNT(*) FROM stock_transactions')->fetchColumn() + 1), 6, '0', STR_PAD_LEFT);
+        if (!$productId) {
+            $error = __('stockadj_err_select_product');
+        } elseif ($reason === '') {
+            $error = __('stockadj_err_reason_required');
+        } else {
+            $stmt = $pdo->prepare('SELECT * FROM products WHERE id = ?');
+            $stmt->execute([$productId]);
+            $product = $stmt->fetch();
 
-        $stmt = $pdo->prepare('INSERT INTO stock_transactions (reference, type, transaction_date, note, supplier_id, user_id) VALUES (?,?,?,?,NULL,?)');
-        $stmt->execute([$reference, 'adjustment', $date, $reason, $_SESSION['user_id']]);
-        $txId = $pdo->lastInsertId();
+            $pdo->beginTransaction();
+            $reference = 'ADJ-' . str_pad((string) ($pdo->query('SELECT COUNT(*) FROM stock_transactions')->fetchColumn() + 1), 6, '0', STR_PAD_LEFT);
 
-        $diff = abs($newQty - $product['current_stock']);
-        $stmt = $pdo->prepare('INSERT INTO stock_transaction_items (transaction_id, product_id, qty, unit_price, subtotal) VALUES (?,?,?,0,0)');
-        $stmt->execute([$txId, $productId, $diff]);
+            $stmt = $pdo->prepare('INSERT INTO stock_transactions (reference, type, transaction_date, note, supplier_id, user_id) VALUES (?,?,?,?,NULL,?)');
+            $stmt->execute([$reference, 'adjustment', $date, $reason, $_SESSION['user_id']]);
+            $txId = $pdo->lastInsertId();
 
-        $stmt = $pdo->prepare('UPDATE products SET current_stock = ? WHERE id = ?');
-        $stmt->execute([$newQty, $productId]);
+            $diff = abs($newQty - $product['current_stock']);
+            $stmt = $pdo->prepare('INSERT INTO stock_transaction_items (transaction_id, product_id, qty, unit_price, subtotal) VALUES (?,?,?,0,0)');
+            $stmt->execute([$txId, $productId, $diff]);
 
-        $pdo->commit();
-        $success = __('stockadj_applied_prefix') . " $reference — {$product['name']}: {$product['current_stock']} → $newQty.";
+            $stmt = $pdo->prepare('UPDATE products SET current_stock = ? WHERE id = ?');
+            $stmt->execute([$newQty, $productId]);
 
-        // refresh products list so the dropdown shows the new stock
-        $products = $pdo->query('SELECT * FROM products ORDER BY name')->fetchAll();
+            $pdo->commit();
+            $success = __('stockadj_applied_prefix') . " $reference — {$product['name']}: {$product['current_stock']} → $newQty.";
+
+            // refresh products list so the dropdown shows the new stock
+            $products = $pdo->query('SELECT * FROM products ORDER BY name')->fetchAll();
+        }
     }
 }
 

@@ -6,27 +6,35 @@ $activePage = 'supplier';
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'create') {
-    $name = trim($_POST['name']);
-    $phone = trim($_POST['phone']);
-    $email = trim($_POST['email']);
-    $address = trim($_POST['address']);
-    $note = trim($_POST['note']);
-    if ($name === '') {
-        $error = __('common_err_name_required');
+    if (!canWrite()) {
+        $error = __('common_err_forbidden');
     } else {
-        $stmt = $pdo->prepare('INSERT INTO suppliers (name, phone, email, address, note) VALUES (?, ?, ?, ?, ?)');
-        $stmt->execute([$name, $phone, $email, $address, $note]);
-        header('Location: ' . BASE_URL . '/supplier/index.php');
-        exit;
+        $name = trim($_POST['name']);
+        $phone = trim($_POST['phone']);
+        $email = trim($_POST['email']);
+        $address = trim($_POST['address']);
+        $note = trim($_POST['note']);
+        if ($name === '') {
+            $error = __('common_err_name_required');
+        } else {
+            $stmt = $pdo->prepare('INSERT INTO suppliers (name, phone, email, address, note) VALUES (?, ?, ?, ?, ?)');
+            $stmt->execute([$name, $phone, $email, $address, $note]);
+            header('Location: ' . BASE_URL . '/supplier/index.php');
+            exit;
+        }
     }
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'update') {
-    $id = (int) $_POST['id'];
-    $stmt = $pdo->prepare('UPDATE suppliers SET name=?, phone=?, email=?, address=?, note=? WHERE id=?');
-    $stmt->execute([trim($_POST['name']), trim($_POST['phone']), trim($_POST['email']), trim($_POST['address']), trim($_POST['note']), $id]);
-    header('Location: ' . BASE_URL . '/supplier/index.php');
-    exit;
+    if (!canWrite()) {
+        $error = __('common_err_forbidden');
+    } else {
+        $id = (int) $_POST['id'];
+        $stmt = $pdo->prepare('UPDATE suppliers SET name=?, phone=?, email=?, address=?, note=? WHERE id=?');
+        $stmt->execute([trim($_POST['name']), trim($_POST['phone']), trim($_POST['email']), trim($_POST['address']), trim($_POST['note']), $id]);
+        header('Location: ' . BASE_URL . '/supplier/index.php');
+        exit;
+    }
 }
 
 if (isset($_GET['delete']) && isAdmin()) {
@@ -50,9 +58,11 @@ require_once __DIR__ . '/../includes/header.php';
 
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h4 class="mb-0"><?= __('supplier_title') ?></h4>
+  <?php if (canWrite()): ?>
   <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createModal">
     <i class="bi bi-plus-lg"></i> <?= __('common_add') ?>
   </button>
+  <?php endif; ?>
 </div>
 
 <form class="mb-3" method="get">
@@ -78,10 +88,12 @@ require_once __DIR__ . '/../includes/header.php';
         <td><?= htmlspecialchars($s['address']) ?></td>
         <td><?= htmlspecialchars($s['note']) ?></td>
         <td class="text-end">
+          <?php if (canWrite()): ?>
           <button class="btn btn-sm btn-outline-primary"
                   data-bs-toggle="modal" data-bs-target="#editModal<?= $s['id'] ?>">
             <i class="bi bi-pencil"></i>
           </button>
+          <?php endif; ?>
           <?php if (isAdmin()): ?>
           <a class="btn btn-sm btn-outline-danger"
              href="?delete=<?= $s['id'] ?>"

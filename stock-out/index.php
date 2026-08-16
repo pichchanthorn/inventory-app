@@ -9,51 +9,55 @@ $success = '';
 $products = $pdo->query('SELECT * FROM products ORDER BY name')->fetchAll();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $date = $_POST['transaction_date'];
-    $note = trim($_POST['note']);
-    $productIds = $_POST['product_id'] ?? [];
-    $qtys = $_POST['qty'] ?? [];
-    $prices = $_POST['unit_price'] ?? [];
-
-    $lines = [];
-    foreach ($productIds as $i => $pid) {
-        if ($pid !== '' && (float) $qtys[$i] > 0) {
-            $lines[] = ['product_id' => (int) $pid, 'qty' => (float) $qtys[$i], 'price' => (float) $prices[$i]];
-        }
-    }
-
-    if (!$lines) {
-        $error = __('stockout_err_add_product');
+    if (!canWrite()) {
+        $error = __('common_err_forbidden');
     } else {
-        // verify enough stock before committing anything
-        foreach ($lines as $line) {
-            $stmt = $pdo->prepare('SELECT name, current_stock FROM products WHERE id = ?');
-            $stmt->execute([$line['product_id']]);
-            $p = $stmt->fetch();
-            if ($p && $line['qty'] > $p['current_stock']) {
-                $error = __('stockout_err_insufficient_prefix') . " {$p['name']} (" . __('stockout_err_insufficient_have') . " {$p['current_stock']}, " . __('stockout_err_insufficient_requested') . " {$line['qty']}).";
-                break;
+        $date = $_POST['transaction_date'];
+        $note = trim($_POST['note']);
+        $productIds = $_POST['product_id'] ?? [];
+        $qtys = $_POST['qty'] ?? [];
+        $prices = $_POST['unit_price'] ?? [];
+
+        $lines = [];
+        foreach ($productIds as $i => $pid) {
+            if ($pid !== '' && (float) $qtys[$i] > 0) {
+                $lines[] = ['product_id' => (int) $pid, 'qty' => (float) $qtys[$i], 'price' => (float) $prices[$i]];
             }
         }
 
-        if (!$error) {
-            $pdo->beginTransaction();
-            $reference = 'STO-' . str_pad((string) ($pdo->query('SELECT COUNT(*) FROM stock_transactions')->fetchColumn() + 1), 6, '0', STR_PAD_LEFT);
-
-            $stmt = $pdo->prepare('INSERT INTO stock_transactions (reference, type, transaction_date, note, supplier_id, user_id) VALUES (?,?,?,?,NULL,?)');
-            $stmt->execute([$reference, 'out', $date, $note, $_SESSION['user_id']]);
-            $txId = $pdo->lastInsertId();
-
+        if (!$lines) {
+            $error = __('stockout_err_add_product');
+        } else {
+            // verify enough stock before committing anything
             foreach ($lines as $line) {
-                $subtotal = $line['qty'] * $line['price'];
-                $stmt = $pdo->prepare('INSERT INTO stock_transaction_items (transaction_id, product_id, qty, unit_price, subtotal) VALUES (?,?,?,?,?)');
-                $stmt->execute([$txId, $line['product_id'], $line['qty'], $line['price'], $subtotal]);
-
-                $stmt = $pdo->prepare('UPDATE products SET current_stock = current_stock - ? WHERE id = ?');
-                $stmt->execute([$line['qty'], $line['product_id']]);
+                $stmt = $pdo->prepare('SELECT name, current_stock FROM products WHERE id = ?');
+                $stmt->execute([$line['product_id']]);
+                $p = $stmt->fetch();
+                if ($p && $line['qty'] > $p['current_stock']) {
+                    $error = __('stockout_err_insufficient_prefix') . " {$p['name']} (" . __('stockout_err_insufficient_have') . " {$p['current_stock']}, " . __('stockout_err_insufficient_requested') . " {$line['qty']}).";
+                    break;
+                }
             }
-            $pdo->commit();
-            $success = __('stockout_recorded_prefix') . " $reference " . __('stockout_recorded_suffix');
+
+            if (!$error) {
+                $pdo->beginTransaction();
+                $reference = 'STO-' . str_pad((string) ($pdo->query('SELECT COUNT(*) FROM stock_transactions')->fetchColumn() + 1), 6, '0', STR_PAD_LEFT);
+
+                $stmt = $pdo->prepare('INSERT INTO stock_transactions (reference, type, transaction_date, note, supplier_id, user_id) VALUES (?,?,?,?,NULL,?)');
+                $stmt->execute([$reference, 'out', $date, $note, $_SESSION['user_id']]);
+                $txId = $pdo->lastInsertId();
+
+                foreach ($lines as $line) {
+                    $subtotal = $line['qty'] * $line['price'];
+                    $stmt = $pdo->prepare('INSERT INTO stock_transaction_items (transaction_id, product_id, qty, unit_price, subtotal) VALUES (?,?,?,?,?)');
+                    $stmt->execute([$txId, $line['product_id'], $line['qty'], $line['price'], $subtotal]);
+
+                    $stmt = $pdo->prepare('UPDATE products SET current_stock = current_stock - ? WHERE id = ?');
+                    $stmt->execute([$line['qty'], $line['product_id']]);
+                }
+                $pdo->commit();
+                $success = __('stockout_recorded_prefix') . " $reference " . __('stockout_recorded_suffix');
+            }
         }
     }
 }
