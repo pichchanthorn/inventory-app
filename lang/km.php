@@ -68,6 +68,9 @@ return [
     'dashboard_units_in_stock' => 'ចំនួនស្តុកមាន',
     'dashboard_inventory_value' => 'តម្លៃស្តុកសរុប',
     'dashboard_low_stock' => 'ស្តុកជិតអស់',
+    'dashboard_chart_movement_title' => 'ចលនាស្តុក (៧ថ្ងៃចុងក្រោយ)',
+    'dashboard_chart_category_title' => 'ផលិតផលតាមប្រភេទ',
+    'dashboard_uncategorized' => 'គ្មានប្រភេទ',
 
     // Auth shared (login + register)
     'auth_tagline' => 'ADVANCED_PHP_MYSQL',

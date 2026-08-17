@@ -68,6 +68,9 @@ return [
     'dashboard_units_in_stock' => 'Units in Stock',
     'dashboard_inventory_value' => 'Inventory Value',
     'dashboard_low_stock' => 'Low Stock',
+    'dashboard_chart_movement_title' => 'Stock Movement (Last 7 Days)',
+    'dashboard_chart_category_title' => 'Products by Category',
+    'dashboard_uncategorized' => 'Uncategorized',
 
     // Auth shared (login + register)
     'auth_tagline' => 'ADVANCED_PHP_MYSQL',

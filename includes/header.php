@@ -15,11 +15,13 @@ function navClass($page, $active) {
   }
 </script>
 <meta charset="UTF-8">
-<title>Inventory</title>
+<title>Inventory Management System</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%2305080D'/><path d='M16 4 27 9.5v13L16 28 5 22.5v-13z' fill='none' stroke='%2322D3EE' stroke-width='2' stroke-linejoin='round'/><path d='M16 4v12M16 16 27 9.5M16 16 5 9.5M16 16v12' stroke='%2322D3EE' stroke-width='2' stroke-linejoin='round'/></svg>">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
 <link rel="stylesheet" href="<?= BASE_URL ?>/assets/style.css?v=<?= ASSET_VER ?>">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js" defer></script>
 <style>
   .sidebar { min-height:100vh; }
   .sidebar .nav-link { padding:.5rem 1rem; margin-bottom:2px; }

@@ -6,6 +6,7 @@ function toggleTheme() {
   const isLight = document.body.classList.toggle('theme-light');
   localStorage.setItem('theme', isLight ? 'light' : 'dark');
   document.getElementById('themeToggleLabel').textContent = isLight ? 'Light' : 'Dark';
+  document.dispatchEvent(new CustomEvent('themechange'));
 }
 document.addEventListener('DOMContentLoaded', () => {
   const label = document.getElementById('themeToggleLabel');
