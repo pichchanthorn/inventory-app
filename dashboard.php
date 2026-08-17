@@ -48,25 +48,25 @@ require_once __DIR__ . '/includes/header.php';
 <div class="row g-3">
   <div class="col-md-3">
     <div class="card p-3">
-      <div class="bracket-label mb-2"><?= __('dashboard_total_products') ?></div>
+      <div class="bracket-label mb-2"><i class="bi bi-box kpi-icon"></i><?= __('dashboard_total_products') ?></div>
       <div class="fs-3 mono fw-bold"><?= $totalProducts ?></div>
     </div>
   </div>
   <div class="col-md-3">
     <div class="card p-3">
-      <div class="bracket-label mb-2"><?= __('dashboard_units_in_stock') ?></div>
+      <div class="bracket-label mb-2"><i class="bi bi-boxes kpi-icon"></i><?= __('dashboard_units_in_stock') ?></div>
       <div class="fs-3 mono fw-bold"><?= $totalUnits ?></div>
     </div>
   </div>
   <div class="col-md-3">
     <div class="card p-3">
-      <div class="bracket-label mb-2"><?= __('dashboard_inventory_value') ?></div>
+      <div class="bracket-label mb-2"><i class="bi bi-cash-stack kpi-icon"></i><?= __('dashboard_inventory_value') ?></div>
       <div class="fs-3 mono fw-bold">$<?= number_format($totalValue, 2) ?></div>
     </div>
   </div>
   <div class="col-md-3">
     <div class="card p-3 <?= $lowStock > 0 ? 'border-danger' : '' ?>">
-      <div class="bracket-label mb-2" style="color:var(--danger);"><?= __('dashboard_low_stock') ?></div>
+      <div class="bracket-label mb-2" style="color:var(--danger);"><i class="bi bi-exclamation-triangle kpi-icon"></i><?= __('dashboard_low_stock') ?></div>
       <div class="fs-3 mono fw-bold text-danger"><?= $lowStock ?></div>
     </div>
   </div>

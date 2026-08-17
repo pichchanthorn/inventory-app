@@ -107,7 +107,7 @@ require_once __DIR__ . '/../includes/header.php';
         $margin = $p['sale_price'] > 0 ? round((($p['sale_price'] - $p['cost_price']) / $p['sale_price']) * 100) : 0;
         $low = $p['current_stock'] <= $p['min_stock'];
       ?>
-      <tr>
+      <tr class="<?= $low ? 'row-low-stock' : '' ?>">
         <td><?= $i + 1 ?></td>
         <td>
           <div class="fw-semibold"><?= htmlspecialchars($p['name']) ?></div>

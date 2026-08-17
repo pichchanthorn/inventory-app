@@ -19,6 +19,10 @@ h1,h2,h3,h4,h5{ font-family:'Rajdhani','Kantumruy Pro',sans-serif; font-weight:7
 .bracket-label::before{ content:'[ '; color:var(--accent-dim); }
 .bracket-label::after{ content:' ]'; color:var(--accent-dim); }
 
+/* small muted icon inside a bracket-label eyebrow (KPI cards) - kept subtle
+   so it doesn't compete visually with the big number below it */
+.kpi-icon{ color:var(--muted); font-size:.85em; margin-right:5px; }
+
 .barcode{ color:var(--accent); }
 
 /* sidebar */
@@ -29,9 +33,9 @@ h1,h2,h3,h4,h5{ font-family:'Rajdhani','Kantumruy Pro',sans-serif; font-weight:7
    to stay legible — subscript consonants and diacritics get lost at .64rem
    with dim color and wide tracking. Bump both for lang=km only. */
 body[lang="km"] .sidebar-section{ font-size:.74rem; color:var(--muted) !important; letter-spacing:.02em; }
-.sidebar .nav-link{ color:#8B9AAE !important; font-family:'JetBrains Mono','Kantumruy Pro',monospace; font-size:.78rem; text-transform:uppercase; letter-spacing:.03em; border-left:2px solid transparent; border-radius:0; }
+.sidebar .nav-link{ color:#8B9AAE !important; font-family:'JetBrains Mono','Kantumruy Pro',monospace; font-size:.78rem; text-transform:uppercase; letter-spacing:.03em; border-left:2px solid transparent; border-radius:0; transition:background-color .15s ease, color .15s ease; }
 .sidebar .nav-link:hover{ background:var(--panel-alt); color:#fff !important; }
-.sidebar .nav-link.active{ background:var(--panel-alt) !important; color:var(--accent) !important; border-left-color:var(--accent); }
+.sidebar .nav-link.active{ background:var(--accent-tint) !important; color:var(--accent) !important; border-left-color:var(--accent); font-weight:600; }
 
 /* buttons */
 .btn-primary{ background:var(--accent) !important; border-color:var(--accent) !important; color:#03181C !important; font-weight:600; transition:filter .15s ease; }
@@ -64,6 +68,7 @@ table thead.table-light th{
   font-size:.68rem; color:var(--muted) !important; border-bottom:1px solid var(--line) !important; font-weight:500;
 }
 table tbody tr{ border-color:var(--line) !important; transition:background-color .12s ease; }
+table tbody tr.row-low-stock{ background:var(--danger-tint) !important; }
 table tbody tr:hover{ background:var(--panel-alt) !important; }
 table td, table th{ border-color:var(--line) !important; }
 .slug-pill{ font-family:'JetBrains Mono','Kantumruy Pro',monospace; font-size:.76rem; background:var(--bg); border:1px solid var(--line); color:var(--accent); padding:3px 8px; border-radius:3px; }

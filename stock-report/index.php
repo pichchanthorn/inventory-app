@@ -38,10 +38,10 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <div class="row g-3 mb-4">
-  <div class="col-md-3"><div class="card p-3"><div class="bracket-label mb-2"><?= __('stockreport_units_in') ?></div><div class="fs-4 mono fw-bold" style="color:var(--good);"><?= $unitsIn ?></div></div></div>
-  <div class="col-md-3"><div class="card p-3"><div class="bracket-label mb-2"><?= __('stockreport_units_out') ?></div><div class="fs-4 mono fw-bold" style="color:var(--danger);"><?= $unitsOut ?></div></div></div>
-  <div class="col-md-3"><div class="card p-3"><div class="bracket-label mb-2"><?= __('stockreport_net_flow') ?></div><div class="fs-4 mono fw-bold"><?= ($unitsIn - $unitsOut >= 0 ? '+' : '') . ($unitsIn - $unitsOut) ?></div></div></div>
-  <div class="col-md-3"><div class="card p-3"><div class="bracket-label mb-2"><?= __('stockreport_transactions') ?></div><div class="fs-4 mono fw-bold"><?= $txCount ?></div></div></div>
+  <div class="col-md-3"><div class="card p-3"><div class="bracket-label mb-2"><i class="bi bi-download kpi-icon"></i><?= __('stockreport_units_in') ?></div><div class="fs-4 mono fw-bold" style="color:var(--good);"><?= $unitsIn ?></div></div></div>
+  <div class="col-md-3"><div class="card p-3"><div class="bracket-label mb-2"><i class="bi bi-upload kpi-icon"></i><?= __('stockreport_units_out') ?></div><div class="fs-4 mono fw-bold" style="color:var(--danger);"><?= $unitsOut ?></div></div></div>
+  <div class="col-md-3"><div class="card p-3"><div class="bracket-label mb-2"><i class="bi bi-arrow-left-right kpi-icon"></i><?= __('stockreport_net_flow') ?></div><div class="fs-4 mono fw-bold"><?= ($unitsIn - $unitsOut >= 0 ? '+' : '') . ($unitsIn - $unitsOut) ?></div></div></div>
+  <div class="col-md-3"><div class="card p-3"><div class="bracket-label mb-2"><i class="bi bi-receipt kpi-icon"></i><?= __('stockreport_transactions') ?></div><div class="fs-4 mono fw-bold"><?= $txCount ?></div></div></div>
 </div>
 
 <ul class="nav nav-pills mb-3">
