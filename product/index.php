@@ -11,6 +11,10 @@ $units      = $pdo->query('SELECT * FROM units ORDER BY name')->fetchAll();
 
 function nullableInt($v) { return $v === '' ? null : (int) $v; }
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_verify();
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'create') {
     if (!canWrite()) {
         $error = __('common_err_forbidden');
@@ -59,9 +63,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'update') {
     }
 }
 
-if (isset($_GET['delete']) && isAdmin()) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete' && isAdmin()) {
     $stmt = $pdo->prepare('DELETE FROM products WHERE id = ?');
-    $stmt->execute([(int) $_GET['delete']]);
+    $stmt->execute([(int) $_POST['id']]);
     header('Location: ' . BASE_URL . '/product/index.php');
     exit;
 }
@@ -127,11 +131,12 @@ require_once __DIR__ . '/../includes/header.php';
           </button>
           <?php endif; ?>
           <?php if (isAdmin()): ?>
-          <a class="btn btn-sm btn-outline-danger"
-             href="?delete=<?= $p['id'] ?>"
-             onclick="return confirm('<?= __('product_delete_confirm') ?>')">
-            <i class="bi bi-trash"></i>
-          </a>
+          <form method="post" class="d-inline" onsubmit="return confirm('<?= __('product_delete_confirm') ?>')">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="delete">
+            <input type="hidden" name="id" value="<?= $p['id'] ?>">
+            <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+          </form>
           <?php endif; ?>
         </td>
       </tr>
@@ -140,6 +145,7 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="modal-dialog">
           <div class="modal-content">
             <form method="post">
+              <?= csrf_field() ?>
               <input type="hidden" name="action" value="update">
               <input type="hidden" name="id" value="<?= $p['id'] ?>">
               <div class="modal-header">
@@ -206,6 +212,7 @@ require_once __DIR__ . '/../includes/header.php';
   <div class="modal-dialog">
     <div class="modal-content">
       <form method="post">
+        <?= csrf_field() ?>
         <input type="hidden" name="action" value="create">
         <div class="modal-header">
           <h5 class="modal-title"><?= __('product_create_title') ?></h5>

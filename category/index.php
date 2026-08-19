@@ -5,6 +5,10 @@ require_once __DIR__ . '/../config/db.php';
 $activePage = 'category';
 $error = '';
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_verify();
+}
+
 // ---------- CREATE ----------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'create') {
     if (!canWrite()) {
@@ -43,8 +47,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'update') {
 }
 
 // ---------- DELETE (Admin only) ----------
-if (isset($_GET['delete']) && isAdmin()) {
-    $id = (int) $_GET['delete'];
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete' && isAdmin()) {
+    $id = (int) $_POST['id'];
     $stmt = $pdo->prepare('DELETE FROM categories WHERE id = ?');
     $stmt->execute([$id]);
     header('Location: ' . BASE_URL . '/category/index.php');
@@ -101,11 +105,12 @@ require_once __DIR__ . '/../includes/header.php';
           </button>
           <?php endif; ?>
           <?php if (isAdmin()): ?>
-          <a class="btn btn-sm btn-outline-danger"
-             href="?delete=<?= $cat['id'] ?>"
-             onclick="return confirm('<?= __('category_delete_confirm') ?>')">
-            <i class="bi bi-trash"></i>
-          </a>
+          <form method="post" class="d-inline" onsubmit="return confirm('<?= __('category_delete_confirm') ?>')">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="delete">
+            <input type="hidden" name="id" value="<?= $cat['id'] ?>">
+            <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+          </form>
           <?php endif; ?>
         </td>
       </tr>
@@ -115,6 +120,7 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="modal-dialog">
           <div class="modal-content">
             <form method="post">
+              <?= csrf_field() ?>
               <input type="hidden" name="action" value="update">
               <input type="hidden" name="id" value="<?= $cat['id'] ?>">
               <div class="modal-header">
@@ -153,6 +159,7 @@ require_once __DIR__ . '/../includes/header.php';
   <div class="modal-dialog">
     <div class="modal-content">
       <form method="post">
+        <?= csrf_field() ?>
         <input type="hidden" name="action" value="create">
         <div class="modal-header">
           <h5 class="modal-title"><?= __('category_create_title') ?></h5>

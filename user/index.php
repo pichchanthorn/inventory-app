@@ -10,6 +10,10 @@ if (!isAdmin()) {
 $activePage = 'user';
 $error = '';
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_verify();
+}
+
 // ---------- CREATE USER (Admin-created staff account) ----------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'create_user') {
     $name     = trim($_POST['name']);
@@ -164,6 +168,7 @@ require_once __DIR__ . '/../includes/header.php';
             <span class="text-secondary small"><?= __('user_this_is_you') ?></span>
           <?php else: ?>
             <form method="post" class="d-flex gap-2">
+              <?= csrf_field() ?>
               <input type="hidden" name="action" value="update_role">
               <input type="hidden" name="id" value="<?= $u['id'] ?>">
               <select name="role_id" class="form-select form-select-sm">
@@ -190,6 +195,7 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="modal-dialog">
           <div class="modal-content">
             <form method="post">
+              <?= csrf_field() ?>
               <input type="hidden" name="action" value="reset_password">
               <input type="hidden" name="id" value="<?= $u['id'] ?>">
               <div class="modal-header">
@@ -226,6 +232,7 @@ require_once __DIR__ . '/../includes/header.php';
   <div class="modal-dialog">
     <div class="modal-content">
       <form method="post">
+        <?= csrf_field() ?>
         <input type="hidden" name="action" value="create_user">
         <div class="modal-header">
           <h5 class="modal-title"><?= __('user_modal_title') ?></h5>
