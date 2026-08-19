@@ -27,25 +27,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([$productId]);
             $product = $stmt->fetch();
 
-            $pdo->beginTransaction();
-            $reference = 'ADJ-' . str_pad((string) ($pdo->query('SELECT COUNT(*) FROM stock_transactions')->fetchColumn() + 1), 6, '0', STR_PAD_LEFT);
+            try {
+                $pdo->beginTransaction();
+                $reference = 'ADJ-' . str_pad((string) ($pdo->query('SELECT COUNT(*) FROM stock_transactions')->fetchColumn() + 1), 6, '0', STR_PAD_LEFT);
 
-            $stmt = $pdo->prepare('INSERT INTO stock_transactions (reference, type, transaction_date, note, supplier_id, user_id) VALUES (?,?,?,?,NULL,?)');
-            $stmt->execute([$reference, 'adjustment', $date, $reason, $_SESSION['user_id']]);
-            $txId = $pdo->lastInsertId();
+                $stmt = $pdo->prepare('INSERT INTO stock_transactions (reference, type, transaction_date, note, supplier_id, user_id) VALUES (?,?,?,?,NULL,?)');
+                $stmt->execute([$reference, 'adjustment', $date, $reason, $_SESSION['user_id']]);
+                $txId = $pdo->lastInsertId();
 
-            $diff = abs($newQty - $product['current_stock']);
-            $stmt = $pdo->prepare('INSERT INTO stock_transaction_items (transaction_id, product_id, qty, unit_price, subtotal) VALUES (?,?,?,0,0)');
-            $stmt->execute([$txId, $productId, $diff]);
+                $diff = abs($newQty - $product['current_stock']);
+                $stmt = $pdo->prepare('INSERT INTO stock_transaction_items (transaction_id, product_id, qty, unit_price, subtotal) VALUES (?,?,?,0,0)');
+                $stmt->execute([$txId, $productId, $diff]);
 
-            $stmt = $pdo->prepare('UPDATE products SET current_stock = ? WHERE id = ?');
-            $stmt->execute([$newQty, $productId]);
+                $stmt = $pdo->prepare('UPDATE products SET current_stock = ? WHERE id = ?');
+                $stmt->execute([$newQty, $productId]);
 
-            $pdo->commit();
-            $success = __('stockadj_applied_prefix') . " $reference — {$product['name']}: {$product['current_stock']} → $newQty.";
+                $pdo->commit();
+                $success = __('stockadj_applied_prefix') . " $reference — {$product['name']}: {$product['current_stock']} → $newQty.";
 
-            // refresh products list so the dropdown shows the new stock
-            $products = $pdo->query('SELECT * FROM products ORDER BY name')->fetchAll();
+                // refresh products list so the dropdown shows the new stock
+                $products = $pdo->query('SELECT * FROM products ORDER BY name')->fetchAll();
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+                error_log('Stock Adjustment failed: ' . $e->getMessage());
+                $error = __('common_err_transaction_failed');
+            }
         }
     }
 }

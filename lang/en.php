@@ -55,6 +55,7 @@ return [
     'common_err_email_taken' => 'This email is already registered.',
     'common_err_name_required' => 'Name is required.',
     'common_err_forbidden' => 'You do not have permission to perform this action.',
+    'common_err_transaction_failed' => 'Something went wrong while saving this transaction, so nothing was changed. Please try again, and contact an administrator if the problem continues.',
     'common_adjustment_label' => 'Adjustment',
 
     // Roles
