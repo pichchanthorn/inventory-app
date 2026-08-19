@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/auth_check.php';
+require_once __DIR__ . '/../includes/sortable.php';
 require_once __DIR__ . '/../config/db.php';
 
 $activePage = 'product';
@@ -72,12 +73,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
 
 $search = trim($_GET['q'] ?? '');
 $lowStockOnly = ($_GET['filter'] ?? '') === 'low_stock';
+$orderBy = sortOrderBy(['name' => 'p.name', 'stock' => 'p.current_stock', 'price' => 'p.sale_price'], 'p.id DESC');
 $sql = 'SELECT p.*, c.name AS category_name, s.name AS supplier_name
         FROM products p
         LEFT JOIN categories c ON c.id = p.category_id
         LEFT JOIN suppliers s ON s.id = p.supplier_id
-        WHERE (p.name LIKE ? OR p.sku LIKE ?)' . ($lowStockOnly ? ' AND p.current_stock <= p.min_stock' : '') . '
-        ORDER BY p.id DESC';
+        WHERE (p.name LIKE ? OR p.sku LIKE ?)' . ($lowStockOnly ? ' AND p.current_stock <= p.min_stock' : '') . "
+        ORDER BY $orderBy";
 $stmt = $pdo->prepare($sql);
 $stmt->execute(["%$search%", "%$search%"]);
 $products = $stmt->fetchAll();
@@ -105,14 +107,14 @@ require_once __DIR__ . '/../includes/header.php';
 
 <form class="mb-3" method="get">
   <?php if ($lowStockOnly): ?><input type="hidden" name="filter" value="low_stock"><?php endif; ?>
-  <input type="text" name="q" class="form-control" style="max-width:300px"
+  <input type="text" name="q" id="searchInput" class="form-control" style="max-width:300px"
          placeholder="<?= __('product_search_placeholder') ?>" value="<?= htmlspecialchars($search) ?>">
 </form>
 
-<div class="card">
+<div class="card" id="resultsArea">
   <table class="table mb-0 align-middle">
     <thead class="table-light">
-      <tr><th>#</th><th><?= __('common_product') ?></th><th><?= __('common_category') ?></th><th><?= __('common_supplier') ?></th><th><?= __('product_col_cost') ?></th><th><?= __('product_col_price') ?></th><th><?= __('product_col_margin') ?></th><th><?= __('product_col_stock') ?></th><th class="text-end"><?= __('common_actions') ?></th></tr>
+      <tr><th>#</th><th><?= sortHeader('name', __('common_product')) ?></th><th><?= __('common_category') ?></th><th><?= __('common_supplier') ?></th><th><?= __('product_col_cost') ?></th><th><?= sortHeader('price', __('product_col_price')) ?></th><th><?= __('product_col_margin') ?></th><th><?= sortHeader('stock', __('product_col_stock')) ?></th><th class="text-end"><?= __('common_actions') ?></th></tr>
     </thead>
     <tbody>
       <?php if (!$products): ?>
@@ -134,7 +136,7 @@ require_once __DIR__ . '/../includes/header.php';
         <td>$<?= number_format($p['sale_price'], 2) ?></td>
         <td style="color:<?= $margin >= 30 ? 'var(--good)' : ($margin >= 15 ? 'var(--warn)' : 'var(--danger)') ?>;"><?= $margin ?>%</td>
         <td><span class="badge-stock <?= $low ? 'badge-low' : 'badge-normal' ?>"><?= $p['current_stock'] ?> <?= __('common_pcs') ?></span></td>
-        <td class="text-end">
+        <td class="text-end row-actions">
           <?php if (canWrite()): ?>
           <button class="btn btn-sm btn-outline-primary"
                   data-bs-toggle="modal" data-bs-target="#editModal<?= $p['id'] ?>">
@@ -281,5 +283,7 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
   </div>
 </div>
+
+<script>document.addEventListener('DOMContentLoaded', () => initLiveSearch('searchInput', 'resultsArea'));</script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>

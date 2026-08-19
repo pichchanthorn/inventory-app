@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/auth_check.php';
+require_once __DIR__ . '/../includes/sortable.php';
 require_once __DIR__ . '/../config/db.php';
 
 $activePage = 'category';
@@ -57,11 +58,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
 
 // ---------- SEARCH + LIST ----------
 $search = trim($_GET['q'] ?? '');
+$orderBy = sortOrderBy(['name' => 'name'], 'id DESC');
 if ($search !== '') {
-    $stmt = $pdo->prepare('SELECT * FROM categories WHERE name LIKE ? ORDER BY id DESC');
+    $stmt = $pdo->prepare("SELECT * FROM categories WHERE name LIKE ? ORDER BY $orderBy");
     $stmt->execute(["%$search%"]);
 } else {
-    $stmt = $pdo->query('SELECT * FROM categories ORDER BY id DESC');
+    $stmt = $pdo->query("SELECT * FROM categories ORDER BY $orderBy");
 }
 $categories = $stmt->fetchAll();
 
@@ -80,14 +82,14 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <form class="mb-3" method="get">
-  <input type="text" name="q" class="form-control" style="max-width:300px"
+  <input type="text" name="q" id="searchInput" class="form-control" style="max-width:300px"
          placeholder="<?= __('common_search_placeholder') ?>" value="<?= htmlspecialchars($search) ?>">
 </form>
 
-<div class="card">
+<div class="card" id="resultsArea">
   <table class="table mb-0 align-middle">
     <thead class="table-light">
-      <tr><th>#</th><th><?= __('common_name') ?></th><th><?= __('category_slug') ?></th><th><?= __('common_note') ?></th><th class="text-end"><?= __('common_actions') ?></th></tr>
+      <tr><th>#</th><th><?= sortHeader('name', __('common_name')) ?></th><th><?= __('category_slug') ?></th><th><?= __('common_note') ?></th><th class="text-end"><?= __('common_actions') ?></th></tr>
     </thead>
     <tbody>
       <?php if (!$categories): ?>
@@ -99,7 +101,7 @@ require_once __DIR__ . '/../includes/header.php';
         <td><?= htmlspecialchars($cat['name']) ?></td>
         <td><span class="slug-pill"><?= htmlspecialchars($cat['slug']) ?></span></td>
         <td><?= htmlspecialchars($cat['note']) ?></td>
-        <td class="text-end">
+        <td class="text-end row-actions">
           <?php if (canWrite()): ?>
           <button class="btn btn-sm btn-outline-primary"
                   data-bs-toggle="modal" data-bs-target="#editModal<?= $cat['id'] ?>">
@@ -189,5 +191,7 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
   </div>
 </div>
+
+<script>document.addEventListener('DOMContentLoaded', () => initLiveSearch('searchInput', 'resultsArea'));</script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
