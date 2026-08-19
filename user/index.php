@@ -119,7 +119,7 @@ require_once __DIR__ . '/../includes/header.php';
   </button>
 </div>
 
-<?php if ($error): ?><div class="alert alert-danger py-2"><?= htmlspecialchars($error) ?></div><?php endif; ?>
+<?php if ($error): ?><script>document.addEventListener('DOMContentLoaded', () => showToast(<?= json_encode($error) ?>, 'error'));</script><?php endif; ?>
 
 <?php if ($newUserCredentials): ?>
   <div class="alert alert-success">

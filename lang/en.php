@@ -57,6 +57,7 @@ return [
     'common_err_forbidden' => 'You do not have permission to perform this action.',
     'common_err_transaction_failed' => 'Something went wrong while saving this transaction, so nothing was changed. Please try again, and contact an administrator if the problem continues.',
     'common_adjustment_label' => 'Adjustment',
+    'common_saving' => 'Saving...',
 
     // Roles
     'role_admin' => 'Admin',
@@ -165,6 +166,8 @@ return [
     'product_sale_price' => 'Sale price',
     'product_min_stock' => 'Min stock',
     'product_stock_hint' => 'Stock starts at 0 — add quantity via Stock In.',
+    'product_filter_low_stock_active' => 'Showing low-stock products only.',
+    'product_filter_clear' => 'Clear filter',
 
     // Stock In
     'stockin_select_supplier' => '— Select supplier —',

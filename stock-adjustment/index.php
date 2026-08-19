@@ -69,8 +69,8 @@ require_once __DIR__ . '/../includes/header.php';
 ?>
 
 <h4 class="mb-4"><?= __('nav_stock_adjustments') ?></h4>
-<?php if ($success): ?><div class="alert alert-success"><?= htmlspecialchars($success) ?></div><?php endif; ?>
-<?php if ($error): ?><div class="alert alert-danger"><?= htmlspecialchars($error) ?></div><?php endif; ?>
+<?php if ($success): ?><script>document.addEventListener('DOMContentLoaded', () => showToast(<?= json_encode($success) ?>, 'success'));</script><?php endif; ?>
+<?php if ($error): ?><script>document.addEventListener('DOMContentLoaded', () => showToast(<?= json_encode($error) ?>, 'error'));</script><?php endif; ?>
 
 <div class="row g-3">
   <div class="col-lg-8">

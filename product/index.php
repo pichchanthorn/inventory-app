@@ -71,11 +71,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
 }
 
 $search = trim($_GET['q'] ?? '');
+$lowStockOnly = ($_GET['filter'] ?? '') === 'low_stock';
 $sql = 'SELECT p.*, c.name AS category_name, s.name AS supplier_name
         FROM products p
         LEFT JOIN categories c ON c.id = p.category_id
         LEFT JOIN suppliers s ON s.id = p.supplier_id
-        WHERE p.name LIKE ? OR p.sku LIKE ?
+        WHERE (p.name LIKE ? OR p.sku LIKE ?)' . ($lowStockOnly ? ' AND p.current_stock <= p.min_stock' : '') . '
         ORDER BY p.id DESC';
 $stmt = $pdo->prepare($sql);
 $stmt->execute(["%$search%", "%$search%"]);
@@ -83,6 +84,8 @@ $products = $stmt->fetchAll();
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
+
+<?php if ($error): ?><script>document.addEventListener('DOMContentLoaded', () => showToast(<?= json_encode($error) ?>, 'error'));</script><?php endif; ?>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h4 class="mb-0"><?= __('product_title') ?></h4>
@@ -93,7 +96,15 @@ require_once __DIR__ . '/../includes/header.php';
   <?php endif; ?>
 </div>
 
+<?php if ($lowStockOnly): ?>
+<div class="alert alert-warning py-2 d-flex justify-content-between align-items-center">
+  <span><i class="bi bi-funnel"></i> <?= __('product_filter_low_stock_active') ?></span>
+  <a href="<?= BASE_URL ?>/product/index.php" class="btn btn-sm btn-outline-secondary"><?= __('product_filter_clear') ?></a>
+</div>
+<?php endif; ?>
+
 <form class="mb-3" method="get">
+  <?php if ($lowStockOnly): ?><input type="hidden" name="filter" value="low_stock"><?php endif; ?>
   <input type="text" name="q" class="form-control" style="max-width:300px"
          placeholder="<?= __('product_search_placeholder') ?>" value="<?= htmlspecialchars($search) ?>">
 </form>
@@ -219,7 +230,6 @@ require_once __DIR__ . '/../includes/header.php';
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
-          <?php if ($error): ?><div class="alert alert-danger py-2"><?= htmlspecialchars($error) ?></div><?php endif; ?>
           <div class="mb-3"><label class="form-label"><?= __('common_name') ?></label>
             <input type="text" name="name" class="form-control" required></div>
           <div class="row">

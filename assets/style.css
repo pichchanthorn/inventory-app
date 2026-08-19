@@ -35,6 +35,13 @@ h1,h2,h3,h4,h5{ font-family:'Rajdhani','Kantumruy Pro',sans-serif; font-weight:7
 }
 .kpi-card-icon.icon-danger{ background:var(--danger-tint); border-color:var(--danger); color:var(--danger); }
 
+/* dashboard KPI cards that act as navigation shortcuts (via a stretched-link
+   child) - lift + border shift on hover so they read as clickable, on top
+   of the existing corner-badge treatment above */
+.kpi-card-link{ transition:border-color .15s ease, transform .15s ease; }
+.kpi-card-link:hover{ cursor:pointer; border-color:var(--accent); transform:translateY(-2px); }
+.kpi-card-link.border-danger:hover{ border-color:var(--danger) !important; }
+
 .barcode{ color:var(--accent); }
 
 /* sidebar */
@@ -90,6 +97,11 @@ table td, table th{ border-color:var(--line) !important; }
 /* modal */
 .modal-content{ background:var(--panel-alt) !important; border:1px solid var(--line-bright) !important; color:#E7EDF3; }
 .btn-close{ filter:invert(1); }
+
+/* toasts (success/error notifications, top-right) */
+.toast{ background:var(--panel-alt) !important; border:1px solid var(--line-bright) !important; color:#E7EDF3; }
+.toast.toast-success{ border-left:3px solid var(--good) !important; }
+.toast.toast-danger{ border-left:3px solid var(--danger) !important; }
 
 /* login / register split screen */
 .auth-wrap{ min-height:100vh; display:flex; }
@@ -150,6 +162,7 @@ body { transition: background-color .15s, color .15s; }
 body.theme-light .modal-content,
 body.theme-light .card,
 body.theme-light table,
+body.theme-light .toast,
 body.theme-light .form-check-label { color: #0B1220 !important; }
 /* --bs-table-color is read directly by Bootstrap's per-cell rule, so the
    plain `color` override above doesn't reach td/th text — override the
