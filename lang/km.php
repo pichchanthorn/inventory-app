@@ -206,6 +206,8 @@ return [
     'stockadj_empty' => 'មិនទាន់មានការកែតម្រូវនៅឡើយ។',
     'stockadj_err_select_product' => 'សូមជ្រើសរើសផលិតផល។',
     'stockadj_err_reason_required' => 'ត្រូវការមូលហេតុ។',
+    'stockadj_err_negative_qty' => 'បរិមាណស្តុកមិនអាចជាចំនួនអវិជ្ជមានទេ។',
+    'stockadj_err_conflict' => 'ស្តុកផលិតផលនេះទើបតែផ្លាស់ប្តូរ (ពីប្រតិបត្តិការមួយផ្សេងទៀត)។ សូមពិនិត្យស្តុកបច្ចុប្បន្ន ហើយសាកល្បងម្តងទៀត។',
     'stockadj_applied_prefix' => 'បានអនុវត្ត',
 
     // Stock Report

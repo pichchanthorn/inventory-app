@@ -206,6 +206,8 @@ return [
     'stockadj_empty' => 'No adjustments yet.',
     'stockadj_err_select_product' => 'Select a product.',
     'stockadj_err_reason_required' => 'Reason is required.',
+    'stockadj_err_negative_qty' => 'Stock quantity cannot be negative.',
+    'stockadj_err_conflict' => 'This product\'s stock changed just now (from another transaction). Please review the current stock and try again.',
     'stockadj_applied_prefix' => 'Applied',
 
     // Stock Report

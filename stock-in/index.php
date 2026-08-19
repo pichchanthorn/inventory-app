@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/auth_check.php';
+require_once __DIR__ . '/../includes/stock.php';
 require_once __DIR__ . '/../config/db.php';
 
 $activePage = 'stock-in';
@@ -32,27 +33,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = __('stockin_err_add_product');
         } else {
             try {
-                $pdo->beginTransaction();
-                $reference = 'STI-' . str_pad((string) ($pdo->query('SELECT COUNT(*) FROM stock_transactions')->fetchColumn() + 1), 6, '0', STR_PAD_LEFT);
-
-                $stmt = $pdo->prepare('INSERT INTO stock_transactions (reference, type, transaction_date, note, supplier_id, user_id) VALUES (?,?,?,?,?,?)');
-                $stmt->execute([$reference, 'in', $date, $note, $supplierId, $_SESSION['user_id']]);
-                $txId = $pdo->lastInsertId();
-
-                foreach ($lines as $line) {
-                    $subtotal = $line['qty'] * $line['cost'];
-                    $stmt = $pdo->prepare('INSERT INTO stock_transaction_items (transaction_id, product_id, qty, unit_price, subtotal) VALUES (?,?,?,?,?)');
-                    $stmt->execute([$txId, $line['product_id'], $line['qty'], $line['cost'], $subtotal]);
-
-                    $stmt = $pdo->prepare('UPDATE products SET current_stock = current_stock + ? WHERE id = ?');
-                    $stmt->execute([$line['qty'], $line['product_id']]);
-                }
-                $pdo->commit();
+                $reference = recordStockIn($pdo, $lines, $date, $supplierId, $note, $_SESSION['user_id']);
                 $success = __('stockin_recorded_prefix') . " $reference " . __('stockin_recorded_suffix');
             } catch (Throwable $e) {
-                if ($pdo->inTransaction()) {
-                    $pdo->rollBack();
-                }
                 error_log('Stock In failed: ' . $e->getMessage());
                 $error = __('common_err_transaction_failed');
             }
