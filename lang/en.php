@@ -72,6 +72,7 @@ return [
     'dashboard_chart_movement_title' => 'Stock Movement (Last 7 Days)',
     'dashboard_chart_category_title' => 'Products by Category',
     'dashboard_uncategorized' => 'Uncategorized',
+    'dashboard_movement_empty' => 'Not much activity yet — try recording a Stock In.',
 
     // Auth shared (login + register)
     'auth_tagline' => 'ADVANCED_PHP_MYSQL',
