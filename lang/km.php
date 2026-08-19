@@ -72,6 +72,7 @@ return [
     'dashboard_chart_movement_title' => 'ចលនាស្តុក (៧ថ្ងៃចុងក្រោយ)',
     'dashboard_chart_category_title' => 'ផលិតផលតាមប្រភេទ',
     'dashboard_uncategorized' => 'គ្មានប្រភេទ',
+    'dashboard_movement_empty' => 'នៅមិនទាន់មានសកម្មភាពច្រើននៅឡើយទេ — សាកល្បងកត់ត្រាស្តុកចូល។',
 
     // Auth shared (login + register)
     'auth_tagline' => 'ADVANCED_PHP_MYSQL',

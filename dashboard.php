@@ -29,6 +29,7 @@ foreach ($movementRows as $row) {
 $movementLabels = array_map(fn($d) => date('M j', strtotime($d)), array_keys($movementByDate));
 $movementIn     = array_values(array_map(fn($v) => $v['in'], $movementByDate));
 $movementOut    = array_values(array_map(fn($v) => $v['out'], $movementByDate));
+$hasMovementData = (array_sum($movementIn) + array_sum($movementOut)) > 0;
 
 // ---------- Category chart: product count per category ----------
 $categoryRows = $pdo->query('
@@ -47,36 +48,50 @@ require_once __DIR__ . '/includes/header.php';
 <h4 class="mb-4"><?= __('dashboard_title') ?></h4>
 <div class="row g-3">
   <div class="col-md-3">
-    <div class="card p-3">
+    <div class="card p-3 kpi-card">
+      <div class="kpi-card-icon"><i class="bi bi-box"></i></div>
       <div class="bracket-label mb-2"><i class="bi bi-box kpi-icon"></i><?= __('dashboard_total_products') ?></div>
       <div class="fs-3 mono fw-bold"><?= $totalProducts ?></div>
     </div>
   </div>
   <div class="col-md-3">
-    <div class="card p-3">
+    <div class="card p-3 kpi-card">
+      <div class="kpi-card-icon"><i class="bi bi-boxes"></i></div>
       <div class="bracket-label mb-2"><i class="bi bi-boxes kpi-icon"></i><?= __('dashboard_units_in_stock') ?></div>
       <div class="fs-3 mono fw-bold"><?= $totalUnits ?></div>
     </div>
   </div>
   <div class="col-md-3">
-    <div class="card p-3">
+    <div class="card p-3 kpi-card">
+      <div class="kpi-card-icon"><i class="bi bi-cash-coin"></i></div>
       <div class="bracket-label mb-2"><i class="bi bi-cash-stack kpi-icon"></i><?= __('dashboard_inventory_value') ?></div>
       <div class="fs-3 mono fw-bold">$<?= number_format($totalValue, 2) ?></div>
     </div>
   </div>
   <div class="col-md-3">
-    <div class="card p-3 <?= $lowStock > 0 ? 'border-danger' : '' ?>">
+    <div class="card p-3 kpi-card <?= $lowStock > 0 ? 'border-danger' : '' ?>">
+      <div class="kpi-card-icon icon-danger"><i class="bi bi-exclamation-triangle"></i></div>
       <div class="bracket-label mb-2" style="color:var(--danger);"><i class="bi bi-exclamation-triangle kpi-icon"></i><?= __('dashboard_low_stock') ?></div>
       <div class="fs-3 mono fw-bold text-danger"><?= $lowStock ?></div>
     </div>
   </div>
 </div>
 
-<div class="row g-3 mt-1">
+<div class="row g-3 mt-3">
   <div class="col-lg-7">
     <div class="card p-3">
       <div class="bracket-label mb-3"><?= __('dashboard_chart_movement_title') ?></div>
-      <canvas id="movementChart" height="220" role="img" aria-label="<?= htmlspecialchars(__('dashboard_chart_movement_title')) ?>"></canvas>
+      <?php if ($hasMovementData): ?>
+        <canvas id="movementChart" height="220" role="img" aria-label="<?= htmlspecialchars(__('dashboard_chart_movement_title')) ?>"></canvas>
+      <?php else: ?>
+        <div class="text-secondary small text-center py-4">
+          <i class="bi bi-graph-up fs-4 d-block mb-2"></i>
+          <?= __('dashboard_movement_empty') ?>
+          <div class="mt-2">
+            <a href="<?= BASE_URL ?>/stock-in/index.php" class="btn btn-sm btn-outline-primary"><i class="bi bi-download"></i> <?= __('nav_stock_in') ?></a>
+          </div>
+        </div>
+      <?php endif; ?>
     </div>
   </div>
   <div class="col-lg-5">
