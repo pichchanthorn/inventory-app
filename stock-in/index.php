@@ -10,6 +10,7 @@ $suppliers = $pdo->query('SELECT * FROM suppliers ORDER BY name')->fetchAll();
 $products  = $pdo->query('SELECT * FROM products ORDER BY name')->fetchAll();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_verify();
     if (!canWrite()) {
         $error = __('common_err_forbidden');
     } else {
@@ -67,6 +68,7 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="row g-3">
   <div class="col-lg-8">
     <form method="post" id="stockInForm">
+      <?= csrf_field() ?>
       <div class="card p-3 mb-3">
         <div class="bracket-label mb-3"><?= __('common_transaction_details') ?></div>
         <div class="row">

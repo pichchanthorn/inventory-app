@@ -9,6 +9,10 @@ $stmt = $pdo->prepare('SELECT users.*, roles.name AS role_name FROM users JOIN r
 $stmt->execute([$_SESSION['user_id']]);
 $user = $stmt->fetch();
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_verify();
+}
+
 // ---------- Update name / email / avatar ----------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_info'])) {
     $name  = trim($_POST['name']);
@@ -112,6 +116,7 @@ require_once __DIR__ . '/includes/header.php';
 
 <div class="d-flex align-items-center gap-3 mb-4">
   <form method="post" enctype="multipart/form-data" id="avatarForm">
+    <?= csrf_field() ?>
     <input type="hidden" name="update_info" value="1">
     <input type="hidden" name="name" value="<?= htmlspecialchars($user['name']) ?>">
     <input type="hidden" name="email" value="<?= htmlspecialchars($user['email']) ?>">
@@ -142,6 +147,7 @@ require_once __DIR__ . '/includes/header.php';
       <?php if (!empty($user['avatar'])): ?>
         &nbsp;·&nbsp;
         <form method="post" class="d-inline">
+          <?= csrf_field() ?>
           <input type="hidden" name="remove_avatar" value="1">
           <button type="submit" class="btn btn-link btn-sm p-0" style="color:var(--danger); font-size:.72rem; vertical-align:baseline;"><?= __('profile_remove_photo') ?></button>
         </form>
@@ -155,6 +161,7 @@ require_once __DIR__ . '/includes/header.php';
     <div class="card p-4 h-100">
       <h6 class="mb-3"><?= __('profile_info_card_title') ?></h6>
       <form method="post">
+        <?= csrf_field() ?>
         <input type="hidden" name="update_info" value="1">
         <div class="mb-3">
           <label class="form-label"><?= __('common_name') ?></label>
@@ -176,6 +183,7 @@ require_once __DIR__ . '/includes/header.php';
       <?php if ($pwMsg): ?><div class="alert alert-success py-2"><?= htmlspecialchars($pwMsg) ?></div><?php endif; ?>
       <?php if ($pwErr): ?><div class="alert alert-danger py-2"><?= htmlspecialchars($pwErr) ?></div><?php endif; ?>
       <form method="post">
+        <?= csrf_field() ?>
         <input type="hidden" name="update_password" value="1">
         <div class="mb-3">
           <label class="form-label"><?= __('profile_current_password_label') ?></label>

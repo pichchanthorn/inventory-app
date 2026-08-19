@@ -3,10 +3,12 @@
 // accounts are in use, so only approved staff can access the system.
 require_once __DIR__ . '/../config/base_url.php';
 require_once __DIR__ . '/../includes/lang.php';
+require_once __DIR__ . '/../includes/csrf.php';
 require_once __DIR__ . '/../config/db.php';
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_verify();
     $name  = trim($_POST['name']);
     $email = trim($_POST['email']);
     $pass  = $_POST['password'];
@@ -68,6 +70,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <h4 class="mb-4"><?= __('register_title') ?></h4>
       <?php if ($error): ?><div class="alert alert-danger py-2"><?= htmlspecialchars($error) ?></div><?php endif; ?>
       <form method="post">
+        <?= csrf_field() ?>
         <div class="mb-3">
           <label class="form-label"><?= __('register_name') ?></label>
           <input type="text" name="name" class="form-control" required>
