@@ -70,7 +70,15 @@ CREATE TABLE products (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL,
     FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL,
-    FOREIGN KEY (unit_id) REFERENCES units(id) ON DELETE SET NULL
+    FOREIGN KEY (unit_id) REFERENCES units(id) ON DELETE SET NULL,
+    -- Final safety net: application code (includes/stock.php) is the
+    -- primary guard against negative stock via atomic/optimistic-locked
+    -- UPDATEs; this CHECK just ensures the invariant holds even if some
+    -- future code path forgets to use it. Enforced on MySQL 8.0.16+ and
+    -- MariaDB 10.2.1+ (this project's Docker image is MySQL 8.4.10); on
+    -- an older MySQL it is parsed but silently not enforced, same as not
+    -- having it at all — no regression either way.
+    CONSTRAINT chk_products_current_stock_nonneg CHECK (current_stock >= 0)
 );
 
 -- Stock transactions (Stock In / Stock Out / Adjustment headers)
@@ -84,7 +92,8 @@ CREATE TABLE stock_transactions (
     user_id INT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+    INDEX idx_transaction_date (transaction_date)
 );
 
 -- Stock transaction line items
