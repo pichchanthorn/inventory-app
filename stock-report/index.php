@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/auth_check.php';
+require_once __DIR__ . '/../includes/sortable.php';
 require_once __DIR__ . '/../config/db.php';
 
 $activePage = 'stock-report';
@@ -28,6 +29,7 @@ $txCount  = (int) $pdo->query('SELECT COUNT(*) FROM stock_transactions')->fetchC
 $byType   = $pdo->query('SELECT type, COUNT(*) c FROM stock_transactions GROUP BY type')->fetchAll(PDO::FETCH_KEY_PAIR);
 
 $typeLabels = ['in' => __('nav_stock_in'), 'out' => __('nav_stock_out'), 'adjustment' => __('common_adjustment_label')];
+$typeBadgeClass = ['in' => 'badge-normal', 'out' => 'badge-low', 'adjustment' => 'badge-accent'];
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -63,21 +65,23 @@ require_once __DIR__ . '/../includes/header.php';
   </div>
 
 <?php elseif ($tab === 'log'):
+  $logSortMap = ['date' => 't.transaction_date', 'value' => 'value'];
+  $logOrderBy = sortOrderBy($logSortMap, 't.id DESC');
   $rows = $pdo->query("SELECT t.*, COUNT(i.id) items, SUM(i.qty) qty, SUM(i.subtotal) value
                         FROM stock_transactions t
                         LEFT JOIN stock_transaction_items i ON i.transaction_id = t.id
-                        GROUP BY t.id ORDER BY t.id DESC")->fetchAll();
+                        GROUP BY t.id ORDER BY $logOrderBy")->fetchAll();
 ?>
   <div class="card">
     <table class="table mb-0 align-middle">
-      <thead class="table-light"><tr><th><?= __('common_reference') ?></th><th><?= __('common_date') ?></th><th><?= __('common_type') ?></th><th><?= __('stockreport_col_products') ?></th><th><?= __('stockreport_col_units') ?></th><th><?= __('common_value') ?></th><th><?= __('common_note') ?></th></tr></thead>
+      <thead class="table-light"><tr><th><?= __('common_reference') ?></th><th><?= sortHeader('date', __('common_date')) ?></th><th><?= __('common_type') ?></th><th><?= __('stockreport_col_products') ?></th><th><?= __('stockreport_col_units') ?></th><th><?= sortHeader('value', __('common_value')) ?></th><th><?= __('common_note') ?></th></tr></thead>
       <tbody>
         <?php if (!$rows): ?><tr><td colspan="7" class="text-center text-secondary py-4"><i class="bi bi-inbox fs-3 d-block mb-2"></i><?= __('common_no_transactions') ?></td></tr><?php endif; ?>
         <?php foreach ($rows as $r): ?>
         <tr>
           <td class="mono text-primary"><?= htmlspecialchars($r['reference']) ?></td>
           <td class="mono"><?= $r['transaction_date'] ?></td>
-          <td><span class="badge-stock <?= $r['type']==='out' ? 'badge-low' : 'badge-normal' ?>"><?= htmlspecialchars($typeLabels[$r['type']] ?? $r['type']) ?></span></td>
+          <td><span class="badge-stock <?= $typeBadgeClass[$r['type']] ?? 'badge-normal' ?>"><?= htmlspecialchars($typeLabels[$r['type']] ?? $r['type']) ?></span></td>
           <td><?= $r['items'] ?></td>
           <td><?= (int) $r['qty'] ?></td>
           <td>$<?= number_format($r['value'], 2) ?></td>

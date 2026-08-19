@@ -29,6 +29,39 @@ function showToast(message, type) {
   toast.show();
 }
 
+// Debounced "live" search for list pages (Products, Categories, Units,
+// Suppliers). Refetches the current URL with an updated ?q= after typing
+// pauses for 300ms, and swaps in just the results container — no full page
+// reload. The plain GET <form> around the search box is left untouched, so
+// pressing Enter still works as a normal fallback (JS disabled, slow
+// network, etc).
+function initLiveSearch(inputId, resultsId) {
+  const input = document.getElementById(inputId);
+  if (!input || !document.getElementById(resultsId)) return;
+  let timer = null;
+  let requestSeq = 0;
+  input.addEventListener('input', () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      const seq = ++requestSeq;
+      const url = new URL(window.location.href);
+      url.searchParams.set('q', input.value);
+      fetch(url)
+        .then(r => r.text())
+        .then(html => {
+          if (seq !== requestSeq) return; // a newer keystroke already superseded this request
+          const fresh = new DOMParser().parseFromString(html, 'text/html').getElementById(resultsId);
+          const current = document.getElementById(resultsId);
+          if (fresh && current) {
+            current.replaceWith(fresh);
+            history.replaceState(null, '', url);
+          }
+        })
+        .catch(() => {}); // silent — Enter-to-submit fallback still works
+    }, 300);
+  });
+}
+
 function toggleTheme() {
   const isLight = document.body.classList.toggle('theme-light');
   localStorage.setItem('theme', isLight ? 'light' : 'dark');

@@ -162,7 +162,7 @@ require_once __DIR__ . '/../includes/header.php';
         <td><?= $i + 1 ?></td>
         <td><?= htmlspecialchars($u['name']) ?></td>
         <td><?= htmlspecialchars($u['email']) ?></td>
-        <td><span class="badge-role <?= $roleBadgeClass[$u['role_name']] ?? 'badge-role-viewer' ?>"><?= htmlspecialchars($roleLabels[$u['role_name']] ?? $u['role_name']) ?></span></td>
+        <td><span class="badge-stock <?= $roleBadgeClass[$u['role_name']] ?? 'badge-role-viewer' ?>"><?= htmlspecialchars($roleLabels[$u['role_name']] ?? $u['role_name']) ?></span></td>
         <td>
           <?php if ($u['id'] === (int) $_SESSION['user_id']): ?>
             <span class="text-secondary small"><?= __('user_this_is_you') ?></span>
