@@ -57,6 +57,7 @@ return [
     'common_err_forbidden' => 'អ្នកមិនមានសិទ្ធិធ្វើសកម្មភាពនេះទេ។',
     'common_err_transaction_failed' => 'មានបញ្ហាកើតឡើងខណៈកំពុងរក្សាទុកប្រតិបត្តិការនេះ ដូច្នេះគ្មានអ្វីត្រូវបានផ្លាស់ប្តូរទេ។ សូមព្យាយាមម្តងទៀត ហើយទាក់ទងអ្នកគ្រប់គ្រងប្រសិនបើបញ្ហានៅតែបន្ត។',
     'common_adjustment_label' => 'កែតម្រូវ',
+    'common_saving' => 'កំពុងរក្សាទុក...',
 
     // Roles
     'role_admin' => 'អ្នកគ្រប់គ្រង',
@@ -165,6 +166,8 @@ return [
     'product_sale_price' => 'តម្លៃលក់',
     'product_min_stock' => 'ស្តុកអប្បបរមា',
     'product_stock_hint' => 'ស្តុកចាប់ផ្តើមពី 0 — បន្ថែមបរិមាណតាមរយៈ ស្តុកចូល។',
+    'product_filter_low_stock_active' => 'កំពុងបង្ហាញតែផលិតផលដែលនៅសល់តិចប៉ុណ្ណោះ។',
+    'product_filter_clear' => 'សម្អាតតម្រង',
 
     // Stock In
     'stockin_select_supplier' => '— ជ្រើសរើសអ្នកផ្គត់ផ្គង់ —',

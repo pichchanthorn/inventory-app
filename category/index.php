@@ -68,6 +68,8 @@ $categories = $stmt->fetchAll();
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
+<?php if ($error): ?><script>document.addEventListener('DOMContentLoaded', () => showToast(<?= json_encode($error) ?>, 'error'));</script><?php endif; ?>
+
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h4 class="mb-0"><?= __('category_title') ?></h4>
   <?php if (canWrite()): ?>
@@ -166,7 +168,6 @@ require_once __DIR__ . '/../includes/header.php';
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
-          <?php if ($error): ?><div class="alert alert-danger py-2"><?= htmlspecialchars($error) ?></div><?php endif; ?>
           <div class="mb-3">
             <label class="form-label"><?= __('common_name') ?></label>
             <input type="text" name="name" class="form-control" required>

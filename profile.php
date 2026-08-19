@@ -111,8 +111,8 @@ require_once __DIR__ . '/includes/header.php';
   <div class="alert alert-warning"><?= __('profile_force_change_banner') ?></div>
 <?php endif; ?>
 
-<?php if ($infoMsg): ?><div class="alert alert-success py-2"><?= htmlspecialchars($infoMsg) ?></div><?php endif; ?>
-<?php if ($infoErr): ?><div class="alert alert-danger py-2"><?= htmlspecialchars($infoErr) ?></div><?php endif; ?>
+<?php if ($infoMsg): ?><script>document.addEventListener('DOMContentLoaded', () => showToast(<?= json_encode($infoMsg) ?>, 'success'));</script><?php endif; ?>
+<?php if ($infoErr): ?><script>document.addEventListener('DOMContentLoaded', () => showToast(<?= json_encode($infoErr) ?>, 'error'));</script><?php endif; ?>
 
 <div class="d-flex align-items-center gap-3 mb-4">
   <form method="post" enctype="multipart/form-data" id="avatarForm">
@@ -180,8 +180,8 @@ require_once __DIR__ . '/includes/header.php';
   <div class="col-md-6">
     <div class="card p-4 h-100">
       <h6 class="mb-3"><?= __('profile_password_card_title') ?></h6>
-      <?php if ($pwMsg): ?><div class="alert alert-success py-2"><?= htmlspecialchars($pwMsg) ?></div><?php endif; ?>
-      <?php if ($pwErr): ?><div class="alert alert-danger py-2"><?= htmlspecialchars($pwErr) ?></div><?php endif; ?>
+      <?php if ($pwMsg): ?><script>document.addEventListener('DOMContentLoaded', () => showToast(<?= json_encode($pwMsg) ?>, 'success'));</script><?php endif; ?>
+      <?php if ($pwErr): ?><script>document.addEventListener('DOMContentLoaded', () => showToast(<?= json_encode($pwErr) ?>, 'error'));</script><?php endif; ?>
       <form method="post">
         <?= csrf_field() ?>
         <input type="hidden" name="update_password" value="1">
