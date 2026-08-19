@@ -1,6 +1,15 @@
 <?php
 // Consider restricting or removing public self-registration once Admin-created
 // accounts are in use, so only approved staff can access the system.
+//
+// Self-registered accounts default to Viewer (role_id 3), not User —
+// anonymous signups get read-only access until an Admin explicitly
+// upgrades them via the Users page. Previously this defaulted to User
+// (role_id 2), which granted write access (create/edit products,
+// suppliers, stock transactions) to anyone who found the registration
+// page. Viewer is a safer default, but it's still open self-registration;
+// an invite/approval-gated flow would be a stronger fix if that matters
+// for this deployment.
 require_once __DIR__ . '/../config/base_url.php';
 require_once __DIR__ . '/../includes/lang.php';
 require_once __DIR__ . '/../includes/csrf.php';
@@ -22,7 +31,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = __('common_err_email_taken');
         } else {
             $hashed = password_hash($pass, PASSWORD_DEFAULT);
-            $stmt = $pdo->prepare('INSERT INTO users (name, email, password, role_id) VALUES (?, ?, ?, 2)');
+            // role_id 3 = Viewer (read-only) — see note at top of file.
+            $stmt = $pdo->prepare('INSERT INTO users (name, email, password, role_id) VALUES (?, ?, ?, 3)');
             $stmt->execute([$name, $email, $hashed]);
             header('Location: ' . BASE_URL . '/auth/login.php?registered=1');
             exit;
