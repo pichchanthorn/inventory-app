@@ -9,12 +9,15 @@ $totalValue    = $pdo->query('SELECT COALESCE(SUM(current_stock * cost_price),0)
 $lowStock      = $pdo->query('SELECT COUNT(*) FROM products WHERE current_stock <= min_stock')->fetchColumn();
 
 // ---------- Stock movement chart: units in vs out per day, last 7 days ----------
+// POS sales are stock leaving just like a manual Stock Out, so they're folded
+// into the same 'out' bucket here (via IF()) rather than shown as a third
+// series - the chart stays a simple in/out view of total movement.
 $movementRows = $pdo->query("
-    SELECT t.transaction_date, t.type, SUM(i.qty) AS total_qty
+    SELECT t.transaction_date, IF(t.type = 'sale', 'out', t.type) AS type, SUM(i.qty) AS total_qty
     FROM stock_transactions t
     JOIN stock_transaction_items i ON i.transaction_id = t.id
-    WHERE t.type IN ('in','out') AND t.transaction_date >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
-    GROUP BY t.transaction_date, t.type
+    WHERE t.type IN ('in','out','sale') AND t.transaction_date >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+    GROUP BY t.transaction_date, IF(t.type = 'sale', 'out', t.type)
 ")->fetchAll();
 
 $movementByDate = [];

@@ -24,12 +24,12 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
 }
 
 $unitsIn  = (int) $pdo->query("SELECT COALESCE(SUM(i.qty),0) FROM stock_transactions t JOIN stock_transaction_items i ON i.transaction_id=t.id WHERE t.type='in'")->fetchColumn();
-$unitsOut = (int) $pdo->query("SELECT COALESCE(SUM(i.qty),0) FROM stock_transactions t JOIN stock_transaction_items i ON i.transaction_id=t.id WHERE t.type='out'")->fetchColumn();
+$unitsOut = (int) $pdo->query("SELECT COALESCE(SUM(i.qty),0) FROM stock_transactions t JOIN stock_transaction_items i ON i.transaction_id=t.id WHERE t.type IN ('out','sale')")->fetchColumn();
 $txCount  = (int) $pdo->query('SELECT COUNT(*) FROM stock_transactions')->fetchColumn();
 $byType   = $pdo->query('SELECT type, COUNT(*) c FROM stock_transactions GROUP BY type')->fetchAll(PDO::FETCH_KEY_PAIR);
 
-$typeLabels = ['in' => __('nav_stock_in'), 'out' => __('nav_stock_out'), 'adjustment' => __('common_adjustment_label')];
-$typeBadgeClass = ['in' => 'badge-normal', 'out' => 'badge-low', 'adjustment' => 'badge-accent'];
+$typeLabels = ['in' => __('nav_stock_in'), 'out' => __('nav_stock_out'), 'adjustment' => __('common_adjustment_label'), 'sale' => __('common_sale_label')];
+$typeBadgeClass = ['in' => 'badge-normal', 'out' => 'badge-low', 'adjustment' => 'badge-accent', 'sale' => 'badge-warn'];
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -56,7 +56,7 @@ require_once __DIR__ . '/../includes/header.php';
   <div class="card p-3">
     <div class="bracket-label mb-3"><?= __('stockreport_by_type_title') ?></div>
     <?php if (!$byType): ?><p class="text-secondary small mb-0"><?= __('common_no_transactions') ?></p><?php endif; ?>
-    <?php foreach (['in' => __('nav_stock_in'), 'out' => __('nav_stock_out'), 'adjustment' => __('stockreport_adjustments_label')] as $key => $label): ?>
+    <?php foreach (['in' => __('nav_stock_in'), 'out' => __('nav_stock_out'), 'adjustment' => __('stockreport_adjustments_label'), 'sale' => __('common_sale_label')] as $key => $label): ?>
       <div class="d-flex justify-content-between border-bottom py-2">
         <span class="text-secondary"><?= $label ?></span>
         <span class="mono fw-semibold"><?= $byType[$key] ?? 0 ?></span>

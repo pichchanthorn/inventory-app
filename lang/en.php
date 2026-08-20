@@ -58,6 +58,8 @@ return [
     'common_err_forbidden' => 'You do not have permission to perform this action.',
     'common_err_transaction_failed' => 'Something went wrong while saving this transaction, so nothing was changed. Please try again, and contact an administrator if the problem continues.',
     'common_adjustment_label' => 'Adjustment',
+    'common_sale_label' => 'Sale',
+    'common_err_invalid_price' => 'Unit price cannot be negative.',
     'common_saving' => 'Saving...',
 
     // Roles
