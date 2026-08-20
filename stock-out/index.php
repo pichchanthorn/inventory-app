@@ -29,6 +29,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (!$lines) {
             $error = __('stockout_err_add_product');
+        } elseif (array_filter($lines, fn($line) => $line['price'] < 0)) {
+            $error = __('common_err_invalid_price');
         } else {
             try {
                 $reference = recordStockOut($pdo, $lines, $date, $note, $_SESSION['user_id']);

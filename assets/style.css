@@ -8,7 +8,7 @@ body[lang="km"], body[lang="km"] * { font-family: 'Kantumruy Pro', 'Inter', sans
   --muted:#7C8FA3;
   --accent:#22D3EE; --accent-dim:#0B7285; --accent-tint:rgba(34,211,238,.10);
   --good:#34D399; --good-tint:rgba(52,211,153,.12);
-  --warn:#FBBF24; --danger:#F87171; --danger-tint:rgba(248,113,113,.12);
+  --warn:#FBBF24; --warn-tint:rgba(251,191,36,.12); --danger:#F87171; --danger-tint:rgba(248,113,113,.12);
 }
 
 body{ background:var(--bg) !important; font-family:'Inter','Kantumruy Pro',-apple-system,sans-serif; color:#E7EDF3; }
@@ -139,6 +139,7 @@ table tbody tr:hover .row-actions .btn,
 .badge-normal{ background:var(--good-tint); color:var(--good); border-color:var(--good); }
 .badge-low{ background:var(--danger-tint); color:var(--danger); border-color:var(--danger); }
 .badge-accent{ background:var(--accent-tint); color:var(--accent); border-color:var(--accent); }
+.badge-warn{ background:var(--warn-tint); color:var(--warn); border-color:var(--warn); }
 
 /* role badge colors (user list + profile) - same .badge-stock base above */
 .badge-role-admin{ background:var(--accent-tint); color:var(--accent); border-color:var(--accent); }
@@ -165,7 +166,7 @@ body.theme-light{
   --muted:#5B6B7D;
   --accent:#0C8599; --accent-dim:#0A6E80; --accent-tint:rgba(12,133,153,.08);
   --good:#0F9D6B; --good-tint:rgba(15,157,107,.10);
-  --warn:#B45309; --danger:#DC2626; --danger-tint:rgba(220,38,38,.08);
+  --warn:#B45309; --warn-tint:rgba(180,83,9,.08); --danger:#DC2626; --danger-tint:rgba(220,38,38,.08);
   color: #0B1220 !important;
 }
 body.theme-light h1, body.theme-light h2, body.theme-light h3,

@@ -5,7 +5,12 @@ require_once __DIR__ . '/../config/db.php';
 
 $activePage = 'pos';
 $error = '';
-$sale = null; // set on a successful sale; drives the receipt/confirmation view
+// Post/Redirect/Get: a successful sale redirects here with the receipt
+// stashed in the session (never persisted - cash_received/change_due
+// aren't DB columns) so a page refresh re-fetches this GET instead of
+// resubmitting the POST and creating a duplicate sale.
+$sale = $_SESSION['pos_last_sale'] ?? null;
+unset($_SESSION['pos_last_sale']);
 
 $products = $pdo->query('SELECT * FROM products ORDER BY name')->fetchAll();
 $productsById = [];
@@ -32,6 +37,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (!$lines) {
             $error = __('stockout_err_add_product');
+        } elseif (array_filter($lines, fn($line) => $line['price'] < 0)) {
+            $error = __('common_err_invalid_price');
         } else {
             // Server-side total — the only total that decides anything. Whatever
             // the client displayed is advisory only.
@@ -59,7 +66,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             'subtotal' => $line['qty'] * $line['price'],
                         ];
                     }
-                    $sale = [
+                    $_SESSION['pos_last_sale'] = [
                         'reference' => $reference,
                         'date' => $today,
                         'lines' => $receiptLines,
@@ -67,10 +74,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'cash_received' => $cashReceived,
                         'change_due' => $cashReceived - $total,
                     ];
-
-                    // Refresh the product list so the picker reflects the new stock
-                    // levels if the cashier starts another sale on this same load.
-                    $products = $pdo->query('SELECT * FROM products ORDER BY name')->fetchAll();
+                    header('Location: ' . BASE_URL . '/pos/index.php');
+                    exit;
                 } catch (StockConflictException $e) {
                     // The guarded UPDATE found insufficient stock at write time -
                     // re-fetch current values to build the same friendly message
