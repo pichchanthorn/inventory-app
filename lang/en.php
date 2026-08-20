@@ -9,6 +9,7 @@ return [
     'nav_units' => 'Units',
     'nav_suppliers' => 'Suppliers',
     'nav_operation' => 'Operation',
+    'nav_pos' => 'Point of Sale',
     'nav_stock_in' => 'Stock In',
     'nav_stock_out' => 'Stock Out',
     'nav_stock_adjustments' => 'Stock Adjustments',
@@ -192,6 +193,20 @@ return [
     'stockout_err_insufficient_prefix' => 'Not enough stock for',
     'stockout_err_insufficient_have' => 'have',
     'stockout_err_insufficient_requested' => 'requested',
+
+    // POS
+    'pos_line_total' => 'Line Total',
+    'pos_subtotal_label' => 'Subtotal',
+    'pos_payment_section_title' => 'Payment',
+    'pos_cash_received_label' => 'Cash Received',
+    'pos_change_due_label' => 'Change Due',
+    'pos_submit_button' => 'Complete Sale',
+    'pos_err_insufficient_cash' => 'Cash received is less than the total due.',
+    'pos_receipt_title' => 'Sale Complete',
+    'pos_total_label' => 'Total',
+    'pos_print_button' => 'Print Receipt',
+    'pos_new_sale_button' => 'New Sale',
+    'pos_recent_sales_title' => 'Recent Sales',
 
     // Stock Adjustment
     'stockadj_reason_label' => 'Reason *',
