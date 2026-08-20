@@ -85,7 +85,7 @@ CREATE TABLE products (
 CREATE TABLE stock_transactions (
     id INT AUTO_INCREMENT PRIMARY KEY,
     reference VARCHAR(30) NOT NULL UNIQUE,
-    type ENUM('in','out','adjustment') NOT NULL,
+    type ENUM('in','out','adjustment','sale') NOT NULL,
     transaction_date DATE NOT NULL,
     note VARCHAR(255),
     supplier_id INT NULL,

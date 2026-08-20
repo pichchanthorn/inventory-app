@@ -75,8 +75,14 @@ stock_transactions       (id, reference, type, transaction_date, note, supplier_
 stock_transaction_items  (id, transaction_id, product_id, qty, unit_price, subtotal)
 ```
 
-`stock_transactions.type` អាចជា `in` / `out` / `adjustment` — រាល់ការផ្លាស់ប្តូរស្តុក
-(ចូល, ចេញ ឬកែតម្រូវដោយដៃ) ត្រូវបានកត់ត្រានៅទីនេះទាំងអស់ ដើម្បីមាន audit trail ពេញលេញ។
+`stock_transactions.type` អាចជា `in` / `out` / `adjustment` / `sale` — រាល់ការផ្លាស់ប្តូរស្តុក
+(ចូល, ចេញ, កែតម្រូវដោយដៃ ឬលក់) ត្រូវបានកត់ត្រានៅទីនេះទាំងអស់ ដើម្បីមាន audit trail ពេញលេញ។
+
+> **សម្រាប់ការដំឡើងដែលមានស្រាប់៖** ប្រសិនបើ database របស់អ្នកត្រូវបានបង្កើតឡើងមុនពេលដែល
+> `database/schema.sql` មាន transaction type `sale` (ជាការត្រៀមសម្រាប់ POS module នាពេលអនាគត —
+> មិនទាន់មានមុខងារ POS នៅឡើយទេ) សូម run
+> `database/migrations/001_add_sale_transaction_type.sql`ម្តងលើ database នោះ។
+> ការដំឡើងថ្មីដោយប្រើ `schema.sql` បច្ចុប្បន្នមានវារួចហើយ។
 
 ---
 
