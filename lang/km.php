@@ -9,6 +9,7 @@ return [
     'nav_units' => 'ឯកតា',
     'nav_suppliers' => 'អ្នកផ្គត់ផ្គង់',
     'nav_operation' => 'ប្រតិបត្តិការ',
+    'nav_pos' => 'ចំណុចលក់',
     'nav_stock_in' => 'ស្តុកចូល',
     'nav_stock_out' => 'ស្តុកចេញ',
     'nav_stock_adjustments' => 'កែតម្រូវស្តុក',
@@ -192,6 +193,20 @@ return [
     'stockout_err_insufficient_prefix' => 'ស្តុកមិនគ្រប់គ្រាន់សម្រាប់',
     'stockout_err_insufficient_have' => 'មាន',
     'stockout_err_insufficient_requested' => 'ស្នើសុំ',
+
+    // POS
+    'pos_line_total' => 'សរុបជួរ',
+    'pos_subtotal_label' => 'សរុបរង',
+    'pos_payment_section_title' => 'ការទូទាត់',
+    'pos_cash_received_label' => 'ប្រាក់ទទួលបាន',
+    'pos_change_due_label' => 'ប្រាក់អាប់',
+    'pos_submit_button' => 'បញ្ចប់ការលក់',
+    'pos_err_insufficient_cash' => 'ប្រាក់ទទួលបានមិនគ្រប់ចំនួនសរុបទេ។',
+    'pos_receipt_title' => 'ការលក់បានជោគជ័យ',
+    'pos_total_label' => 'សរុប',
+    'pos_print_button' => 'បោះពុម្ពបង្កាន់ដៃ',
+    'pos_new_sale_button' => 'ការលក់ថ្មី',
+    'pos_recent_sales_title' => 'ការលក់ថ្មីៗ',
 
     // Stock Adjustment
     'stockadj_reason_label' => 'មូលហេតុ *',

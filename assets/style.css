@@ -197,3 +197,13 @@ body.theme-light .form-control::placeholder { color: #8792A0; }
   margin-bottom:8px;
 }
 .theme-toggle-btn:hover{ border-color:var(--accent); color:var(--accent); }
+
+/* POS receipt printing - hide app chrome and neutralize the dark theme so
+   window.print() produces a plain, readable page with just the receipt */
+@media print {
+  .sidebar, .no-print, .toast-container { display:none !important; }
+  main { padding:0 !important; margin:0 !important; }
+  body { background:#fff !important; color:#000 !important; }
+  .card { background:#fff !important; border-color:#ccc !important; color:#000 !important; box-shadow:none !important; }
+  table { color:#000 !important; }
+}

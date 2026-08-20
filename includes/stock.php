@@ -87,7 +87,11 @@ function recordStockOut(PDO $pdo, array $lines, string $date, string $note, int 
 
     try {
         $pdo->beginTransaction();
-        $reference = nextStockReference($pdo, 'STO');
+        // Reference prefix follows the transaction type: a POS sale gets
+        // SAL-, a manual Stock Out keeps the existing STO- prefix. $type
+        // already defaults to 'out', so this is a no-op for every existing
+        // caller - it only changes behavior when 'sale' is passed.
+        $reference = nextStockReference($pdo, $type === 'sale' ? 'SAL' : 'STO');
 
         $stmt = $pdo->prepare('INSERT INTO stock_transactions (reference, type, transaction_date, note, supplier_id, user_id) VALUES (?,?,?,?,NULL,?)');
         $stmt->execute([$reference, $type, $date, $note, $userId]);
