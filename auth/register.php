@@ -78,6 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <div class="auth-right">
     <div class="auth-form">
       <h4 class="mb-4"><?= __('register_title') ?></h4>
+      <div class="alert alert-info py-2"><?= __('register_viewer_notice') ?></div>
       <?php if ($error): ?><div class="alert alert-danger py-2"><?= htmlspecialchars($error) ?></div><?php endif; ?>
       <form method="post">
         <?= csrf_field() ?>

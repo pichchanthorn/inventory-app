@@ -99,6 +99,7 @@ return [
     'register_have_account' => 'Already have an account?',
     'register_login_link' => 'Log in',
     'register_err_fill_fields' => 'Please fill in every field.',
+    'register_viewer_notice' => 'New accounts start with view-only (Viewer) access. An administrator can grant additional permissions if needed.',
 
     // Profile
     'profile_force_change_banner' => 'Your account was just created for you — please set your own password below before continuing.',
