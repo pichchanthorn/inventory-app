@@ -75,13 +75,22 @@ function recordStockIn(PDO $pdo, array $lines, string $date, ?int $supplierId, s
 // race past. 0 rows affected means insufficient stock at the moment of
 // the write; throws StockConflictException so the caller can rebuild the
 // existing "not enough stock for X" message.
-function recordStockOut(PDO $pdo, array $lines, string $date, string $note, int $userId) {
+//
+// $type distinguishes a manual Stock Out from a future POS sale — both
+// decrease stock the same way, but are logged as different transaction
+// types for reporting. Defaults to 'out' so every existing caller keeps
+// working unmodified.
+function recordStockOut(PDO $pdo, array $lines, string $date, string $note, int $userId, string $type = 'out') {
+    if (!in_array($type, ['out', 'sale'], true)) {
+        throw new InvalidArgumentException("Invalid stock-out type '$type' - must be 'out' or 'sale'.");
+    }
+
     try {
         $pdo->beginTransaction();
         $reference = nextStockReference($pdo, 'STO');
 
         $stmt = $pdo->prepare('INSERT INTO stock_transactions (reference, type, transaction_date, note, supplier_id, user_id) VALUES (?,?,?,?,NULL,?)');
-        $stmt->execute([$reference, 'out', $date, $note, $userId]);
+        $stmt->execute([$reference, $type, $date, $note, $userId]);
         $txId = $pdo->lastInsertId();
 
         foreach ($lines as $line) {

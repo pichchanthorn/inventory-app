@@ -75,8 +75,15 @@ stock_transactions       (id, reference, type, transaction_date, note, supplier_
 stock_transaction_items  (id, transaction_id, product_id, qty, unit_price, subtotal)
 ```
 
-`stock_transactions.type` is one of `in` / `out` / `adjustment` — every stock
-change (in, out, or manual correction) is logged here for a full audit trail.
+`stock_transactions.type` is one of `in` / `out` / `adjustment` / `sale` — every
+stock change (in, out, manual correction, or sale) is logged here for a full
+audit trail.
+
+> **Existing installations:** if your database was set up before
+> `database/schema.sql` included the `sale` transaction type (a prerequisite
+> for a future POS module — no POS feature ships yet), run
+> `database/migrations/001_add_sale_transaction_type.sql` once against it.
+> Fresh installs using the current `schema.sql` already include it.
 
 ---
 
