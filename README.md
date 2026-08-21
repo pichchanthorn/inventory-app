@@ -30,7 +30,8 @@ prepared statements throughout for SQL-injection safety.
 | **Stock In** | Multi-line receiving form; increases stock and logs a transaction inside a DB transaction |
 | **Stock Out** | Multi-line issuing form; decreases stock with an availability check |
 | **Stock Adjustments** | Sets an exact stock count with a required reason (for physical counts / corrections) |
-| **Stock Reports** | Overview, full transaction log (filterable), by-product stock levels, CSV export |
+| **Point of Sale (POS)** | Cart-based checkout — add products, cash received / change due, records a `sale` transaction (same stock-safety guarantees as Stock Out), printable receipt |
+| **Stock Reports** | Overview, full transaction log (filterable), by-product stock levels, CSV export — includes POS sales alongside Stock In/Out/Adjustments |
 | **Profile** | Update name/email, change password, upload a profile photo, view role and member-since date |
 | **Theme** | Light/Dark toggle in the sidebar, saved per browser via `localStorage` |
 
@@ -76,12 +77,12 @@ stock_transaction_items  (id, transaction_id, product_id, qty, unit_price, subto
 ```
 
 `stock_transactions.type` is one of `in` / `out` / `adjustment` / `sale` — every
-stock change (in, out, manual correction, or sale) is logged here for a full
-audit trail.
+stock change (in, out, manual correction, or a POS sale) is logged here for a
+full audit trail.
 
 > **Existing installations:** if your database was set up before
-> `database/schema.sql` included the `sale` transaction type (a prerequisite
-> for a future POS module — no POS feature ships yet), run
+> `database/schema.sql` included the `sale` transaction type (needed by the
+> Point of Sale module), run
 > `database/migrations/001_add_sale_transaction_type.sql` once against it.
 > Fresh installs using the current `schema.sql` already include it.
 
