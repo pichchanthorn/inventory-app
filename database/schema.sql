@@ -81,19 +81,31 @@ CREATE TABLE products (
     CONSTRAINT chk_products_current_stock_nonneg CHECK (current_stock >= 0)
 );
 
--- Stock transactions (Stock In / Stock Out / Adjustment headers)
+-- Stock transactions (Stock In / Stock Out / Adjustment / Sale headers)
 CREATE TABLE stock_transactions (
     id INT AUTO_INCREMENT PRIMARY KEY,
     reference VARCHAR(30) NOT NULL UNIQUE,
     type ENUM('in','out','adjustment','sale') NOT NULL,
     transaction_date DATE NOT NULL,
     note VARCHAR(255),
+    -- Cash tendered for a POS sale; NULL for every non-'sale' row, and for
+    -- 'sale' rows created before this column existed (never captured, so
+    -- there is nothing to backfill - the UI must show "not recorded" for
+    -- those, not $0.00). change_due is deliberately not stored - it's
+    -- derived at read time as (SUM(line subtotals) - cash_received), the
+    -- same way every other total in this app comes from line items rather
+    -- than a cached column.
+    cash_received DECIMAL(10,2) NULL DEFAULT NULL,
     supplier_id INT NULL,
     user_id INT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
-    INDEX idx_transaction_date (transaction_date)
+    INDEX idx_transaction_date (transaction_date),
+    -- Defense-in-depth, same spirit as chk_products_current_stock_nonneg -
+    -- the application (POS's cash_received < total rejection) already
+    -- guarantees this in practice; this is just a backstop.
+    CONSTRAINT chk_stock_transactions_cash_received_nonneg CHECK (cash_received IS NULL OR cash_received >= 0)
 );
 
 -- Stock transaction line items

@@ -80,7 +80,12 @@ function recordStockIn(PDO $pdo, array $lines, string $date, ?int $supplierId, s
 // decrease stock the same way, but are logged as different transaction
 // types for reporting. Defaults to 'out' so every existing caller keeps
 // working unmodified.
-function recordStockOut(PDO $pdo, array $lines, string $date, string $note, int $userId, string $type = 'out') {
+// $cashReceived is only meaningful for 'sale' — persisted as NULL for
+// every other type regardless of what's passed in, so the DB invariant
+// ("only sale rows have this populated") doesn't depend on caller
+// discipline. Defaults to null, so the existing Stock Out call site
+// (which never passes it) is unaffected.
+function recordStockOut(PDO $pdo, array $lines, string $date, string $note, int $userId, string $type = 'out', ?float $cashReceived = null) {
     if (!in_array($type, ['out', 'sale'], true)) {
         throw new InvalidArgumentException("Invalid stock-out type '$type' - must be 'out' or 'sale'.");
     }
@@ -93,8 +98,8 @@ function recordStockOut(PDO $pdo, array $lines, string $date, string $note, int 
         // caller - it only changes behavior when 'sale' is passed.
         $reference = nextStockReference($pdo, $type === 'sale' ? 'SAL' : 'STO');
 
-        $stmt = $pdo->prepare('INSERT INTO stock_transactions (reference, type, transaction_date, note, supplier_id, user_id) VALUES (?,?,?,?,NULL,?)');
-        $stmt->execute([$reference, $type, $date, $note, $userId]);
+        $stmt = $pdo->prepare('INSERT INTO stock_transactions (reference, type, transaction_date, note, supplier_id, user_id, cash_received) VALUES (?,?,?,?,NULL,?,?)');
+        $stmt->execute([$reference, $type, $date, $note, $userId, $type === 'sale' ? $cashReceived : null]);
         $txId = $pdo->lastInsertId();
 
         foreach ($lines as $line) {
