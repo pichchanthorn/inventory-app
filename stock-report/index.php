@@ -84,7 +84,7 @@ require_once __DIR__ . '/../includes/header.php';
           <td><span class="badge-stock <?= $typeBadgeClass[$r['type']] ?? 'badge-normal' ?>"><?= htmlspecialchars($typeLabels[$r['type']] ?? $r['type']) ?></span></td>
           <td><?= $r['items'] ?></td>
           <td><?= (int) $r['qty'] ?></td>
-          <td>$<?= number_format($r['value'], 2) ?></td>
+          <td class="mono">$<?= number_format($r['value'], 2) ?></td>
           <td class="text-secondary small"><?= htmlspecialchars($r['note']) ?></td>
         </tr>
         <?php endforeach; ?>

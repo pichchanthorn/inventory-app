@@ -34,6 +34,14 @@ h1,h2,h3,h4,h5{ font-family:'Rajdhani','Kantumruy Pro',sans-serif; font-weight:7
   border-radius:6px; color:var(--accent); font-size:.8rem;
 }
 .kpi-card-icon.icon-danger{ background:var(--danger-tint); border-color:var(--danger); color:var(--danger); }
+/* Cap the bracket-label eyebrow's own box width (not just padding - the
+   label is short text that doesn't naturally reach the card's edge, so
+   padding-right alone never forces it to wrap) so it wraps to a second
+   line instead of running under the absolutely-positioned corner icon.
+   Matters at normal size too, but becomes visible once Khmer's larger
+   km-mode bracket-label size (below) makes the label wide enough to
+   reach the icon's position. */
+.kpi-card .bracket-label{ max-width: calc(100% - 40px); }
 
 /* dashboard KPI cards that act as navigation shortcuts (via a stretched-link
    child) - lift + border shift on hover so they read as clickable, on top
@@ -52,6 +60,29 @@ h1,h2,h3,h4,h5{ font-family:'Rajdhani','Kantumruy Pro',sans-serif; font-weight:7
    to stay legible — subscript consonants and diacritics get lost at .64rem
    with dim color and wide tracking. Bump both for lang=km only. */
 body[lang="km"] .sidebar-section{ font-size:.74rem; color:var(--muted) !important; letter-spacing:.02em; }
+
+/* ---------------------------------------------------------------
+   Khmer typography (lang=km): Kantumruy Pro renders visually
+   smaller/thinner than Latin text at the same declared size/weight,
+   hurting readability across the sidebar, dashboard, and tables.
+   Bump size/weight/line-height on the Khmer-bearing text elements
+   below by roughly 10-15% and one font-weight step.
+   .mono/.slug-pill (SKU codes, references, dates, monetary values -
+   JetBrains Mono, Latin/digit content) are excluded via :not() so
+   they stay at normal Latin sizing, since they're numbers/codes,
+   not language text that needs the readability boost.
+   Reuses the existing body[lang="km"] attribute selector above
+   (already used for font-family and .sidebar-section) rather than
+   adding a separate body class. */
+body[lang="km"] { line-height: 1.65; }
+body[lang="km"] h1, body[lang="km"] h2, body[lang="km"] h3,
+body[lang="km"] h4, body[lang="km"] h5 { font-size: 1.1em; }
+body[lang="km"] .sidebar .nav-link { font-size: .88rem; font-weight: 500; }
+body[lang="km"] .bracket-label { font-size: .8rem; font-weight: 500; }
+body[lang="km"] label.form-label { font-size: .8rem; font-weight: 500; }
+body[lang="km"] table thead.table-light th { font-size: .76rem; font-weight: 600; }
+body[lang="km"] table td:not(.mono):not(.slug-pill) { font-size: 1.08em; }
+body[lang="km"] .badge-stock { font-size: .84rem; font-weight: 600; }
 .sidebar .nav-link{ color:#8B9AAE !important; font-family:'JetBrains Mono','Kantumruy Pro',monospace; font-size:.78rem; text-transform:uppercase; letter-spacing:.03em; border-left:2px solid transparent; border-radius:0; transition:background-color .15s ease, color .15s ease, border-color .15s ease; }
 .sidebar .nav-link:hover{ background:var(--panel-alt); color:#fff !important; }
 .sidebar .nav-link.active{ background:var(--accent-tint) !important; color:var(--accent) !important; border-left-color:var(--accent); font-weight:600; }
@@ -71,6 +102,11 @@ body[lang="km"] .sidebar-section{ font-size:.74rem; color:var(--muted) !importan
 .form-control:focus, .form-select:focus{ border-color:var(--accent) !important; box-shadow:0 0 0 .2rem var(--accent-tint) !important; background:var(--bg) !important; color:#E7EDF3 !important; }
 .form-control::placeholder{ color:#4E5D70; }
 label.form-label{ font-family:'JetBrains Mono','Kantumruy Pro',monospace; font-size:.72rem; letter-spacing:.05em; text-transform:uppercase; color:var(--muted); }
+/* Khmer option text (e.g. the "— គ្មាន —" placeholder) is wider per
+   character than Latin at the same size, and narrow <select>s (e.g. the
+   3-per-row category/supplier/unit pickers in the product modal) can wrap
+   it to two lines. Give km-mode selects room instead of shrinking it. */
+body[lang="km"] .form-select{ min-width: 110px; padding-right: 2.5rem; }
 
 /* cards + tables */
 .card{ background:var(--panel) !important; border:1px solid var(--line) !important; border-radius:8px !important; box-shadow:none !important; color:#E7EDF3; }
