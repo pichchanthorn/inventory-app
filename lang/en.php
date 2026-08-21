@@ -1,5 +1,12 @@
 <?php
 return [
+    // App shell
+    'app_title' => 'Inventory Management System',
+    'app_brand_name' => 'Inventory',
+    'theme_toggle_dark' => 'Dark',
+    'theme_toggle_light' => 'Light',
+    'common_close' => 'Close',
+
     // Sidebar
     'nav_overview' => 'Overview',
     'nav_dashboard' => 'Dashboard',

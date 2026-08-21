@@ -143,7 +143,7 @@ require_once __DIR__ . '/includes/header.php';
       <span style="color:var(--muted); font-size:.85rem;"><?= htmlspecialchars($user['email']) ?></span>
     </div>
     <div style="font-size:.72rem; color:var(--muted); margin-top:6px;">
-      <?= __('profile_member_since') ?> <?= date('M Y', strtotime($user['created_at'])) ?>
+      <?= __('profile_member_since') ?> <?= localizedDate('M Y', strtotime($user['created_at'])) ?>
       <?php if (!empty($user['avatar'])): ?>
         &nbsp;·&nbsp;
         <form method="post" class="d-inline">

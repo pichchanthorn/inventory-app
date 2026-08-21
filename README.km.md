@@ -34,6 +34,7 @@
 | **Stock Reports** | ទិដ្ឋភាពទូទៅ, កំណត់ត្រា transaction ពេញលេញ (filter បាន), កម្រិតស្តុកតាមផលិតផល, Export ជា CSV — រួមបញ្ចូលទាំងការលក់ពី POS ជាមួយ Stock In/Out/Adjustments |
 | **Profile** | កែឈ្មោះ/អ៊ីមែល, ប្តូរ password, upload រូបភាព profile, មើល role និងកាលបរិច្ឆេទចូលជាសមាជិក |
 | **Theme** | ប្តូររវាង Light/Dark ក្នុង sidebar រក្សាទុកក្នុង browser តាមរយៈ `localStorage` |
+| **ភាសា (Localization)** | Interface ពីរភាសា ភាសាអង់គ្លេស/ខ្មែរពេញលេញ — sidebar, forms, errors, កាលបរិច្ឆេទ និង toast ទាំងអស់ប្តូរភ្លាមៗតាមរយៈប៊ូតុងប្តូរភាសាដែលរក្សាទុកក្នុង session |
 
 ---
 

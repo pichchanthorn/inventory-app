@@ -1,5 +1,12 @@
 <?php
 return [
+    // App shell
+    'app_title' => 'ប្រព័ន្ធគ្រប់គ្រងស្តុកទំនិញ',
+    'app_brand_name' => 'ស្តុក',
+    'theme_toggle_dark' => 'ងងឹត',
+    'theme_toggle_light' => 'ភ្លឺ',
+    'common_close' => 'បិទ',
+
     // Sidebar
     'nav_overview' => 'ទិដ្ឋភាពទូទៅ',
     'nav_dashboard' => 'ផ្ទាំងគ្រប់គ្រង',

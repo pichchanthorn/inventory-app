@@ -15,7 +15,7 @@ function navClass($page, $active) {
   }
 </script>
 <meta charset="UTF-8">
-<title>Inventory Management System</title>
+<title><?= __('app_title') ?></title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%2305080D'/><path d='M16 4 27 9.5v13L16 28 5 22.5v-13z' fill='none' stroke='%2322D3EE' stroke-width='2' stroke-linejoin='round'/><path d='M16 4v12M16 16 27 9.5M16 16 5 9.5M16 16v12' stroke='%2322D3EE' stroke-width='2' stroke-linejoin='round'/></svg>">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -38,7 +38,7 @@ function navClass($page, $active) {
   <nav class="sidebar p-3" style="width:230px;">
     <div class="d-flex align-items-center gap-2 mb-4">
       <span class="barcode text-primary"><i style="height:60%"></i><i style="height:100%"></i><i style="height:40%"></i><i style="height:80%"></i></span>
-      <span class="fs-5 fw-bold">Inventory</span>
+      <span class="fs-5 fw-bold"><?= __('app_brand_name') ?></span>
     </div>
 
     <div class="sidebar-section"><?= __('nav_overview') ?></div>
@@ -67,7 +67,7 @@ function navClass($page, $active) {
     <div class="sidebar-section"><?= __('nav_account') ?></div>
     <a class="<?= navClass('profile', $activePage) ?>" href="<?= BASE_URL ?>/profile.php"><i class="bi bi-person-circle me-2"></i><?= __('nav_profile') ?></a>
     <button type="button" class="theme-toggle-btn" onclick="toggleTheme()">
-      <i class="bi bi-circle-half"></i> <span id="themeToggleLabel">Dark</span>
+      <i class="bi bi-circle-half"></i> <span id="themeToggleLabel"><?= __('theme_toggle_dark') ?></span>
     </button>
     <a href="?lang=<?= $_SESSION['lang'] === 'km' ? 'en' : 'km' ?>" class="theme-toggle-btn text-decoration-none d-block text-center">
       <?= $_SESSION['lang'] === 'km' ? 'EN' : 'ខ្មែរ' ?>
