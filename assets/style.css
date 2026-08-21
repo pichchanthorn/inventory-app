@@ -108,6 +108,11 @@ label.form-label{ font-family:'JetBrains Mono','Kantumruy Pro',monospace; font-s
    it to two lines. Give km-mode selects room instead of shrinking it. */
 body[lang="km"] .form-select{ min-width: 110px; padding-right: 2.5rem; }
 
+/* live-search in-flight indicator (Products/Categories/Units/Suppliers) -
+   a subtle dim on the results table while the debounced fetch is out,
+   cleared as soon as it resolves (or immediately by the swap itself). */
+.live-search-loading{ opacity:.5; pointer-events:none; transition:opacity .15s ease; }
+
 /* cards + tables */
 .card{ background:var(--panel) !important; border:1px solid var(--line) !important; border-radius:8px !important; box-shadow:none !important; color:#E7EDF3; }
 /* Bootstrap 5.3 sets --bs-table-bg: var(--bs-body-bg) on .table, and every
@@ -186,10 +191,12 @@ table tbody tr:hover .row-actions .btn,
 .badge-accent{ background:var(--accent-tint); color:var(--accent); border-color:var(--accent); }
 .badge-warn{ background:var(--warn-tint); color:var(--warn); border-color:var(--warn); }
 
-/* role badge colors (user list + profile) - same .badge-stock base above */
-.badge-role-admin{ background:var(--accent-tint); color:var(--accent); border-color:var(--accent); }
-.badge-role-user{ background:var(--good-tint); color:var(--good); border-color:var(--good); }
-.badge-role-viewer{ background:var(--panel-alt); color:var(--muted); border-color:var(--line); }
+/* neutral/muted modifier - same family as badge-normal/low/accent/warn
+   above. Used for Viewer role badges (user list + profile); Admin/User
+   reuse badge-accent/badge-normal directly since their colors already
+   match exactly, rather than keeping a separate badge-role-* class
+   family for the same visual concept. */
+.badge-muted{ background:var(--panel-alt); color:var(--muted); border-color:var(--line); }
 
 /* profile page */
 .profile-avatar{

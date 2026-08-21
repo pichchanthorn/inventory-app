@@ -34,10 +34,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'update') {
         $id   = (int) $_POST['id'];
         $name = trim($_POST['name']);
         $note = trim($_POST['note']);
-        $stmt = $pdo->prepare('UPDATE units SET name = ?, note = ? WHERE id = ?');
-        $stmt->execute([$name, $note, $id]);
-        header('Location: ' . BASE_URL . '/unit/index.php');
-        exit;
+        if ($name === '') {
+            $error = __('common_err_name_required');
+        } else {
+            $stmt = $pdo->prepare('UPDATE units SET name = ?, note = ? WHERE id = ?');
+            $stmt->execute([$name, $note, $id]);
+            header('Location: ' . BASE_URL . '/unit/index.php');
+            exit;
+        }
     }
 }
 
