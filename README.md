@@ -34,6 +34,7 @@ prepared statements throughout for SQL-injection safety.
 | **Stock Reports** | Overview, full transaction log (filterable), by-product stock levels, CSV export — includes POS sales alongside Stock In/Out/Adjustments |
 | **Profile** | Update name/email, change password, upload a profile photo, view role and member-since date |
 | **Theme** | Light/Dark toggle in the sidebar, saved per browser via `localStorage` |
+| **Localization** | Full bilingual English/Khmer interface — sidebar, forms, errors, dates, and toasts all switch instantly via a session-based language toggle |
 
 ---
 

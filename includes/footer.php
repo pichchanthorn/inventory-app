@@ -4,6 +4,9 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 const T_SAVING = <?= json_encode(__('common_saving')) ?>;
+const T_CLOSE = <?= json_encode(__('common_close')) ?>;
+const T_THEME_DARK = <?= json_encode(__('theme_toggle_dark')) ?>;
+const T_THEME_LIGHT = <?= json_encode(__('theme_toggle_light')) ?>;
 
 // Shared toast helper — every page that used to render a top-of-page
 // success/error <div class="alert"> now calls this instead, so messages
@@ -20,7 +23,7 @@ function showToast(message, type) {
   toastEl.innerHTML =
     '<div class="d-flex">' +
       '<div class="toast-body"></div>' +
-      '<button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>' +
+      '<button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast" aria-label="' + T_CLOSE + '"></button>' +
     '</div>';
   toastEl.querySelector('.toast-body').textContent = message;
   stack.appendChild(toastEl);
@@ -65,13 +68,13 @@ function initLiveSearch(inputId, resultsId) {
 function toggleTheme() {
   const isLight = document.body.classList.toggle('theme-light');
   localStorage.setItem('theme', isLight ? 'light' : 'dark');
-  document.getElementById('themeToggleLabel').textContent = isLight ? 'Light' : 'Dark';
+  document.getElementById('themeToggleLabel').textContent = isLight ? T_THEME_LIGHT : T_THEME_DARK;
   document.dispatchEvent(new CustomEvent('themechange'));
 }
 document.addEventListener('DOMContentLoaded', () => {
   const label = document.getElementById('themeToggleLabel');
   if (label && document.body.classList.contains('theme-light')) {
-    label.textContent = 'Light';
+    label.textContent = T_THEME_LIGHT;
   }
 });
 

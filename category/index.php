@@ -129,7 +129,7 @@ require_once __DIR__ . '/../includes/header.php';
               <input type="hidden" name="id" value="<?= $cat['id'] ?>">
               <div class="modal-header">
                 <h5 class="modal-title"><?= __('category_edit_title') ?></h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="<?= __('common_close') ?>"></button>
               </div>
               <div class="modal-body">
                 <div class="mb-3">
@@ -167,7 +167,7 @@ require_once __DIR__ . '/../includes/header.php';
         <input type="hidden" name="action" value="create">
         <div class="modal-header">
           <h5 class="modal-title"><?= __('category_create_title') ?></h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="<?= __('common_close') ?>"></button>
         </div>
         <div class="modal-body">
           <div class="mb-3">

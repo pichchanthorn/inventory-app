@@ -29,7 +29,7 @@ foreach ($movementRows as $row) {
         $movementByDate[$row['transaction_date']][$row['type']] = (float) $row['total_qty'];
     }
 }
-$movementLabels = array_map(fn($d) => date('M j', strtotime($d)), array_keys($movementByDate));
+$movementLabels = array_map(fn($d) => localizedDate('M j', strtotime($d)), array_keys($movementByDate));
 $movementIn     = array_values(array_map(fn($v) => $v['in'], $movementByDate));
 $movementOut    = array_values(array_map(fn($v) => $v['out'], $movementByDate));
 $hasMovementData = (array_sum($movementIn) + array_sum($movementOut)) > 0;
