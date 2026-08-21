@@ -63,6 +63,13 @@ CREATE TABLE products (
     supplier_id INT,
     unit_id INT,
     note TEXT,
+    -- Agrochemical-specific, both nullable so non-agrochemical rows (or
+    -- products where it doesn't apply, e.g. plain organic fertilizer)
+    -- simply leave them empty. No CHECK constraint on expiry_date - stock
+    -- that has already expired must still be recordable, that's the point
+    -- of tracking it.
+    active_ingredient VARCHAR(150) DEFAULT NULL,
+    expiry_date DATE DEFAULT NULL,
     cost_price DECIMAL(10,2) DEFAULT 0,
     sale_price DECIMAL(10,2) DEFAULT 0,
     min_stock INT DEFAULT 0,
