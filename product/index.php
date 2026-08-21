@@ -132,8 +132,8 @@ require_once __DIR__ . '/../includes/header.php';
         </td>
         <td><?= $p['category_name'] ? htmlspecialchars($p['category_name']) : '<span class="text-secondary">—</span>' ?></td>
         <td><?= $p['supplier_name'] ? htmlspecialchars($p['supplier_name']) : '<span class="text-secondary">—</span>' ?></td>
-        <td>$<?= number_format($p['cost_price'], 2) ?></td>
-        <td>$<?= number_format($p['sale_price'], 2) ?></td>
+        <td class="mono">$<?= number_format($p['cost_price'], 2) ?></td>
+        <td class="mono">$<?= number_format($p['sale_price'], 2) ?></td>
         <td style="color:<?= $margin >= 30 ? 'var(--good)' : ($margin >= 15 ? 'var(--warn)' : 'var(--danger)') ?>;"><?= $margin ?>%</td>
         <td><span class="badge-stock <?= $low ? 'badge-low' : 'badge-normal' ?>"><?= $p['current_stock'] ?> <?= __('common_pcs') ?></span></td>
         <td class="text-end row-actions">
