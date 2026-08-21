@@ -92,7 +92,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
         <div class="mb-3">
           <label class="form-label"><?= __('register_password') ?></label>
-          <input type="password" name="password" class="form-control" required minlength="6">
+          <input type="password" name="password" id="registerPassword" class="form-control" required minlength="6" oninput="updatePasswordStrength(this.value)" autocomplete="new-password">
+          <div class="password-strength-track mt-2"><div class="password-strength-fill" id="passwordStrengthFill"></div></div>
+          <span class="password-strength-label" id="passwordStrengthLabel"></span>
         </div>
         <button class="btn btn-primary w-100"><?= __('register_button') ?></button>
         <p class="text-center mt-3 mb-0"><?= __('register_have_account') ?> <a href="<?= BASE_URL ?>/auth/login.php"><?= __('register_login_link') ?></a></p>
@@ -100,5 +102,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
   </div>
 </div>
+<script>
+// Purely a client-side UX hint - the server still enforces the 6-character
+// minimum (and only that) independently in auth/register.php; this never
+// blocks or relaxes submission, it just gives feedback as the user types.
+const T_STRENGTH_WEAK   = <?= json_encode(__('register_strength_weak')) ?>;
+const T_STRENGTH_FAIR   = <?= json_encode(__('register_strength_fair')) ?>;
+const T_STRENGTH_GOOD   = <?= json_encode(__('register_strength_good')) ?>;
+const T_STRENGTH_STRONG = <?= json_encode(__('register_strength_strong')) ?>;
+
+function updatePasswordStrength(pw) {
+  const fill = document.getElementById('passwordStrengthFill');
+  const label = document.getElementById('passwordStrengthLabel');
+  const levels = [
+    { pct: 20,  cls: 'strength-weak',   text: T_STRENGTH_WEAK },
+    { pct: 45,  cls: 'strength-weak',   text: T_STRENGTH_WEAK },
+    { pct: 65,  cls: 'strength-fair',   text: T_STRENGTH_FAIR },
+    { pct: 85,  cls: 'strength-good',   text: T_STRENGTH_GOOD },
+    { pct: 100, cls: 'strength-strong', text: T_STRENGTH_STRONG },
+  ];
+  fill.className = 'password-strength-fill';
+  label.className = 'password-strength-label';
+  if (!pw) { fill.style.width = '0%'; label.textContent = ''; return; }
+
+  let score = 0;
+  if (pw.length >= 6) score++;
+  if (pw.length >= 10) score++;
+  if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) score++;
+  if (/\d/.test(pw)) score++;
+  if (/[^A-Za-z0-9]/.test(pw)) score++;
+
+  const level = levels[Math.min(score, levels.length - 1)];
+  fill.style.width = level.pct + '%';
+  fill.classList.add(level.cls);
+  label.classList.add(level.cls);
+  label.textContent = level.text;
+}
+</script>
 </body>
 </html>

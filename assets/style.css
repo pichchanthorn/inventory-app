@@ -98,9 +98,28 @@ body[lang="km"] .badge-stock { font-size: .84rem; font-weight: 600; }
 .text-primary{ color:var(--accent) !important; }
 
 /* form controls */
-.form-control, .form-select{ background:var(--bg) !important; border:1px solid var(--line) !important; color:#E7EDF3 !important; }
+.form-control, .form-select{ background:var(--bg) !important; border:1px solid var(--line) !important; color:#E7EDF3 !important; transition:border-color .2s ease, box-shadow .2s ease, background-color .2s ease; }
 .form-control:focus, .form-select:focus{ border-color:var(--accent) !important; box-shadow:0 0 0 .2rem var(--accent-tint) !important; background:var(--bg) !important; color:#E7EDF3 !important; }
 .form-control::placeholder{ color:#4E5D70; }
+/* Browser autofill (very likely on the login/register email+password
+   fields) paints its own internal background layer that plain
+   background-color can't override, even with !important - only the
+   -webkit-box-shadow inset trick reaches it. Without this, an
+   autofilled input reverts to the browser's light default regardless
+   of the dark-theme rule above. */
+.form-control:-webkit-autofill,
+.form-control:-webkit-autofill:hover,
+.form-control:-webkit-autofill:focus{
+  -webkit-text-fill-color:#E7EDF3; caret-color:#E7EDF3;
+  -webkit-box-shadow:0 0 0 1000px var(--bg) inset !important;
+  box-shadow:0 0 0 1000px var(--bg) inset !important;
+  transition:background-color 5000s ease-in-out 0s;
+}
+body.theme-light .form-control:-webkit-autofill,
+body.theme-light .form-control:-webkit-autofill:hover,
+body.theme-light .form-control:-webkit-autofill:focus{
+  -webkit-text-fill-color:#0B1220; caret-color:#0B1220;
+}
 label.form-label{ font-family:'JetBrains Mono','Kantumruy Pro',monospace; font-size:.72rem; letter-spacing:.05em; text-transform:uppercase; color:var(--muted); }
 /* Khmer option text (e.g. the "— គ្មាន —" placeholder) is wider per
    character than Latin at the same size, and narrow <select>s (e.g. the
@@ -170,12 +189,39 @@ table tbody tr:hover .row-actions .btn,
 
 /* login / register split screen */
 .auth-wrap{ min-height:100vh; display:flex; }
-.auth-left{ flex:1.1; background:var(--bg); color:#fff; padding:56px; display:flex; flex-direction:column; justify-content:space-between; border-right:1px solid var(--line); }
+.auth-left{ flex:1.1; position:relative; overflow:hidden; background:var(--bg); color:#fff; padding:56px; display:flex; flex-direction:column; justify-content:space-between; border-right:1px solid var(--line); }
 .auth-left h1{ font-size:2rem; line-height:1.25; max-width:420px; color:#fff; }
 .auth-left p{ color:var(--muted); max-width:380px; font-size:.95rem; }
+/* ambient background glow - two soft accent-tinted radial gradients that
+   drift slowly, purely decorative (pointer-events:none, kept behind the
+   real content via z-index). Stays put (no animation) when the visitor
+   has requested reduced motion - see the media query below. */
+.auth-left::before{
+  content:''; position:absolute; inset:-20%; pointer-events:none; z-index:0;
+  background:
+    radial-gradient(circle at 28% 22%, var(--accent-tint), transparent 45%),
+    radial-gradient(circle at 78% 78%, var(--accent-tint), transparent 42%);
+}
+.auth-left > div{ position:relative; z-index:1; }
+@media (prefers-reduced-motion: no-preference){
+  .auth-left::before{ animation:auth-glow-drift 16s ease-in-out infinite alternate; }
+}
+@keyframes auth-glow-drift{
+  0%{ transform:translate(0,0) scale(1); }
+  100%{ transform:translate(-4%,3%) scale(1.1); }
+}
 .auth-right{ flex:.9; background:var(--panel); display:flex; align-items:center; justify-content:center; padding:40px; }
-.auth-form{ width:100%; max-width:340px; background:var(--panel-alt); border:1px solid var(--line); padding:30px; }
+.auth-form{ width:100%; max-width:340px; background:var(--panel-alt); border:1px solid var(--line); padding:30px; transition:border-color .25s ease, box-shadow .25s ease; }
 .auth-form .alert{ font-size:.85rem; }
+.auth-form .btn-primary{ transition:filter .15s ease, box-shadow .15s ease; }
+.auth-form .btn-primary:hover{ box-shadow:0 6px 20px var(--accent-tint); }
+@media (prefers-reduced-motion: no-preference){
+  .auth-form{ transition:transform .25s ease, border-color .25s ease, box-shadow .25s ease; }
+  .auth-form:hover{ transform:translateY(-3px); box-shadow:0 12px 40px rgba(0,0,0,.35); border-color:var(--line-bright); }
+  .auth-form .btn-primary{ transition:filter .15s ease, transform .15s ease, box-shadow .15s ease; }
+  .auth-form .btn-primary:hover{ transform:translateY(-1px); }
+  .auth-form .btn-primary:active{ transform:translateY(0); }
+}
 
 /* nav-pills (Stock Reports tabs) - Bootstrap defaults are unreadable on dark backgrounds */
 .nav-pills .nav-link{ color: var(--muted); }
@@ -242,6 +288,20 @@ body.theme-light table { --bs-table-color:#0B1220 !important; }
 body.theme-light .form-control,
 body.theme-light .form-select { color: #0B1220 !important; }
 body.theme-light .form-control::placeholder { color: #8792A0; }
+
+/* password-strength meter (register page only) - purely a client-side
+   UX hint, does not replace or relax the server-side 6-char minimum. */
+.password-strength-track{ height:4px; border-radius:2px; background:var(--line); overflow:hidden; }
+.password-strength-fill{ height:100%; width:0%; border-radius:2px; background:var(--line); transition:width .25s ease, background-color .25s ease; }
+.password-strength-fill.strength-weak{ background:var(--danger); }
+.password-strength-fill.strength-fair{ background:var(--warn); }
+.password-strength-fill.strength-good{ background:var(--accent); }
+.password-strength-fill.strength-strong{ background:var(--good); }
+.password-strength-label{ display:block; min-height:1.1em; font-size:.72rem; }
+.password-strength-label.strength-weak{ color:var(--danger); }
+.password-strength-label.strength-fair{ color:var(--warn); }
+.password-strength-label.strength-good{ color:var(--accent); }
+.password-strength-label.strength-strong{ color:var(--good); }
 
 .theme-toggle-btn{
   width:100%; display:flex; align-items:center; gap:8px;
