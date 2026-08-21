@@ -79,7 +79,13 @@ require_once __DIR__ . '/../includes/header.php';
         <?php if (!$rows): ?><tr><td colspan="7" class="text-center text-secondary py-4"><i class="bi bi-inbox fs-3 d-block mb-2"></i><?= __('common_no_transactions') ?></td></tr><?php endif; ?>
         <?php foreach ($rows as $r): ?>
         <tr>
-          <td class="mono text-primary"><?= htmlspecialchars($r['reference']) ?></td>
+          <td class="mono text-primary">
+            <?php if ($r['type'] === 'sale'): ?>
+              <a href="<?= BASE_URL ?>/pos/receipt.php?ref=<?= urlencode($r['reference']) ?>" class="text-primary"><?= htmlspecialchars($r['reference']) ?></a>
+            <?php else: ?>
+              <?= htmlspecialchars($r['reference']) ?>
+            <?php endif; ?>
+          </td>
           <td class="mono"><?= $r['transaction_date'] ?></td>
           <td><span class="badge-stock <?= $typeBadgeClass[$r['type']] ?? 'badge-normal' ?>"><?= htmlspecialchars($typeLabels[$r['type']] ?? $r['type']) ?></span></td>
           <td><?= $r['items'] ?></td>

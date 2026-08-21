@@ -53,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // A sale is always "now" - never a client-supplied, backdatable value.
                 $today = date('Y-m-d');
                 try {
-                    $reference = recordStockOut($pdo, $lines, $today, '', $_SESSION['user_id'], 'sale');
+                    $reference = recordStockOut($pdo, $lines, $today, '', $_SESSION['user_id'], 'sale', $cashReceived);
 
                     $receiptLines = [];
                     foreach ($lines as $line) {
@@ -69,6 +69,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $_SESSION['pos_last_sale'] = [
                         'reference' => $reference,
                         'date' => $today,
+                        'cashier' => $_SESSION['user_name'] ?? null,
                         'lines' => $receiptLines,
                         'total' => $total,
                         'cash_received' => $cashReceived,
@@ -117,46 +118,10 @@ require_once __DIR__ . '/../includes/header.php';
 <?php if ($sale): ?>
 <div class="row g-3">
   <div class="col-lg-7">
-    <div class="card p-4" id="posReceipt">
-      <div class="text-center mb-3">
-        <div class="bracket-label mb-1"><?= __('pos_receipt_title') ?></div>
-        <div class="fs-4 mono fw-bold text-primary"><?= htmlspecialchars($sale['reference']) ?></div>
-        <div class="text-secondary small mono"><?= htmlspecialchars($sale['date']) ?></div>
-      </div>
-      <table class="table table-sm mb-3">
-        <thead class="table-light">
-          <tr><th><?= __('common_product') ?></th><th class="text-end"><?= __('common_qty') ?></th><th class="text-end"><?= __('stockout_unit_price') ?></th><th class="text-end"><?= __('pos_line_total') ?></th></tr>
-        </thead>
-        <tbody>
-          <?php foreach ($sale['lines'] as $line): ?>
-          <tr>
-            <td><?= htmlspecialchars($line['name']) ?> <span class="slug-pill"><?= htmlspecialchars($line['sku']) ?></span></td>
-            <td class="text-end mono"><?= $line['qty'] ?></td>
-            <td class="text-end mono">$<?= number_format($line['price'], 2) ?></td>
-            <td class="text-end mono">$<?= number_format($line['subtotal'], 2) ?></td>
-          </tr>
-          <?php endforeach; ?>
-        </tbody>
-      </table>
-      <div class="border-top pt-3">
-        <div class="d-flex justify-content-between py-1 fs-5">
-          <span class="fw-bold"><?= __('pos_total_label') ?></span>
-          <span class="mono fw-bold">$<?= number_format($sale['total'], 2) ?></span>
-        </div>
-        <div class="d-flex justify-content-between py-1">
-          <span class="text-secondary"><?= __('pos_cash_received_label') ?></span>
-          <span class="mono">$<?= number_format($sale['cash_received'], 2) ?></span>
-        </div>
-        <div class="d-flex justify-content-between py-1">
-          <span class="text-secondary"><?= __('pos_change_due_label') ?></span>
-          <span class="mono fw-bold" style="color:var(--good);">$<?= number_format($sale['change_due'], 2) ?></span>
-        </div>
-      </div>
-      <div class="d-flex gap-2 mt-4 no-print">
-        <button type="button" class="btn btn-outline-primary flex-fill" onclick="window.print()"><i class="bi bi-printer"></i> <?= __('pos_print_button') ?></button>
-        <a href="<?= BASE_URL ?>/pos/index.php" class="btn btn-primary flex-fill"><i class="bi bi-plus-lg"></i> <?= __('pos_new_sale_button') ?></a>
-      </div>
-    </div>
+    <?php
+    $receiptSecondaryAction = '<a href="' . BASE_URL . '/pos/index.php" class="btn btn-primary flex-fill"><i class="bi bi-plus-lg"></i> ' . htmlspecialchars(__('pos_new_sale_button')) . '</a>';
+    require __DIR__ . '/../includes/receipt_view.php';
+    ?>
   </div>
 </div>
 
@@ -210,7 +175,7 @@ require_once __DIR__ . '/../includes/header.php';
       <?php foreach ($recentSales as $t): ?>
         <div class="border-bottom pb-2 mb-2">
           <div class="d-flex justify-content-between small">
-            <span class="mono text-primary"><?= htmlspecialchars($t['reference']) ?></span>
+            <a href="<?= BASE_URL ?>/pos/receipt.php?ref=<?= urlencode($t['reference']) ?>" class="mono text-primary text-decoration-none"><?= htmlspecialchars($t['reference']) ?></a>
             <span class="mono text-secondary"><?= $t['transaction_date'] ?></span>
           </div>
           <div class="small mt-1"><?= $t['items'] ?> <?= __('common_products_word') ?> · <?= (int)$t['total_qty'] ?> <?= __('common_units_word') ?> · <strong>$<?= number_format($t['total_value'], 2) ?></strong></div>
