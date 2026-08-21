@@ -7,7 +7,7 @@ function navClass($page, $active) {
 }
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="<?= htmlspecialchars($_SESSION['lang']) ?>">
 <head>
 <script>
   if (localStorage.getItem('theme') === 'light') {

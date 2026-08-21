@@ -30,7 +30,8 @@
 | **Stock In** | Form ទទួលទំនិញច្រើនជួរបន្ទាត់; បន្ថែមស្តុក និងកត់ត្រា transaction ក្នុង DB transaction តែមួយ |
 | **Stock Out** | Form ចេញទំនិញច្រើនជួរបន្ទាត់; កាត់ស្តុកជាមួយការត្រួតពិនិត្យចំនួនស្តុកមានគ្រប់គ្រាន់ |
 | **Stock Adjustments** | កំណត់ចំនួនស្តុកឲ្យត្រូវនឹងតម្លៃពិត ព្រមជាមួយហេតុផលចាំបាច់ (សម្រាប់ការរាប់ស្តុកជាក់ស្តែង / កែតម្រូវ) |
-| **Stock Reports** | ទិដ្ឋភាពទូទៅ, កំណត់ត្រា transaction ពេញលេញ (filter បាន), កម្រិតស្តុកតាមផលិតផល, Export ជា CSV |
+| **Point of Sale (POS)** | ការគិតលុយបែប cart — បន្ថែមផលិតផល, បញ្ចូលចំនួនប្រាក់ទទួល / ប្រាក់អាប់, កត់ត្រា transaction ប្រភេទ `sale` (មានការការពារស្តុកដូចគ្នានឹង Stock Out), បង្កាន់ដៃអាច print បាន |
+| **Stock Reports** | ទិដ្ឋភាពទូទៅ, កំណត់ត្រា transaction ពេញលេញ (filter បាន), កម្រិតស្តុកតាមផលិតផល, Export ជា CSV — រួមបញ្ចូលទាំងការលក់ពី POS ជាមួយ Stock In/Out/Adjustments |
 | **Profile** | កែឈ្មោះ/អ៊ីមែល, ប្តូរ password, upload រូបភាព profile, មើល role និងកាលបរិច្ឆេទចូលជាសមាជិក |
 | **Theme** | ប្តូររវាង Light/Dark ក្នុង sidebar រក្សាទុកក្នុង browser តាមរយៈ `localStorage` |
 
@@ -76,12 +77,11 @@ stock_transaction_items  (id, transaction_id, product_id, qty, unit_price, subto
 ```
 
 `stock_transactions.type` អាចជា `in` / `out` / `adjustment` / `sale` — រាល់ការផ្លាស់ប្តូរស្តុក
-(ចូល, ចេញ, កែតម្រូវដោយដៃ ឬលក់) ត្រូវបានកត់ត្រានៅទីនេះទាំងអស់ ដើម្បីមាន audit trail ពេញលេញ។
+(ចូល, ចេញ, កែតម្រូវដោយដៃ ឬការលក់ពី POS) ត្រូវបានកត់ត្រានៅទីនេះទាំងអស់ ដើម្បីមាន audit trail ពេញលេញ។
 
 > **សម្រាប់ការដំឡើងដែលមានស្រាប់៖** ប្រសិនបើ database របស់អ្នកត្រូវបានបង្កើតឡើងមុនពេលដែល
-> `database/schema.sql` មាន transaction type `sale` (ជាការត្រៀមសម្រាប់ POS module នាពេលអនាគត —
-> មិនទាន់មានមុខងារ POS នៅឡើយទេ) សូម run
-> `database/migrations/001_add_sale_transaction_type.sql`ម្តងលើ database នោះ។
+> `database/schema.sql` មាន transaction type `sale` (ដែលត្រូវការសម្រាប់ Point of Sale module)
+> សូម run `database/migrations/001_add_sale_transaction_type.sql`ម្តងលើ database នោះ។
 > ការដំឡើងថ្មីដោយប្រើ `schema.sql` បច្ចុប្បន្នមានវារួចហើយ។
 
 ---
