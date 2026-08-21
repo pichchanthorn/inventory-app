@@ -49,6 +49,7 @@ function initLiveSearch(inputId, resultsId) {
       const seq = ++requestSeq;
       const url = new URL(window.location.href);
       url.searchParams.set('q', input.value);
+      document.getElementById(resultsId)?.classList.add('live-search-loading');
       fetch(url)
         .then(r => r.text())
         .then(html => {
@@ -60,7 +61,10 @@ function initLiveSearch(inputId, resultsId) {
             history.replaceState(null, '', url);
           }
         })
-        .catch(() => {}); // silent — Enter-to-submit fallback still works
+        .catch(() => {}) // silent — Enter-to-submit fallback still works
+        .finally(() => {
+          if (seq === requestSeq) document.getElementById(resultsId)?.classList.remove('live-search-loading');
+        });
     }, 300);
   });
 }

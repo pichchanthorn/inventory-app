@@ -40,10 +40,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'update') {
         $slug = trim($_POST['slug']);
         $note = trim($_POST['note']);
 
-        $stmt = $pdo->prepare('UPDATE categories SET name = ?, slug = ?, note = ? WHERE id = ?');
-        $stmt->execute([$name, $slug, $note, $id]);
-        header('Location: ' . BASE_URL . '/category/index.php');
-        exit;
+        if ($name === '' || $slug === '') {
+            $error = __('category_err_required');
+        } else {
+            $stmt = $pdo->prepare('UPDATE categories SET name = ?, slug = ?, note = ? WHERE id = ?');
+            $stmt->execute([$name, $slug, $note, $id]);
+            header('Location: ' . BASE_URL . '/category/index.php');
+            exit;
+        }
     }
 }
 

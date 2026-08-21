@@ -50,17 +50,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'update') {
         $error = __('common_err_forbidden');
     } else {
         $id = (int) $_POST['id'];
-        $stmt = $pdo->prepare('UPDATE products SET
-            name=?, sku=?, barcode=?, category_id=?, supplier_id=?, unit_id=?, note=?, cost_price=?, sale_price=?, min_stock=?
-            WHERE id=?');
-        $stmt->execute([
-            trim($_POST['name']), trim($_POST['sku']), trim($_POST['barcode']),
-            nullableInt($_POST['category_id']), nullableInt($_POST['supplier_id']), nullableInt($_POST['unit_id']),
-            trim($_POST['note']), (float) $_POST['cost_price'], (float) $_POST['sale_price'], (int) $_POST['min_stock'],
-            $id,
-        ]);
-        header('Location: ' . BASE_URL . '/product/index.php');
-        exit;
+        $name = trim($_POST['name']);
+        $sku  = trim($_POST['sku']);
+        if ($name === '' || $sku === '') {
+            $error = __('product_err_required');
+        } else {
+            $stmt = $pdo->prepare('UPDATE products SET
+                name=?, sku=?, barcode=?, category_id=?, supplier_id=?, unit_id=?, note=?, cost_price=?, sale_price=?, min_stock=?
+                WHERE id=?');
+            $stmt->execute([
+                $name, $sku, trim($_POST['barcode']),
+                nullableInt($_POST['category_id']), nullableInt($_POST['supplier_id']), nullableInt($_POST['unit_id']),
+                trim($_POST['note']), (float) $_POST['cost_price'], (float) $_POST['sale_price'], (int) $_POST['min_stock'],
+                $id,
+            ]);
+            header('Location: ' . BASE_URL . '/product/index.php');
+            exit;
+        }
     }
 }
 

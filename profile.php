@@ -100,7 +100,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_password'])) {
 }
 
 $roleLabels = ['Admin' => __('role_admin'), 'User' => __('role_user'), 'Viewer' => __('role_viewer')];
-$roleBadgeClass = ['Admin' => 'badge-role-admin', 'User' => 'badge-role-user', 'Viewer' => 'badge-role-viewer'];
+$roleBadgeClass = ['Admin' => 'badge-accent', 'User' => 'badge-normal', 'Viewer' => 'badge-muted'];
 
 require_once __DIR__ . '/includes/header.php';
 ?>
@@ -139,7 +139,7 @@ require_once __DIR__ . '/includes/header.php';
   <div>
     <h4 class="mb-1"><?= htmlspecialchars($user['name']) ?></h4>
     <div class="d-flex align-items-center gap-2 flex-wrap">
-      <span class="badge-stock <?= $roleBadgeClass[$user['role_name']] ?? 'badge-role-viewer' ?>"><?= htmlspecialchars($roleLabels[$user['role_name']] ?? $user['role_name']) ?></span>
+      <span class="badge-stock <?= $roleBadgeClass[$user['role_name']] ?? 'badge-muted' ?>"><?= htmlspecialchars($roleLabels[$user['role_name']] ?? $user['role_name']) ?></span>
       <span style="color:var(--muted); font-size:.85rem;"><?= htmlspecialchars($user['email']) ?></span>
     </div>
     <div style="font-size:.72rem; color:var(--muted); margin-top:6px;">

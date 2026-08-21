@@ -35,10 +35,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'update') {
         $error = __('common_err_forbidden');
     } else {
         $id = (int) $_POST['id'];
-        $stmt = $pdo->prepare('UPDATE suppliers SET name=?, phone=?, email=?, address=?, note=? WHERE id=?');
-        $stmt->execute([trim($_POST['name']), trim($_POST['phone']), trim($_POST['email']), trim($_POST['address']), trim($_POST['note']), $id]);
-        header('Location: ' . BASE_URL . '/supplier/index.php');
-        exit;
+        $name = trim($_POST['name']);
+        if ($name === '') {
+            $error = __('common_err_name_required');
+        } else {
+            $stmt = $pdo->prepare('UPDATE suppliers SET name=?, phone=?, email=?, address=?, note=? WHERE id=?');
+            $stmt->execute([$name, trim($_POST['phone']), trim($_POST['email']), trim($_POST['address']), trim($_POST['note']), $id]);
+            header('Location: ' . BASE_URL . '/supplier/index.php');
+            exit;
+        }
     }
 }
 
