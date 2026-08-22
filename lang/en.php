@@ -168,6 +168,7 @@ return [
     'product_title' => 'Products',
     'product_err_required' => 'Name and SKU are required.',
     'product_err_sku_exists' => 'This SKU already exists.',
+    'product_err_delete_has_history' => "This product can't be deleted because it has stock transaction history.",
     'product_search_placeholder' => 'Search products or SKU...',
     'product_col_cost' => 'Cost',
     'product_col_price' => 'Price',

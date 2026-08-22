@@ -103,9 +103,17 @@ CREATE TABLE products (
     min_stock INT DEFAULT 0,
     current_stock INT DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    -- created_by/updated_by: same nullable/ON DELETE SET NULL pattern as
+    -- categories/units/suppliers - see those tables' comment above for
+    -- why losing attribution must never block or cascade a user delete.
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    created_by INT NULL,
+    updated_by INT NULL,
     FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL,
     FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL,
     FOREIGN KEY (unit_id) REFERENCES units(id) ON DELETE SET NULL,
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL,
     -- Final safety net: application code (includes/stock.php) is the
     -- primary guard against negative stock via atomic/optimistic-locked
     -- UPDATEs; this CHECK just ensures the invariant holds even if some
