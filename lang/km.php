@@ -46,6 +46,7 @@ return [
     'common_supplier' => 'អ្នកផ្គត់ផ្គង់',
     'common_unit' => 'ឯកតា',
     'common_product' => 'ផលិតផល',
+    'common_user' => 'អ្នកប្រើប្រាស់',
     'common_qty' => 'បរិមាណ',
     'common_reference' => 'លេខយោង',
     'common_date' => 'កាលបរិច្ឆេទ',

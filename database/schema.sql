@@ -15,6 +15,11 @@ CREATE TABLE roles (
 INSERT INTO roles (name) VALUES ('Admin'), ('User'), ('Viewer');
 
 -- Users (login accounts)
+-- created_by/updated_by: same nullable/ON DELETE SET NULL pattern as
+-- categories/units/suppliers/products - see those tables' comments
+-- above for why losing attribution must never block or cascade a user
+-- delete. Self-referential (users.created_by -> users.id) since this
+-- is the users table itself - MySQL allows this without issue.
 CREATE TABLE users (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
@@ -24,7 +29,12 @@ CREATE TABLE users (
     avatar VARCHAR(255) DEFAULT NULL,
     must_change_password TINYINT(1) NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (role_id) REFERENCES roles(id)
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    created_by INT NULL,
+    updated_by INT NULL,
+    FOREIGN KEY (role_id) REFERENCES roles(id),
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
 );
 
 -- Categories (Laptop, PC, TV, ...)

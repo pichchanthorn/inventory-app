@@ -34,3 +34,31 @@ function logAudit(PDO $pdo, int $actorId, string $action, string $entityType, in
         $after !== null ? json_encode($after) : null,
     ]);
 }
+
+// The ONLY function permitted to build a users-table audit snapshot.
+// Every users write path (user/index.php, profile.php, and
+// auth/register.php if in scope) must route through this - never
+// hand-build a users snapshot, never pass $user or a raw fetch() row
+// straight to logAudit().
+//
+// This is an explicit field allowlist, not $row with password
+// unset() - it is built as a literal array from named keys, so it
+// physically never reads $row['password']. A future column added to
+// `users` (a 2FA secret, an API token, anything) is excluded by
+// default and requires a deliberate edit here to ever appear in an
+// audit snapshot, rather than being silently swept in by a SELECT *
+// the way an unset()-based approach would.
+function userAuditSnapshot(array $row): array {
+    return [
+        'id'                   => (int) $row['id'],
+        'name'                 => $row['name'],
+        'email'                => $row['email'],
+        'role_id'              => (int) $row['role_id'],
+        'avatar'               => $row['avatar'],
+        'must_change_password' => (int) $row['must_change_password'],
+        'created_at'           => $row['created_at'],
+        'updated_at'           => $row['updated_at'] ?? null,
+        'created_by'           => $row['created_by'] ?? null,
+        'updated_by'           => $row['updated_by'] ?? null,
+    ];
+}
