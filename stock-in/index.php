@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/auth_check.php';
 require_once __DIR__ . '/../includes/stock.php';
+require_once __DIR__ . '/../includes/currency.php';
 require_once __DIR__ . '/../config/db.php';
 
 $activePage = 'stock-in';
@@ -15,6 +16,13 @@ unset($_SESSION['stockin_flash']);
 $suppliers = $pdo->query('SELECT * FROM suppliers ORDER BY name')->fetchAll();
 $products  = $pdo->query('SELECT * FROM products ORDER BY name')->fetchAll();
 
+// Used both server-side (resolvePriceField, below) to convert a KHR entry
+// to the USD value actually passed to recordStockIn(), and exposed to JS
+// as a page-global constant purely for the live "≈" preview text - the
+// client never computes the value that gets submitted.
+$khrRateRow = $pdo->query('SELECT usd_to_khr_rate FROM app_settings WHERE id = 1')->fetchColumn();
+$khrRate = $khrRateRow !== false ? (float) $khrRateRow : null;
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify();
     if (!canWrite()) {
@@ -26,26 +34,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $productIds = $_POST['product_id'] ?? [];
         $qtys = $_POST['qty'] ?? [];
         $costs = $_POST['unit_cost'] ?? [];
+        $costCurrencies = $_POST['unit_cost_currency'] ?? [];
 
-        $lines = [];
-        foreach ($productIds as $i => $pid) {
-            if ($pid !== '' && (float) $qtys[$i] > 0) {
-                $lines[] = ['product_id' => (int) $pid, 'qty' => (float) $qtys[$i], 'cost' => (float) $costs[$i]];
+        try {
+            $lines = [];
+            foreach ($productIds as $i => $pid) {
+                if ($pid !== '' && (float) $qtys[$i] > 0) {
+                    $cost = resolvePriceField(
+                        ['unit_cost' => $costs[$i] ?? 0, 'unit_cost_currency' => $costCurrencies[$i] ?? 'USD'],
+                        'unit_cost', $khrRate
+                    );
+                    $lines[] = ['product_id' => (int) $pid, 'qty' => (float) $qtys[$i], 'cost' => $cost];
+                }
             }
-        }
 
-        if (!$lines) {
-            $error = __('stockin_err_add_product');
-        } else {
-            try {
+            if (!$lines) {
+                $error = __('stockin_err_add_product');
+            } else {
                 $reference = recordStockIn($pdo, $lines, $date, $supplierId, $note, $_SESSION['user_id']);
                 $_SESSION['stockin_flash'] = __('stockin_recorded_prefix') . " $reference " . __('stockin_recorded_suffix');
                 header('Location: ' . BASE_URL . '/stock-in/index.php');
                 exit;
-            } catch (Throwable $e) {
-                error_log('Stock In failed: ' . $e->getMessage());
-                $error = __('common_err_transaction_failed');
             }
+        } catch (PriceConversionException $e) {
+            $error = $e->getMessage();
+        } catch (Throwable $e) {
+            error_log('Stock In failed: ' . $e->getMessage());
+            $error = __('common_err_transaction_failed');
         }
     }
 }
@@ -126,6 +141,10 @@ const PRODUCTS = <?= json_encode($products) ?>;
 const T_CHOOSE_PRODUCT = <?= json_encode(__('common_choose_product_option')) ?>;
 const T_NOW = <?= json_encode(__('common_now_label')) ?>;
 const T_PCS = <?= json_encode(__('common_pcs')) ?>;
+// Live-preview-only KHR<->USD conversion for the Unit Cost currency
+// toggle - the server always resolves the real submitted value via
+// resolvePriceField(), independently of this preview.
+const EXCHANGE_RATE = <?= json_encode($khrRate) ?>;
 
 function productOptions(selected) {
   let html = `<option value="">${T_CHOOSE_PRODUCT}</option>`;
@@ -138,18 +157,69 @@ function productOptions(selected) {
 
 function addRow(productId = '', qty = 1, cost = '') {
   const tr = document.createElement('tr');
+  const toggleDisabled = EXCHANGE_RATE ? '' : 'disabled';
   tr.innerHTML = `
     <td><select name="product_id[]" class="form-select form-select-sm" onchange="fillCost(this)">${productOptions(productId)}</select></td>
     <td><input type="number" name="qty[]" class="form-control form-control-sm" value="${qty}" min="1"></td>
-    <td><input type="number" name="unit_cost[]" class="form-control form-control-sm" value="${cost}" step="0.01"></td>
+    <td>
+      <div class="input-group input-group-sm price-input-group">
+        <button type="button" class="btn btn-outline-secondary currency-toggle-btn" onclick="toggleCurrency(this)" ${toggleDisabled}>$</button>
+        <input type="number" name="unit_cost[]" class="form-control price-amount-input" value="${cost}" step="0.01" oninput="updatePricePreview(this)">
+        <input type="hidden" name="unit_cost_currency[]" class="price-currency-input" value="USD">
+      </div>
+      <div class="text-secondary small price-preview"></div>
+    </td>
     <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()">✕</button></td>`;
   document.getElementById('lineBody').appendChild(tr);
 }
 function fillCost(sel) {
   const opt = sel.selectedOptions[0];
   const row = sel.closest('tr');
-  row.querySelector('[name="unit_cost[]"]').value = opt.dataset.cost || 0;
+  const input = row.querySelector('[name="unit_cost[]"]');
+  const currencyInput = row.querySelector('[name="unit_cost_currency[]"]');
+  const btn = row.querySelector('.currency-toggle-btn');
+  input.value = opt.dataset.cost || 0;
+  // Auto-fill always resets to USD (the product's stored cost is USD) -
+  // otherwise a row left toggled to KHR from a previous product would
+  // silently reinterpret the freshly-filled USD figure as Riel.
+  currencyInput.value = 'USD';
+  btn.textContent = '$';
+  input.step = '0.01';
+  updatePricePreview(input);
 }
+
+function toggleCurrency(btn) {
+  if (btn.disabled) return;
+  const group = btn.closest('.price-input-group');
+  const input = group.querySelector('.price-amount-input');
+  const currencyInput = group.querySelector('.price-currency-input');
+  const current = parseFloat(input.value) || 0;
+  if (currencyInput.value === 'USD') {
+    currencyInput.value = 'KHR';
+    btn.textContent = '៛';
+    input.value = Math.round(current * EXCHANGE_RATE);
+    input.step = '1';
+  } else {
+    currencyInput.value = 'USD';
+    btn.textContent = '$';
+    input.value = (current / EXCHANGE_RATE).toFixed(2);
+    input.step = '0.01';
+  }
+  updatePricePreview(input);
+}
+
+function updatePricePreview(input) {
+  const group = input.closest('.price-input-group');
+  const currencyInput = group.querySelector('.price-currency-input');
+  const preview = group.parentElement.querySelector('.price-preview');
+  if (!preview) return;
+  const amount = parseFloat(input.value) || 0;
+  if (!EXCHANGE_RATE || amount <= 0) { preview.textContent = ''; return; }
+  preview.textContent = currencyInput.value === 'USD'
+    ? `≈ ៛${Math.round(amount * EXCHANGE_RATE).toLocaleString()}`
+    : `≈ $${(amount / EXCHANGE_RATE).toFixed(2)}`;
+}
+
 addRow();
 </script>
 

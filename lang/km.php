@@ -187,6 +187,10 @@ return [
     'product_package_size' => 'ទំហំវេចខ្ចប់',
     'product_package_size_placeholder' => 'ឧ. 50kg, 500ml',
 
+    // Currency (KHR entry toggle - Product Cost/Sale Price, Stock In Unit Cost)
+    'currency_err_no_rate_configured' => 'មិនទាន់មានអត្រាប្តូរប្រាក់កំណត់ទេ — សូមកំណត់នៅក្នុងការកំណត់ មុននឹងបញ្ចូលចំនួនជារៀល។',
+    'currency_err_price_rounds_to_zero' => 'ចំនួននេះតូចពេក ហើយនឹងក្លាយជា $0.00 — សូមពិនិត្យតម្លៃម្តងទៀត។',
+
     // Stock In
     'stockin_select_supplier' => '— ជ្រើសរើសអ្នកផ្គត់ផ្គង់ —',
     'stockin_note_placeholder' => 'ឧ. ការទិញប្រចាំត្រីមាស',
