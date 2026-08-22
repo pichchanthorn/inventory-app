@@ -25,6 +25,7 @@ return [
     'nav_administration' => 'Administration',
     'nav_users' => 'Users',
     'nav_settings' => 'Settings',
+    'nav_audit_log' => 'Audit Log',
     'nav_account' => 'Account',
     'nav_profile' => 'Profile',
     'nav_sign_out' => 'Sign out',
@@ -310,4 +311,19 @@ return [
     'settings_exchange_rate_hint' => 'Used to show an approximate Riel total on sale receipts. Update this whenever the rate changes — it is not fetched automatically.',
     'settings_err_invalid_rate' => 'Enter a rate greater than 0.',
     'settings_rate_updated' => 'Exchange rate updated.',
+
+    // Audit Log
+    'audit_title' => 'Audit Log',
+    'audit_col_time' => 'Time',
+    'audit_col_actor' => 'Actor',
+    'audit_col_action' => 'Action',
+    'audit_col_entity_type' => 'Entity Type',
+    'audit_col_entity' => 'Entity',
+    'audit_action_create' => 'Created',
+    'audit_action_update' => 'Updated',
+    'audit_action_delete' => 'Deleted',
+    'audit_view_details' => 'Details',
+    'audit_before_label' => 'Before',
+    'audit_after_label' => 'After',
+    'audit_empty' => 'No audit history yet.',
 ];

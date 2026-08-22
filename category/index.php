@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/auth_check.php';
 require_once __DIR__ . '/../includes/sortable.php';
+require_once __DIR__ . '/../includes/audit.php';
 require_once __DIR__ . '/../config/db.php';
 
 $activePage = 'category';
@@ -22,10 +23,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'create') {
         if ($name === '' || $slug === '') {
             $error = __('category_err_required');
         } else {
-            $stmt = $pdo->prepare('INSERT INTO categories (name, slug, note) VALUES (?, ?, ?)');
-            $stmt->execute([$name, $slug, $note]);
-            header('Location: ' . BASE_URL . '/category/index.php');
-            exit;
+            $actorId = (int) $_SESSION['user_id'];
+            try {
+                $pdo->beginTransaction();
+                $stmt = $pdo->prepare('INSERT INTO categories (name, slug, note, created_by, updated_by) VALUES (?, ?, ?, ?, ?)');
+                $stmt->execute([$name, $slug, $note, $actorId, $actorId]);
+                $newId = (int) $pdo->lastInsertId();
+                logAudit($pdo, $actorId, 'create', 'category', $newId, null, ['name' => $name, 'slug' => $slug, 'note' => $note]);
+                $pdo->commit();
+                header('Location: ' . BASE_URL . '/category/index.php');
+                exit;
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                error_log('Category create failed: ' . $e->getMessage());
+                $error = __('common_err_transaction_failed');
+            }
         }
     }
 }
@@ -43,10 +55,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'update') {
         if ($name === '' || $slug === '') {
             $error = __('category_err_required');
         } else {
-            $stmt = $pdo->prepare('UPDATE categories SET name = ?, slug = ?, note = ? WHERE id = ?');
-            $stmt->execute([$name, $slug, $note, $id]);
-            header('Location: ' . BASE_URL . '/category/index.php');
-            exit;
+            $actorId = (int) $_SESSION['user_id'];
+            $stmt = $pdo->prepare('SELECT * FROM categories WHERE id = ?');
+            $stmt->execute([$id]);
+            $before = $stmt->fetch();
+
+            try {
+                $pdo->beginTransaction();
+                $stmt = $pdo->prepare('UPDATE categories SET name = ?, slug = ?, note = ?, updated_by = ? WHERE id = ?');
+                $stmt->execute([$name, $slug, $note, $actorId, $id]);
+                logAudit($pdo, $actorId, 'update', 'category', $id, $before ?: null, ['name' => $name, 'slug' => $slug, 'note' => $note]);
+                $pdo->commit();
+                header('Location: ' . BASE_URL . '/category/index.php');
+                exit;
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                error_log('Category update failed: ' . $e->getMessage());
+                $error = __('common_err_transaction_failed');
+            }
         }
     }
 }
@@ -54,10 +80,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'update') {
 // ---------- DELETE (Admin only) ----------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete' && isAdmin()) {
     $id = (int) $_POST['id'];
-    $stmt = $pdo->prepare('DELETE FROM categories WHERE id = ?');
+    $actorId = (int) $_SESSION['user_id'];
+    $stmt = $pdo->prepare('SELECT * FROM categories WHERE id = ?');
     $stmt->execute([$id]);
-    header('Location: ' . BASE_URL . '/category/index.php');
-    exit;
+    $before = $stmt->fetch();
+
+    try {
+        $pdo->beginTransaction();
+        $stmt = $pdo->prepare('DELETE FROM categories WHERE id = ?');
+        $stmt->execute([$id]);
+        if ($before) {
+            logAudit($pdo, $actorId, 'delete', 'category', $id, $before, null);
+        }
+        $pdo->commit();
+        header('Location: ' . BASE_URL . '/category/index.php');
+        exit;
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        error_log('Category delete failed: ' . $e->getMessage());
+        $error = __('common_err_transaction_failed');
+    }
 }
 
 // ---------- SEARCH + LIST ----------

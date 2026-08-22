@@ -28,19 +28,36 @@ CREATE TABLE users (
 );
 
 -- Categories (Laptop, PC, TV, ...)
+-- created_by/updated_by are nullable FKs to users(id) - NULL on existing
+-- rows predating this column (unknown, not a guess) and on any future
+-- row saved by code that doesn't set them. ON DELETE SET NULL rather
+-- than blocking a user delete or cascading: losing the attribution
+-- ("who" made a change) must never be allowed to block or destroy the
+-- change record itself - see audit_log below for the actual history.
 CREATE TABLE categories (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     slug VARCHAR(100) NOT NULL UNIQUE,
     note TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    created_by INT NULL,
+    updated_by INT NULL,
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
 );
 
 -- Units (pcs, box, ream, kg, ltr, btr, set ...)
 CREATE TABLE units (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(50) NOT NULL,
-    note TEXT
+    note TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    created_by INT NULL,
+    updated_by INT NULL,
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
 );
 
 -- Suppliers
@@ -50,7 +67,13 @@ CREATE TABLE suppliers (
     phone VARCHAR(30),
     email VARCHAR(150),
     address TEXT,
-    note TEXT
+    note TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    created_by INT NULL,
+    updated_by INT NULL,
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
 );
 
 -- Products
@@ -143,4 +166,40 @@ CREATE TABLE app_settings (
     id INT NOT NULL DEFAULT 1 PRIMARY KEY,
     usd_to_khr_rate DECIMAL(10,2) NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- Accountability Foundation: append-only audit trail for CREATE/UPDATE/
+-- DELETE on the catalog/config tables (Products and Users are separate,
+-- later batches; stock_transactions is out of scope entirely - it's
+-- already append-only/permanent by design, nothing to audit there).
+--
+-- entity_id deliberately has NO foreign key: one column can't reference
+-- five different tables, and a 'delete' row's entity_id must remain
+-- valid (and meaningful) after the referenced row is gone - that's the
+-- whole point of that row existing. entity_type + entity_id together
+-- identify what changed; the application is the only thing that
+-- enforces which (type, id) pairs are valid, same as any polymorphic
+-- reference.
+--
+-- before_snapshot/after_snapshot are entity-level (the whole row as the
+-- app read/wrote it), not field-level diffs - Phase 1 scope. Snapshots
+-- must never contain users.password - that redaction is the caller's
+-- responsibility (see includes/audit.php), not enforced by this table.
+--
+-- CRITICAL: this table must never become editable through the app, not
+-- even for Admin - no UPDATE/DELETE code path is expected to exist
+-- against it, ever. It is written to (via includes/audit.php) and read
+-- from (the Admin-only audit log page) - nothing else.
+CREATE TABLE audit_log (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NULL,
+    action ENUM('create','update','delete') NOT NULL,
+    entity_type VARCHAR(30) NOT NULL,
+    entity_id INT NOT NULL,
+    before_snapshot JSON NULL,
+    after_snapshot JSON NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+    INDEX idx_entity (entity_type, entity_id),
+    INDEX idx_created_at (created_at)
 );

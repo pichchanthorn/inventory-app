@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/auth_check.php';
 require_once __DIR__ . '/../includes/sortable.php';
+require_once __DIR__ . '/../includes/audit.php';
 require_once __DIR__ . '/../config/db.php';
 
 $activePage = 'unit';
@@ -19,10 +20,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'create') {
         if ($name === '') {
             $error = __('common_err_name_required');
         } else {
-            $stmt = $pdo->prepare('INSERT INTO units (name, note) VALUES (?, ?)');
-            $stmt->execute([$name, $note]);
-            header('Location: ' . BASE_URL . '/unit/index.php');
-            exit;
+            $actorId = (int) $_SESSION['user_id'];
+            try {
+                $pdo->beginTransaction();
+                $stmt = $pdo->prepare('INSERT INTO units (name, note, created_by, updated_by) VALUES (?, ?, ?, ?)');
+                $stmt->execute([$name, $note, $actorId, $actorId]);
+                $newId = (int) $pdo->lastInsertId();
+                logAudit($pdo, $actorId, 'create', 'unit', $newId, null, ['name' => $name, 'note' => $note]);
+                $pdo->commit();
+                header('Location: ' . BASE_URL . '/unit/index.php');
+                exit;
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                error_log('Unit create failed: ' . $e->getMessage());
+                $error = __('common_err_transaction_failed');
+            }
         }
     }
 }
@@ -37,19 +49,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'update') {
         if ($name === '') {
             $error = __('common_err_name_required');
         } else {
-            $stmt = $pdo->prepare('UPDATE units SET name = ?, note = ? WHERE id = ?');
-            $stmt->execute([$name, $note, $id]);
-            header('Location: ' . BASE_URL . '/unit/index.php');
-            exit;
+            $actorId = (int) $_SESSION['user_id'];
+            $stmt = $pdo->prepare('SELECT * FROM units WHERE id = ?');
+            $stmt->execute([$id]);
+            $before = $stmt->fetch();
+
+            try {
+                $pdo->beginTransaction();
+                $stmt = $pdo->prepare('UPDATE units SET name = ?, note = ?, updated_by = ? WHERE id = ?');
+                $stmt->execute([$name, $note, $actorId, $id]);
+                logAudit($pdo, $actorId, 'update', 'unit', $id, $before ?: null, ['name' => $name, 'note' => $note]);
+                $pdo->commit();
+                header('Location: ' . BASE_URL . '/unit/index.php');
+                exit;
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                error_log('Unit update failed: ' . $e->getMessage());
+                $error = __('common_err_transaction_failed');
+            }
         }
     }
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete' && isAdmin()) {
-    $stmt = $pdo->prepare('DELETE FROM units WHERE id = ?');
-    $stmt->execute([(int) $_POST['id']]);
-    header('Location: ' . BASE_URL . '/unit/index.php');
-    exit;
+    $id = (int) $_POST['id'];
+    $actorId = (int) $_SESSION['user_id'];
+    $stmt = $pdo->prepare('SELECT * FROM units WHERE id = ?');
+    $stmt->execute([$id]);
+    $before = $stmt->fetch();
+
+    try {
+        $pdo->beginTransaction();
+        $stmt = $pdo->prepare('DELETE FROM units WHERE id = ?');
+        $stmt->execute([$id]);
+        if ($before) {
+            logAudit($pdo, $actorId, 'delete', 'unit', $id, $before, null);
+        }
+        $pdo->commit();
+        header('Location: ' . BASE_URL . '/unit/index.php');
+        exit;
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        error_log('Unit delete failed: ' . $e->getMessage());
+        $error = __('common_err_transaction_failed');
+    }
 }
 
 $search = trim($_GET['q'] ?? '');

@@ -25,6 +25,7 @@ return [
     'nav_administration' => 'រដ្ឋបាល',
     'nav_users' => 'អ្នកប្រើប្រាស់',
     'nav_settings' => 'ការកំណត់',
+    'nav_audit_log' => 'កំណត់ត្រាសវនកម្ម',
     'nav_account' => 'គណនី',
     'nav_profile' => 'ប្រវត្តិរូប',
     'nav_sign_out' => 'ចាកចេញ',
@@ -310,4 +311,19 @@ return [
     'settings_exchange_rate_hint' => 'ប្រើសម្រាប់បង្ហាញចំនួនប្រហាក់ប្រហែលជារៀលនៅលើបង្កាន់ដៃលក់។ សូមធ្វើបច្ចុប្បន្នភាពរាល់ពេលអត្រាផ្លាស់ប្តូរ — វាមិនទាញយកដោយស្វ័យប្រវត្តិទេ។',
     'settings_err_invalid_rate' => 'សូមបញ្ចូលអត្រាធំជាង 0។',
     'settings_rate_updated' => 'អត្រាប្តូរប្រាក់ត្រូវបានធ្វើបច្ចុប្បន្នភាព។',
+
+    // Audit Log
+    'audit_title' => 'កំណត់ត្រាសវនកម្ម',
+    'audit_col_time' => 'ពេលវេលា',
+    'audit_col_actor' => 'អ្នកធ្វើសកម្មភាព',
+    'audit_col_action' => 'សកម្មភាព',
+    'audit_col_entity_type' => 'ប្រភេទធាតុ',
+    'audit_col_entity' => 'ធាតុ',
+    'audit_action_create' => 'បានបង្កើត',
+    'audit_action_update' => 'បានធ្វើបច្ចុប្បន្នភាព',
+    'audit_action_delete' => 'បានលុប',
+    'audit_view_details' => 'ព័ត៌មានលម្អិត',
+    'audit_before_label' => 'មុន',
+    'audit_after_label' => 'បន្ទាប់',
+    'audit_empty' => 'មិនទាន់មានប្រវត្តិសវនកម្មនៅឡើយ។',
 ];
