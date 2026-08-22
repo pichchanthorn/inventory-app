@@ -53,69 +53,77 @@ INSERT INTO units (name, note) VALUES
 -- current_stock is set directly here for a populated-looking demo; the
 -- app itself always creates new products at 0 and only changes stock
 -- through Stock In / Stock Out / Adjustment transactions.
-INSERT INTO products (name, sku, barcode, category_id, supplier_id, unit_id, note, active_ingredient, expiry_date, cost_price, sale_price, min_stock, current_stock) VALUES
-('ជីអ៊ុយរ៉េ ៤៦% (Buffalo Head) - បាវ ៥០kg', 'FERT-UREA-50', NULL,
+--
+-- package_size holds what one unit actually contains (e.g. "50kg"),
+-- kept out of `name` so the two NPK 16-16-8 rows (50kg/25kg) and the two
+-- Abamectin rows (500ml/1L) below share an identical name and differ
+-- only by size - exactly the real-world case that motivated giving
+-- package_size its own column instead of baking it into the name string.
+-- Latin digits here (not Khmer numerals) since this is semi-structured
+-- data, not customer-facing prose.
+INSERT INTO products (name, sku, barcode, category_id, supplier_id, unit_id, package_size, note, active_ingredient, expiry_date, cost_price, sale_price, min_stock, current_stock) VALUES
+('ជីអ៊ុយរ៉េ ៤៦% (Buffalo Head)', 'FERT-UREA-50', NULL,
     (SELECT id FROM categories WHERE slug = 'inorganic-fertilizer'),
     NULL,
     (SELECT id FROM units WHERE name = 'បាវ'),
-    NULL, 'Urea 46% N', '2027-06-30', 28.00, 32.00, 20, 40),
+    '50kg', NULL, 'Urea 46% N', '2027-06-30', 28.00, 32.00, 20, 40),
 
-('ជី DAP ១៨-៤៦-០ (Binh Dien) - បាវ ៥០kg', 'FERT-DAP-50', NULL,
+('ជី DAP ១៨-៤៦-០ (Binh Dien)', 'FERT-DAP-50', NULL,
     (SELECT id FROM categories WHERE slug = 'inorganic-fertilizer'),
     NULL,
     (SELECT id FROM units WHERE name = 'បាវ'),
-    NULL, 'DAP 18-46-0', '2027-06-30', 45.00, 50.00, 15, 25),
+    '50kg', NULL, 'DAP 18-46-0', '2027-06-30', 45.00, 50.00, 15, 25),
 
-('ជី NPK ១៦-១៦-៨ (Royal Crown) - បាវ ៥០kg', 'FERT-NPK1616-50', NULL,
+('ជី NPK ១៦-១៦-៨ (Royal Crown)', 'FERT-NPK1616-50', NULL,
     (SELECT id FROM categories WHERE slug = 'inorganic-fertilizer'),
     NULL,
     (SELECT id FROM units WHERE name = 'បាវ'),
-    NULL, 'NPK 16-16-8', '2027-06-30', 26.00, 30.00, 20, 35),
+    '50kg', NULL, 'NPK 16-16-8', '2027-06-30', 26.00, 30.00, 20, 35),
 
-('ជី NPK ១៦-១៦-៨ (Royal Crown) - បាវ ២៥kg', 'FERT-NPK1616-25', NULL,
+('ជី NPK ១៦-១៦-៨ (Royal Crown)', 'FERT-NPK1616-25', NULL,
     (SELECT id FROM categories WHERE slug = 'inorganic-fertilizer'),
     NULL,
     (SELECT id FROM units WHERE name = 'បាវ'),
-    NULL, 'NPK 16-16-8', '2027-06-30', 14.00, 16.00, 20, 6),
+    '25kg', NULL, 'NPK 16-16-8', '2027-06-30', 14.00, 16.00, 20, 6),
 
-('ជីសរីរាង្គ (Terragro) - បាវ ២៥kg', 'FERT-ORG-25', NULL,
+('ជីសរីរាង្គ (Terragro)', 'FERT-ORG-25', NULL,
     (SELECT id FROM categories WHERE slug = 'organic-fertilizer'),
     NULL,
     (SELECT id FROM units WHERE name = 'បាវ'),
-    NULL, NULL, '2027-03-31', 8.00, 10.00, 15, 30),
+    '25kg', NULL, NULL, '2027-03-31', 8.00, 10.00, 15, 30),
 
-('ជីទឹក Foliar Boost (Terragro) - ដប ១L', 'FERT-FOLIAR-1L', NULL,
+('ជីទឹក Foliar Boost (Terragro)', 'FERT-FOLIAR-1L', NULL,
     (SELECT id FROM categories WHERE slug = 'foliar-fertilizer'),
     NULL,
     (SELECT id FROM units WHERE name = 'ដប'),
-    NULL, NULL, '2026-12-31', 6.00, 9.00, 15, 22),
+    '1L', NULL, NULL, '2026-12-31', 6.00, 9.00, 15, 22),
 
-('ថ្នាំសម្លាប់សត្វល្អិត Abamectin 1.8% EC - ដប ៥០០ml', 'PEST-ABA-500ML', NULL,
+('ថ្នាំសម្លាប់សត្វល្អិត Abamectin 1.8% EC', 'PEST-ABA-500ML', NULL,
     (SELECT id FROM categories WHERE slug = 'insecticide'),
     NULL,
     (SELECT id FROM units WHERE name = 'ដប'),
-    NULL, 'Abamectin 1.8% EC', '2027-01-31', 4.00, 6.00, 20, 18),
+    '500ml', NULL, 'Abamectin 1.8% EC', '2027-01-31', 4.00, 6.00, 20, 18),
 
-('ថ្នាំសម្លាប់សត្វល្អិត Abamectin 1.8% EC - ដប ១L', 'PEST-ABA-1L', NULL,
+('ថ្នាំសម្លាប់សត្វល្អិត Abamectin 1.8% EC', 'PEST-ABA-1L', NULL,
     (SELECT id FROM categories WHERE slug = 'insecticide'),
     NULL,
     (SELECT id FROM units WHERE name = 'ដប'),
-    NULL, 'Abamectin 1.8% EC', '2027-01-31', 7.00, 11.00, 10, 4),
+    '1L', NULL, 'Abamectin 1.8% EC', '2027-01-31', 7.00, 11.00, 10, 4),
 
-('ថ្នាំកម្ចាត់ស្មៅ Glyphosate 41% SL - ដប ១L', 'PEST-GLY-1L', NULL,
+('ថ្នាំកម្ចាត់ស្មៅ Glyphosate 41% SL', 'PEST-GLY-1L', NULL,
     (SELECT id FROM categories WHERE slug = 'herbicide'),
     NULL,
     (SELECT id FROM units WHERE name = 'ដប'),
-    NULL, 'Glyphosate 41% SL', '2027-05-31', 3.50, 5.50, 25, 48),
+    '1L', NULL, 'Glyphosate 41% SL', '2027-05-31', 3.50, 5.50, 25, 48),
 
-('ថ្នាំកម្ចាត់ផ្សិត Propiconazole 25% EC - ដប ២៥០ml', 'PEST-PROP-250ML', NULL,
+('ថ្នាំកម្ចាត់ផ្សិត Propiconazole 25% EC', 'PEST-PROP-250ML', NULL,
     (SELECT id FROM categories WHERE slug = 'fungicide'),
     NULL,
     (SELECT id FROM units WHERE name = 'ដប'),
-    NULL, 'Propiconazole 25% EC', '2027-02-28', 3.00, 4.50, 20, 15),
+    '250ml', NULL, 'Propiconazole 25% EC', '2027-02-28', 3.00, 4.50, 20, 15),
 
-('ថ្នាំកម្ចាត់ផ្សិត (ម្សៅ) - កញ្ចប់ ៥០០g', 'PEST-FUNGP-500G', NULL,
+('ថ្នាំកម្ចាត់ផ្សិត (ម្សៅ)', 'PEST-FUNGP-500G', NULL,
     (SELECT id FROM categories WHERE slug = 'fungicide'),
     NULL,
     (SELECT id FROM units WHERE name = 'កញ្ចប់'),
-    NULL, NULL, '2027-02-28', 2.50, 4.00, 20, 3);
+    '500g', NULL, NULL, '2027-02-28', 2.50, 4.00, 20, 3);

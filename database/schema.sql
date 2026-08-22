@@ -62,6 +62,11 @@ CREATE TABLE products (
     category_id INT,
     supplier_id INT,
     unit_id INT,
+    -- What one unit actually contains (e.g. "50kg", "500ml") - a product
+    -- attribute, distinct from unit_id (what it's sold AS: bag/bottle/
+    -- packet). Nullable and free-text since it's descriptive, not used in
+    -- any calculation.
+    package_size VARCHAR(50) DEFAULT NULL,
     note TEXT,
     -- Agrochemical-specific, both nullable so non-agrochemical rows (or
     -- products where it doesn't apply, e.g. plain organic fertilizer)
