@@ -5,7 +5,12 @@ require_once __DIR__ . '/../config/db.php';
 
 $activePage = 'stock-out';
 $error = '';
-$success = '';
+
+// Post/Redirect/Get: a successful Stock Out redirects here with the toast
+// message stashed in the session, so a page refresh re-fetches this GET
+// instead of resubmitting the POST and creating a duplicate transaction.
+$success = $_SESSION['stockout_flash'] ?? '';
+unset($_SESSION['stockout_flash']);
 
 $products = $pdo->query('SELECT * FROM products ORDER BY name')->fetchAll();
 
@@ -34,7 +39,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             try {
                 $reference = recordStockOut($pdo, $lines, $date, $note, $_SESSION['user_id']);
-                $success = __('stockout_recorded_prefix') . " $reference " . __('stockout_recorded_suffix');
+                $_SESSION['stockout_flash'] = __('stockout_recorded_prefix') . " $reference " . __('stockout_recorded_suffix');
+                header('Location: ' . BASE_URL . '/stock-out/index.php');
+                exit;
             } catch (StockConflictException $e) {
                 // The guarded UPDATE found insufficient stock at write time -
                 // re-fetch current values to rebuild the existing friendly message.
@@ -131,7 +138,7 @@ function productOptions(selected) {
   let html = `<option value="">${T_CHOOSE_PRODUCT}</option>`;
   PRODUCTS.forEach(p => {
     const size = p.package_size ? ` — ${p.package_size}` : '';
-    html += `<option value="${p.id}" data-price="${p.sale_price}" ${String(p.id)===String(selected)?'selected':''}>${p.name}${size} · ${p.sku} (${T_NOW}: ${p.current_stock} ${T_PCS})</option>`;
+    html += `<option value="${p.id}" data-price="${p.sale_price}" ${String(p.id)===String(selected)?'selected':''}>${p.name}${size} (${T_NOW}: ${p.current_stock} ${T_PCS})</option>`;
   });
   return html;
 }

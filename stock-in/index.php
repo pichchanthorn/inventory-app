@@ -5,7 +5,12 @@ require_once __DIR__ . '/../config/db.php';
 
 $activePage = 'stock-in';
 $error = '';
-$success = '';
+
+// Post/Redirect/Get: a successful Stock In redirects here with the toast
+// message stashed in the session, so a page refresh re-fetches this GET
+// instead of resubmitting the POST and creating a duplicate transaction.
+$success = $_SESSION['stockin_flash'] ?? '';
+unset($_SESSION['stockin_flash']);
 
 $suppliers = $pdo->query('SELECT * FROM suppliers ORDER BY name')->fetchAll();
 $products  = $pdo->query('SELECT * FROM products ORDER BY name')->fetchAll();
@@ -34,7 +39,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             try {
                 $reference = recordStockIn($pdo, $lines, $date, $supplierId, $note, $_SESSION['user_id']);
-                $success = __('stockin_recorded_prefix') . " $reference " . __('stockin_recorded_suffix');
+                $_SESSION['stockin_flash'] = __('stockin_recorded_prefix') . " $reference " . __('stockin_recorded_suffix');
+                header('Location: ' . BASE_URL . '/stock-in/index.php');
+                exit;
             } catch (Throwable $e) {
                 error_log('Stock In failed: ' . $e->getMessage());
                 $error = __('common_err_transaction_failed');
@@ -124,7 +131,7 @@ function productOptions(selected) {
   let html = `<option value="">${T_CHOOSE_PRODUCT}</option>`;
   PRODUCTS.forEach(p => {
     const size = p.package_size ? ` — ${p.package_size}` : '';
-    html += `<option value="${p.id}" data-cost="${p.cost_price}" ${String(p.id)===String(selected)?'selected':''}>${p.name}${size} · ${p.sku} (${T_NOW}: ${p.current_stock} ${T_PCS})</option>`;
+    html += `<option value="${p.id}" data-cost="${p.cost_price}" ${String(p.id)===String(selected)?'selected':''}>${p.name}${size} (${T_NOW}: ${p.current_stock} ${T_PCS})</option>`;
   });
   return html;
 }

@@ -131,3 +131,16 @@ CREATE TABLE stock_transaction_items (
     FOREIGN KEY (transaction_id) REFERENCES stock_transactions(id) ON DELETE CASCADE,
     FOREIGN KEY (product_id) REFERENCES products(id)
 );
+
+-- App-wide settings. Currently just the USD->KHR display rate - not a
+-- generic key-value config framework, just the minimal shape this one
+-- Admin-configurable value needs. Always exactly one row (id=1); the app
+-- always reads/writes WHERE id=1 rather than enforcing singularity with
+-- a CHECK, same "trust the one call site" spirit as the rest of this
+-- schema. KHR is calculated at render time from this rate and is never
+-- stored on any transaction - underlying data stays USD-only.
+CREATE TABLE app_settings (
+    id INT NOT NULL DEFAULT 1 PRIMARY KEY,
+    usd_to_khr_rate DECIMAL(10,2) NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);

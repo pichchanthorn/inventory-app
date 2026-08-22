@@ -24,6 +24,7 @@ return [
     'nav_stock_reports' => 'របាយការណ៍ស្តុក',
     'nav_administration' => 'រដ្ឋបាល',
     'nav_users' => 'អ្នកប្រើប្រាស់',
+    'nav_settings' => 'ការកំណត់',
     'nav_account' => 'គណនី',
     'nav_profile' => 'ប្រវត្តិរូប',
     'nav_sign_out' => 'ចាកចេញ',
@@ -226,6 +227,7 @@ return [
     'pos_print_button' => 'បោះពុម្ពបង្កាន់ដៃ',
     'pos_new_sale_button' => 'ការលក់ថ្មី',
     'pos_recent_sales_title' => 'ការលក់ថ្មីៗ',
+    'pos_total_khr_label' => 'សរុប (រៀល ប្រហាក់ប្រហែល)',
 
     // Stock Adjustment
     'stockadj_reason_label' => 'មូលហេតុ *',
@@ -296,4 +298,12 @@ return [
     'user_reset_password_submit' => 'កំណត់ពាក្យសម្ងាត់ឡើងវិញ',
     'user_password_reset_banner_title' => 'ពាក្យសម្ងាត់ត្រូវបានកំណត់ឡើងវិញ — សូមចែករំលែកពាក្យសម្ងាត់ថ្មីនេះទៅបុគ្គលិក៖',
     'user_err_self_reset' => 'សូមប្រើទំព័រប្រវត្តិរូបដើម្បីផ្លាស់ប្តូរពាក្យសម្ងាត់ខ្លួនឯង។',
+
+    // Settings
+    'settings_title' => 'ការកំណត់',
+    'settings_exchange_rate_title' => 'អត្រាប្តូរប្រាក់',
+    'settings_usd_to_khr_label' => 'អត្រា USD ទៅ KHR',
+    'settings_exchange_rate_hint' => 'ប្រើសម្រាប់បង្ហាញចំនួនប្រហាក់ប្រហែលជារៀលនៅលើបង្កាន់ដៃលក់។ សូមធ្វើបច្ចុប្បន្នភាពរាល់ពេលអត្រាផ្លាស់ប្តូរ — វាមិនទាញយកដោយស្វ័យប្រវត្តិទេ។',
+    'settings_err_invalid_rate' => 'សូមបញ្ចូលអត្រាធំជាង 0។',
+    'settings_rate_updated' => 'អត្រាប្តូរប្រាក់ត្រូវបានធ្វើបច្ចុប្បន្នភាព។',
 ];

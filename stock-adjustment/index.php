@@ -5,7 +5,12 @@ require_once __DIR__ . '/../config/db.php';
 
 $activePage = 'stock-adjustment';
 $error = '';
-$success = '';
+
+// Post/Redirect/Get: a successful Adjustment redirects here with the toast
+// message stashed in the session, so a page refresh re-fetches this GET
+// instead of resubmitting the POST and applying a duplicate adjustment.
+$success = $_SESSION['stockadj_flash'] ?? '';
+unset($_SESSION['stockadj_flash']);
 
 $products = $pdo->query('SELECT * FROM products ORDER BY name')->fetchAll();
 
@@ -32,10 +37,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             try {
                 $reference = adjustStock($pdo, $productId, $newQty, $product['current_stock'], $reason, $date, $_SESSION['user_id']);
-                $success = __('stockadj_applied_prefix') . " $reference — {$product['name']}: {$product['current_stock']} → $newQty.";
-
-                // refresh products list so the dropdown shows the new stock
-                $products = $pdo->query('SELECT * FROM products ORDER BY name')->fetchAll();
+                $_SESSION['stockadj_flash'] = __('stockadj_applied_prefix') . " $reference — {$product['name']}: {$product['current_stock']} → $newQty.";
+                header('Location: ' . BASE_URL . '/stock-adjustment/index.php');
+                exit;
             } catch (StockConflictException $e) {
                 // Optimistic-lock guard found current_stock had already changed
                 // since it was read - don't overwrite that concurrent change.
@@ -87,7 +91,7 @@ require_once __DIR__ . '/../includes/header.php';
           <select name="product_id" id="adjProduct" class="form-select" required onchange="updatePreview()">
             <option value=""><?= __('stockadj_select_product') ?></option>
             <?php foreach ($products as $p): ?>
-            <option value="<?= $p['id'] ?>" data-stock="<?= $p['current_stock'] ?>"><?= htmlspecialchars($p['name']) ?><?= $p['package_size'] ? ' — ' . htmlspecialchars($p['package_size']) : '' ?> · <?= htmlspecialchars($p['sku']) ?> (<?= __('common_now_label') ?>: <?= $p['current_stock'] ?> <?= __('common_pcs') ?>)</option>
+            <option value="<?= $p['id'] ?>" data-stock="<?= $p['current_stock'] ?>"><?= htmlspecialchars($p['name']) ?><?= $p['package_size'] ? ' — ' . htmlspecialchars($p['package_size']) : '' ?> (<?= __('common_now_label') ?>: <?= $p['current_stock'] ?> <?= __('common_pcs') ?>)</option>
             <?php endforeach; ?>
           </select>
         </div>

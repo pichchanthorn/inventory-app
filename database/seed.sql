@@ -127,3 +127,9 @@ INSERT INTO products (name, sku, barcode, category_id, supplier_id, unit_id, pac
     NULL,
     (SELECT id FROM units WHERE name = 'កញ្ចប់'),
     '500g', NULL, NULL, '2027-02-28', 2.50, 4.00, 20, 3);
+
+-- ---------- App Settings ----------
+-- ILLUSTRATIVE starting rate only, not a live/fetched figure - the Admin
+-- must update this to the real current rate via Settings (Administration
+-- section) before relying on KHR display anywhere.
+INSERT INTO app_settings (id, usd_to_khr_rate) VALUES (1, 4100.00);
