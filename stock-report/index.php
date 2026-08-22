@@ -83,7 +83,7 @@ require_once __DIR__ . '/../includes/header.php';
             <?php if ($r['type'] === 'sale'): ?>
               <a href="<?= BASE_URL ?>/pos/receipt.php?ref=<?= urlencode($r['reference']) ?>" class="text-primary"><?= htmlspecialchars($r['reference']) ?></a>
             <?php else: ?>
-              <?= htmlspecialchars($r['reference']) ?>
+              <a href="<?= BASE_URL ?>/stock-transaction/view.php?ref=<?= urlencode($r['reference']) ?>" class="text-primary"><?= htmlspecialchars($r['reference']) ?></a>
             <?php endif; ?>
           </td>
           <td class="mono"><?= $r['transaction_date'] ?></td>
@@ -108,7 +108,10 @@ require_once __DIR__ . '/../includes/header.php';
         <?php if (!$rows): ?><tr><td colspan="4" class="text-center text-secondary py-4"><i class="bi bi-inbox fs-3 d-block mb-2"></i><?= __('product_empty') ?></td></tr><?php endif; ?>
         <?php foreach ($rows as $p): $low = $p['current_stock'] <= $p['min_stock']; ?>
         <tr>
-          <td class="fw-semibold"><?= htmlspecialchars($p['name']) ?></td>
+          <td>
+            <div class="fw-semibold"><?= htmlspecialchars($p['name']) ?></div>
+            <?php if (!empty($p['package_size'])): ?><div class="text-secondary small"><?= htmlspecialchars($p['package_size']) ?></div><?php endif; ?>
+          </td>
           <td><?= $p['category_name'] ? htmlspecialchars($p['category_name']) : '<span class="text-secondary">—</span>' ?></td>
           <td><?= $p['current_stock'] ?></td>
           <td><span class="badge-stock <?= $low ? 'badge-low' : 'badge-normal' ?>"><?= $low ? __('stockreport_badge_low') : __('stockreport_badge_normal') ?></span></td>

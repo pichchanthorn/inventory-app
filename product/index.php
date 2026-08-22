@@ -31,12 +31,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'create') {
                 $error = __('product_err_sku_exists');
             } else {
                 $stmt = $pdo->prepare('INSERT INTO products
-                    (name, sku, barcode, category_id, supplier_id, unit_id, note, cost_price, sale_price, min_stock, current_stock)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,0)');
+                    (name, sku, barcode, category_id, supplier_id, unit_id, package_size, note, cost_price, sale_price, min_stock, current_stock)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,0)');
                 $stmt->execute([
                     $name, $sku, trim($_POST['barcode']),
                     nullableInt($_POST['category_id']), nullableInt($_POST['supplier_id']), nullableInt($_POST['unit_id']),
-                    trim($_POST['note']), (float) $_POST['cost_price'], (float) $_POST['sale_price'], (int) $_POST['min_stock'],
+                    trim($_POST['package_size']), trim($_POST['note']), (float) $_POST['cost_price'], (float) $_POST['sale_price'], (int) $_POST['min_stock'],
                 ]);
                 header('Location: ' . BASE_URL . '/product/index.php');
                 exit;
@@ -56,12 +56,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'update') {
             $error = __('product_err_required');
         } else {
             $stmt = $pdo->prepare('UPDATE products SET
-                name=?, sku=?, barcode=?, category_id=?, supplier_id=?, unit_id=?, note=?, cost_price=?, sale_price=?, min_stock=?
+                name=?, sku=?, barcode=?, category_id=?, supplier_id=?, unit_id=?, package_size=?, note=?, cost_price=?, sale_price=?, min_stock=?
                 WHERE id=?');
             $stmt->execute([
                 $name, $sku, trim($_POST['barcode']),
                 nullableInt($_POST['category_id']), nullableInt($_POST['supplier_id']), nullableInt($_POST['unit_id']),
-                trim($_POST['note']), (float) $_POST['cost_price'], (float) $_POST['sale_price'], (int) $_POST['min_stock'],
+                trim($_POST['package_size']), trim($_POST['note']), (float) $_POST['cost_price'], (float) $_POST['sale_price'], (int) $_POST['min_stock'],
                 $id,
             ]);
             header('Location: ' . BASE_URL . '/product/index.php');
@@ -135,6 +135,7 @@ require_once __DIR__ . '/../includes/header.php';
         <td>
           <div class="fw-semibold"><?= htmlspecialchars($p['name']) ?></div>
           <span class="slug-pill"><?= htmlspecialchars($p['sku']) ?></span>
+          <?php if (!empty($p['package_size'])): ?><span class="text-secondary small ms-1"><?= htmlspecialchars($p['package_size']) ?></span><?php endif; ?>
         </td>
         <td><?= $p['category_name'] ? htmlspecialchars($p['category_name']) : '<span class="text-secondary">—</span>' ?></td>
         <td><?= $p['supplier_name'] ? htmlspecialchars($p['supplier_name']) : '<span class="text-secondary">—</span>' ?></td>
@@ -175,10 +176,12 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="mb-3"><label class="form-label"><?= __('common_name') ?></label>
                   <input type="text" name="name" class="form-control" value="<?= htmlspecialchars($p['name']) ?>" required></div>
                 <div class="row">
-                  <div class="col-6 mb-3"><label class="form-label"><?= __('product_sku') ?></label>
+                  <div class="col-4 mb-3"><label class="form-label"><?= __('product_sku') ?></label>
                     <input type="text" name="sku" class="form-control" value="<?= htmlspecialchars($p['sku']) ?>" required></div>
-                  <div class="col-6 mb-3"><label class="form-label"><?= __('product_barcode') ?></label>
+                  <div class="col-4 mb-3"><label class="form-label"><?= __('product_barcode') ?></label>
                     <input type="text" name="barcode" class="form-control" value="<?= htmlspecialchars($p['barcode']) ?>"></div>
+                  <div class="col-4 mb-3"><label class="form-label"><?= __('product_package_size') ?></label>
+                    <input type="text" name="package_size" class="form-control" value="<?= htmlspecialchars($p['package_size'] ?? '') ?>" placeholder="<?= __('product_package_size_placeholder') ?>"></div>
                 </div>
                 <div class="row">
                   <div class="col-4 mb-3"><label class="form-label"><?= __('common_category') ?></label>
@@ -241,10 +244,12 @@ require_once __DIR__ . '/../includes/header.php';
           <div class="mb-3"><label class="form-label"><?= __('common_name') ?></label>
             <input type="text" name="name" class="form-control" required></div>
           <div class="row">
-            <div class="col-6 mb-3"><label class="form-label"><?= __('product_sku') ?></label>
+            <div class="col-4 mb-3"><label class="form-label"><?= __('product_sku') ?></label>
               <input type="text" name="sku" class="form-control" required></div>
-            <div class="col-6 mb-3"><label class="form-label"><?= __('product_barcode') ?></label>
+            <div class="col-4 mb-3"><label class="form-label"><?= __('product_barcode') ?></label>
               <input type="text" name="barcode" class="form-control"></div>
+            <div class="col-4 mb-3"><label class="form-label"><?= __('product_package_size') ?></label>
+              <input type="text" name="package_size" class="form-control" placeholder="<?= __('product_package_size_placeholder') ?>"></div>
           </div>
           <div class="row">
             <div class="col-4 mb-3"><label class="form-label"><?= __('common_category') ?></label>

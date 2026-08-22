@@ -111,7 +111,7 @@ require_once __DIR__ . '/../includes/header.php';
       <?php foreach ($recent as $t): ?>
         <div class="border-bottom pb-2 mb-2">
           <div class="d-flex justify-content-between small">
-            <span class="mono" style="color:var(--danger);"><?= htmlspecialchars($t['reference']) ?></span>
+            <a href="<?= BASE_URL ?>/stock-transaction/view.php?ref=<?= urlencode($t['reference']) ?>" class="mono text-decoration-none" style="color:var(--danger);"><?= htmlspecialchars($t['reference']) ?></a>
             <span class="mono text-secondary"><?= $t['transaction_date'] ?></span>
           </div>
           <div class="small mt-1"><?= $t['items'] ?> <?= __('common_products_word') ?> · <?= (int)$t['total_qty'] ?> <?= __('common_units_word') ?> · <strong>$<?= number_format($t['total_value'], 2) ?></strong></div>
@@ -130,7 +130,8 @@ const T_PCS = <?= json_encode(__('common_pcs')) ?>;
 function productOptions(selected) {
   let html = `<option value="">${T_CHOOSE_PRODUCT}</option>`;
   PRODUCTS.forEach(p => {
-    html += `<option value="${p.id}" data-price="${p.sale_price}" ${String(p.id)===String(selected)?'selected':''}>${p.name} · ${p.sku} (${T_NOW}: ${p.current_stock} ${T_PCS})</option>`;
+    const size = p.package_size ? ` — ${p.package_size}` : '';
+    html += `<option value="${p.id}" data-price="${p.sale_price}" ${String(p.id)===String(selected)?'selected':''}>${p.name}${size} · ${p.sku} (${T_NOW}: ${p.current_stock} ${T_PCS})</option>`;
   });
   return html;
 }

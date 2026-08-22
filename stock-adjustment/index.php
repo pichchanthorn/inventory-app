@@ -87,7 +87,7 @@ require_once __DIR__ . '/../includes/header.php';
           <select name="product_id" id="adjProduct" class="form-select" required onchange="updatePreview()">
             <option value=""><?= __('stockadj_select_product') ?></option>
             <?php foreach ($products as $p): ?>
-            <option value="<?= $p['id'] ?>" data-stock="<?= $p['current_stock'] ?>"><?= htmlspecialchars($p['name']) ?> · <?= htmlspecialchars($p['sku']) ?> (<?= __('common_now_label') ?>: <?= $p['current_stock'] ?> <?= __('common_pcs') ?>)</option>
+            <option value="<?= $p['id'] ?>" data-stock="<?= $p['current_stock'] ?>"><?= htmlspecialchars($p['name']) ?><?= $p['package_size'] ? ' — ' . htmlspecialchars($p['package_size']) : '' ?> · <?= htmlspecialchars($p['sku']) ?> (<?= __('common_now_label') ?>: <?= $p['current_stock'] ?> <?= __('common_pcs') ?>)</option>
             <?php endforeach; ?>
           </select>
         </div>
@@ -109,7 +109,7 @@ require_once __DIR__ . '/../includes/header.php';
       <?php foreach ($recent as $t): ?>
         <div class="border-bottom pb-2 mb-2">
           <div class="d-flex justify-content-between small">
-            <span class="mono text-primary"><?= htmlspecialchars($t['reference']) ?></span>
+            <a href="<?= BASE_URL ?>/stock-transaction/view.php?ref=<?= urlencode($t['reference']) ?>" class="mono text-primary text-decoration-none"><?= htmlspecialchars($t['reference']) ?></a>
             <span class="mono text-secondary"><?= $t['transaction_date'] ?></span>
           </div>
           <div class="small mt-1"><?= htmlspecialchars($t['product_name'] ?? '—') ?></div>

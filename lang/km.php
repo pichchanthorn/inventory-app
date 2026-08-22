@@ -183,6 +183,8 @@ return [
     'product_stock_hint' => 'ស្តុកចាប់ផ្តើមពី 0 — បន្ថែមបរិមាណតាមរយៈ ស្តុកចូល។',
     'product_filter_low_stock_active' => 'កំពុងបង្ហាញតែផលិតផលដែលនៅសល់តិចប៉ុណ្ណោះ។',
     'product_filter_clear' => 'សម្អាតតម្រង',
+    'product_package_size' => 'ទំហំវេចខ្ចប់',
+    'product_package_size_placeholder' => 'ឧ. 50kg, 500ml',
 
     // Stock In
     'stockin_select_supplier' => '— ជ្រើសរើសអ្នកផ្គត់ផ្គង់ —',
@@ -242,6 +244,16 @@ return [
     'stockadj_err_negative_qty' => 'បរិមាណស្តុកមិនអាចជាចំនួនអវិជ្ជមានទេ។',
     'stockadj_err_conflict' => 'ស្តុកផលិតផលនេះទើបតែផ្លាស់ប្តូរ (ពីប្រតិបត្តិការមួយផ្សេងទៀត)។ សូមពិនិត្យស្តុកបច្ចុប្បន្ន ហើយសាកល្បងម្តងទៀត។',
     'stockadj_applied_prefix' => 'បានអនុវត្ត',
+    'stockadj_reason_label_plain' => 'មូលហេតុ',
+
+    // Transaction Detail (Stock In / Stock Out / Adjustment)
+    'stockin_detail_title' => 'ព័ត៌មានលម្អិតស្តុកចូល',
+    'stockout_detail_title' => 'ព័ត៌មានលម្អិតស្តុកចេញ',
+    'stockadj_detail_title' => 'ព័ត៌មានលម្អិតការកែតម្រូវ',
+    'txdetail_performed_by' => 'កត់ត្រាដោយ',
+    'txdetail_qty_changed' => 'បរិមាណបានផ្លាស់ប្តូរ',
+    'txdetail_not_found' => 'រកមិនឃើញប្រតិបត្តិការ។',
+    'txdetail_print_button' => 'បោះពុម្ព',
 
     // Stock Report
     'stockreport_export_button' => 'នាំចេញ CSV',

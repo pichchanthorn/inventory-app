@@ -183,6 +183,8 @@ return [
     'product_stock_hint' => 'Stock starts at 0 — add quantity via Stock In.',
     'product_filter_low_stock_active' => 'Showing low-stock products only.',
     'product_filter_clear' => 'Clear filter',
+    'product_package_size' => 'Package Size',
+    'product_package_size_placeholder' => 'e.g. 50kg, 500ml',
 
     // Stock In
     'stockin_select_supplier' => '— Select supplier —',
@@ -242,6 +244,16 @@ return [
     'stockadj_err_negative_qty' => 'Stock quantity cannot be negative.',
     'stockadj_err_conflict' => 'This product\'s stock changed just now (from another transaction). Please review the current stock and try again.',
     'stockadj_applied_prefix' => 'Applied',
+    'stockadj_reason_label_plain' => 'Reason',
+
+    // Transaction Detail (Stock In / Stock Out / Adjustment)
+    'stockin_detail_title' => 'Stock In Detail',
+    'stockout_detail_title' => 'Stock Out Detail',
+    'stockadj_detail_title' => 'Adjustment Detail',
+    'txdetail_performed_by' => 'Recorded by',
+    'txdetail_qty_changed' => 'Qty changed',
+    'txdetail_not_found' => 'Transaction not found.',
+    'txdetail_print_button' => 'Print',
 
     // Stock Report
     'stockreport_export_button' => 'Export CSV',
