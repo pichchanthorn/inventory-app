@@ -62,6 +62,7 @@ return [
     'common_pcs' => 'pcs',
     'common_now_label' => 'now',
     'common_choose_product_option' => '— Choose product —',
+    'common_no_results_found' => 'No matching products.',
     'common_err_email_taken' => 'This email is already registered.',
     'common_err_name_required' => 'Name is required.',
     'common_err_forbidden' => 'You do not have permission to perform this action.',
