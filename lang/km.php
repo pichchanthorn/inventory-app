@@ -62,6 +62,7 @@ return [
     'common_pcs' => 'ដុំ',
     'common_now_label' => 'ឥឡូវ',
     'common_choose_product_option' => '— ជ្រើសរើសផលិតផល —',
+    'common_no_results_found' => 'រកមិនឃើញផលិតផលដែលត្រូវគ្នា។',
     'common_err_email_taken' => 'អ៊ីមែលនេះបានចុះឈ្មោះរួចហើយ។',
     'common_err_name_required' => 'ត្រូវការឈ្មោះ។',
     'common_err_forbidden' => 'អ្នកមិនមានសិទ្ធិធ្វើសកម្មភាពនេះទេ។',

@@ -132,6 +132,23 @@ body[lang="km"] .form-select{ min-width: 110px; padding-right: 2.5rem; }
    cleared as soon as it resolves (or immediately by the swap itself). */
 .live-search-loading{ opacity:.5; pointer-events:none; transition:opacity .15s ease; }
 
+/* searchable product dropdown (Stock In / Stock Out line items) - a plain
+   text input + absolutely-positioned filtered list standing in for the
+   native <select>, styled with the same tokens as .form-control/.dropdown
+   so it matches dark/light automatically. */
+.product-select{ position:relative; }
+.product-search-menu{
+  display:none; position:absolute; left:0; right:0; top:100%; z-index:20;
+  margin-top:2px; max-height:220px; overflow-y:auto;
+  background:var(--panel) !important; border:1px solid var(--line-bright);
+  border-radius:6px; box-shadow:0 8px 24px rgba(0,0,0,.35);
+}
+.product-search-menu.open{ display:block; }
+.product-search-option{ padding:.4rem .65rem; font-size:.85rem; cursor:pointer; color:#E7EDF3; }
+.product-search-option.active{ background:var(--accent-tint); }
+.product-search-option.disabled{ cursor:default; color:var(--muted); }
+body.theme-light .product-search-option{ color:#0B1220; }
+
 /* cards + tables */
 .card{ background:var(--panel) !important; border:1px solid var(--line) !important; border-radius:8px !important; box-shadow:none !important; color:#E7EDF3; }
 /* Bootstrap 5.3 sets --bs-table-bg: var(--bs-body-bg) on .table, and every
