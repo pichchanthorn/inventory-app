@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/auth_check.php';
 require_once __DIR__ . '/../includes/sortable.php';
+require_once __DIR__ . '/../includes/currency.php';
 require_once __DIR__ . '/../config/db.php';
 
 $activePage = 'product';
@@ -9,6 +10,13 @@ $error = '';
 $categories = $pdo->query('SELECT * FROM categories ORDER BY name')->fetchAll();
 $suppliers  = $pdo->query('SELECT * FROM suppliers ORDER BY name')->fetchAll();
 $units      = $pdo->query('SELECT * FROM units ORDER BY name')->fetchAll();
+
+// Used both server-side (resolvePriceField, below) to convert a KHR entry
+// to the USD value actually stored, and exposed to JS as a page-global
+// constant purely for the live "≈" preview text - the client never
+// computes the value that gets submitted.
+$khrRateRow = $pdo->query('SELECT usd_to_khr_rate FROM app_settings WHERE id = 1')->fetchColumn();
+$khrRate = $khrRateRow !== false ? (float) $khrRateRow : null;
 
 function nullableInt($v) { return $v === '' ? null : (int) $v; }
 
@@ -30,16 +38,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'create') {
             if ($stmt->fetch()) {
                 $error = __('product_err_sku_exists');
             } else {
-                $stmt = $pdo->prepare('INSERT INTO products
-                    (name, sku, barcode, category_id, supplier_id, unit_id, package_size, note, cost_price, sale_price, min_stock, current_stock)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,0)');
-                $stmt->execute([
-                    $name, $sku, trim($_POST['barcode']),
-                    nullableInt($_POST['category_id']), nullableInt($_POST['supplier_id']), nullableInt($_POST['unit_id']),
-                    trim($_POST['package_size']), trim($_POST['note']), (float) $_POST['cost_price'], (float) $_POST['sale_price'], (int) $_POST['min_stock'],
-                ]);
-                header('Location: ' . BASE_URL . '/product/index.php');
-                exit;
+                try {
+                    $costPrice = resolvePriceField($_POST, 'cost_price', $khrRate);
+                    $salePrice = resolvePriceField($_POST, 'sale_price', $khrRate);
+
+                    $stmt = $pdo->prepare('INSERT INTO products
+                        (name, sku, barcode, category_id, supplier_id, unit_id, package_size, note, cost_price, sale_price, min_stock, current_stock)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,0)');
+                    $stmt->execute([
+                        $name, $sku, trim($_POST['barcode']),
+                        nullableInt($_POST['category_id']), nullableInt($_POST['supplier_id']), nullableInt($_POST['unit_id']),
+                        trim($_POST['package_size']), trim($_POST['note']), $costPrice, $salePrice, (int) $_POST['min_stock'],
+                    ]);
+                    header('Location: ' . BASE_URL . '/product/index.php');
+                    exit;
+                } catch (PriceConversionException $e) {
+                    $error = $e->getMessage();
+                }
             }
         }
     }
@@ -55,17 +70,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'update') {
         if ($name === '' || $sku === '') {
             $error = __('product_err_required');
         } else {
-            $stmt = $pdo->prepare('UPDATE products SET
-                name=?, sku=?, barcode=?, category_id=?, supplier_id=?, unit_id=?, package_size=?, note=?, cost_price=?, sale_price=?, min_stock=?
-                WHERE id=?');
-            $stmt->execute([
-                $name, $sku, trim($_POST['barcode']),
-                nullableInt($_POST['category_id']), nullableInt($_POST['supplier_id']), nullableInt($_POST['unit_id']),
-                trim($_POST['package_size']), trim($_POST['note']), (float) $_POST['cost_price'], (float) $_POST['sale_price'], (int) $_POST['min_stock'],
-                $id,
-            ]);
-            header('Location: ' . BASE_URL . '/product/index.php');
-            exit;
+            try {
+                $costPrice = resolvePriceField($_POST, 'cost_price', $khrRate);
+                $salePrice = resolvePriceField($_POST, 'sale_price', $khrRate);
+
+                $stmt = $pdo->prepare('UPDATE products SET
+                    name=?, sku=?, barcode=?, category_id=?, supplier_id=?, unit_id=?, package_size=?, note=?, cost_price=?, sale_price=?, min_stock=?
+                    WHERE id=?');
+                $stmt->execute([
+                    $name, $sku, trim($_POST['barcode']),
+                    nullableInt($_POST['category_id']), nullableInt($_POST['supplier_id']), nullableInt($_POST['unit_id']),
+                    trim($_POST['package_size']), trim($_POST['note']), $costPrice, $salePrice, (int) $_POST['min_stock'],
+                    $id,
+                ]);
+                header('Location: ' . BASE_URL . '/product/index.php');
+                exit;
+            } catch (PriceConversionException $e) {
+                $error = $e->getMessage();
+            }
         }
     }
 }
@@ -208,9 +230,19 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
                 <div class="row">
                   <div class="col-4 mb-3"><label class="form-label"><?= __('product_cost_price') ?></label>
-                    <input type="number" step="0.01" name="cost_price" class="form-control" value="<?= $p['cost_price'] ?>"></div>
+                    <div class="input-group price-input-group">
+                      <button type="button" class="btn btn-outline-secondary currency-toggle-btn" onclick="toggleCurrency(this)"<?= $khrRate ? '' : ' disabled title="' . htmlspecialchars(__('currency_err_no_rate_configured')) . '"' ?>>$</button>
+                      <input type="number" step="0.01" name="cost_price" class="form-control price-amount-input" value="<?= $p['cost_price'] ?>" oninput="updatePricePreview(this)">
+                      <input type="hidden" name="cost_price_currency" class="price-currency-input" value="USD">
+                    </div>
+                    <div class="text-secondary small price-preview"></div></div>
                   <div class="col-4 mb-3"><label class="form-label"><?= __('product_sale_price') ?></label>
-                    <input type="number" step="0.01" name="sale_price" class="form-control" value="<?= $p['sale_price'] ?>"></div>
+                    <div class="input-group price-input-group">
+                      <button type="button" class="btn btn-outline-secondary currency-toggle-btn" onclick="toggleCurrency(this)"<?= $khrRate ? '' : ' disabled title="' . htmlspecialchars(__('currency_err_no_rate_configured')) . '"' ?>>$</button>
+                      <input type="number" step="0.01" name="sale_price" class="form-control price-amount-input" value="<?= $p['sale_price'] ?>" oninput="updatePricePreview(this)">
+                      <input type="hidden" name="sale_price_currency" class="price-currency-input" value="USD">
+                    </div>
+                    <div class="text-secondary small price-preview"></div></div>
                   <div class="col-4 mb-3"><label class="form-label"><?= __('product_min_stock') ?></label>
                     <input type="number" name="min_stock" class="form-control" value="<?= $p['min_stock'] ?>"></div>
                 </div>
@@ -276,9 +308,19 @@ require_once __DIR__ . '/../includes/header.php';
           </div>
           <div class="row">
             <div class="col-4 mb-3"><label class="form-label"><?= __('product_cost_price') ?></label>
-              <input type="number" step="0.01" name="cost_price" class="form-control" value="0"></div>
+              <div class="input-group price-input-group">
+                <button type="button" class="btn btn-outline-secondary currency-toggle-btn" onclick="toggleCurrency(this)"<?= $khrRate ? '' : ' disabled title="' . htmlspecialchars(__('currency_err_no_rate_configured')) . '"' ?>>$</button>
+                <input type="number" step="0.01" name="cost_price" class="form-control price-amount-input" value="0" oninput="updatePricePreview(this)">
+                <input type="hidden" name="cost_price_currency" class="price-currency-input" value="USD">
+              </div>
+              <div class="text-secondary small price-preview"></div></div>
             <div class="col-4 mb-3"><label class="form-label"><?= __('product_sale_price') ?></label>
-              <input type="number" step="0.01" name="sale_price" class="form-control" value="0"></div>
+              <div class="input-group price-input-group">
+                <button type="button" class="btn btn-outline-secondary currency-toggle-btn" onclick="toggleCurrency(this)"<?= $khrRate ? '' : ' disabled title="' . htmlspecialchars(__('currency_err_no_rate_configured')) . '"' ?>>$</button>
+                <input type="number" step="0.01" name="sale_price" class="form-control price-amount-input" value="0" oninput="updatePricePreview(this)">
+                <input type="hidden" name="sale_price_currency" class="price-currency-input" value="USD">
+              </div>
+              <div class="text-secondary small price-preview"></div></div>
             <div class="col-4 mb-3"><label class="form-label"><?= __('product_min_stock') ?></label>
               <input type="number" name="min_stock" class="form-control" value="0"></div>
           </div>
@@ -295,6 +337,47 @@ require_once __DIR__ . '/../includes/header.php';
   </div>
 </div>
 
-<script>document.addEventListener('DOMContentLoaded', () => initLiveSearch('searchInput', 'resultsArea'));</script>
+<script>
+document.addEventListener('DOMContentLoaded', () => initLiveSearch('searchInput', 'resultsArea'));
+
+// Live-preview-only KHR<->USD conversion for the Cost/Sale Price currency
+// toggle. This never decides what gets submitted - the server always
+// resolves the authoritative USD value from the raw amount + currency
+// flag (includes/currency.php's resolvePriceField()), independently of
+// whatever this preview shows or whether JS even ran.
+const EXCHANGE_RATE = <?= json_encode($khrRate) ?>;
+
+function toggleCurrency(btn) {
+  if (btn.disabled) return;
+  const group = btn.closest('.price-input-group');
+  const input = group.querySelector('.price-amount-input');
+  const currencyInput = group.querySelector('.price-currency-input');
+  const current = parseFloat(input.value) || 0;
+  if (currencyInput.value === 'USD') {
+    currencyInput.value = 'KHR';
+    btn.textContent = '៛';
+    input.value = Math.round(current * EXCHANGE_RATE);
+    input.step = '1';
+  } else {
+    currencyInput.value = 'USD';
+    btn.textContent = '$';
+    input.value = (current / EXCHANGE_RATE).toFixed(2);
+    input.step = '0.01';
+  }
+  updatePricePreview(input);
+}
+
+function updatePricePreview(input) {
+  const group = input.closest('.price-input-group');
+  const currencyInput = group.querySelector('.price-currency-input');
+  const preview = group.parentElement.querySelector('.price-preview');
+  if (!preview) return;
+  const amount = parseFloat(input.value) || 0;
+  if (!EXCHANGE_RATE || amount <= 0) { preview.textContent = ''; return; }
+  preview.textContent = currencyInput.value === 'USD'
+    ? `≈ ៛${Math.round(amount * EXCHANGE_RATE).toLocaleString()}`
+    : `≈ $${(amount / EXCHANGE_RATE).toFixed(2)}`;
+}
+</script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>

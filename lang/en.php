@@ -187,6 +187,10 @@ return [
     'product_package_size' => 'Package Size',
     'product_package_size_placeholder' => 'e.g. 50kg, 500ml',
 
+    // Currency (KHR entry toggle - Product Cost/Sale Price, Stock In Unit Cost)
+    'currency_err_no_rate_configured' => 'No exchange rate is configured yet — set one in Settings before entering amounts in KHR.',
+    'currency_err_price_rounds_to_zero' => 'This amount is too small and would round to $0.00 — please check the value.',
+
     // Stock In
     'stockin_select_supplier' => '— Select supplier —',
     'stockin_note_placeholder' => 'e.g. Quarterly procurement',
