@@ -46,6 +46,7 @@ return [
     'common_supplier' => 'Supplier',
     'common_unit' => 'Unit',
     'common_product' => 'Product',
+    'common_user' => 'User',
     'common_qty' => 'Qty',
     'common_reference' => 'Reference',
     'common_date' => 'Date',

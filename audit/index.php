@@ -28,9 +28,9 @@ $rows = $pdo->query("SELECT a.*, u.name AS actor_name
 $actionBadgeClass = ['create' => 'badge-normal', 'update' => 'badge-accent', 'delete' => 'badge-low'];
 $actionLabels = ['create' => __('audit_action_create'), 'update' => __('audit_action_update'), 'delete' => __('audit_action_delete')];
 // entity_type values are the lowercase singular strings each module
-// passes to logAudit() ('category'/'unit'/'supplier'/'product') -
+// passes to logAudit() ('category'/'unit'/'supplier'/'product'/'user') -
 // reusing the existing common_* labels rather than inventing new ones.
-$entityTypeLabels = ['category' => __('common_category'), 'unit' => __('common_unit'), 'supplier' => __('common_supplier'), 'product' => __('common_product')];
+$entityTypeLabels = ['category' => __('common_category'), 'unit' => __('common_unit'), 'supplier' => __('common_supplier'), 'product' => __('common_product'), 'user' => __('common_user')];
 
 require_once __DIR__ . '/../includes/header.php';
 ?>

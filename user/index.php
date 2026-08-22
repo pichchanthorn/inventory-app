@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/auth_check.php';
+require_once __DIR__ . '/../includes/audit.php';
 require_once __DIR__ . '/../config/db.php';
 
 if (!isAdmin()) {
@@ -32,15 +33,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'create_user')
         if ($stmt->fetch()) {
             $error = __('common_err_email_taken');
         } else {
-            $hashed = password_hash($password, PASSWORD_DEFAULT);
-            $stmt = $pdo->prepare('INSERT INTO users (name, email, password, role_id, must_change_password) VALUES (?, ?, ?, ?, ?)');
-            $stmt->execute([$name, $email, $hashed, $roleId, $mustChange]);
+            $actorId = (int) $_SESSION['user_id'];
+            try {
+                $hashed = password_hash($password, PASSWORD_DEFAULT);
+                $pdo->beginTransaction();
+                $stmt = $pdo->prepare('INSERT INTO users (name, email, password, role_id, must_change_password, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?)');
+                $stmt->execute([$name, $email, $hashed, $roleId, $mustChange, $actorId, $actorId]);
+                $newId = (int) $pdo->lastInsertId();
 
-            // Stash the plaintext temp password as a one-time flash message so the
-            // Admin can copy it — never stored anywhere after this request.
-            $_SESSION['new_user_credentials'] = ['name' => $name, 'email' => $email, 'password' => $password];
-            header('Location: ' . BASE_URL . '/user/index.php');
-            exit;
+                // Fresh read-back, same reason as product/index.php's create -
+                // never hand-build the snapshot from POST values, so a column
+                // this form doesn't touch can never be silently omitted.
+                // userAuditSnapshot() is the only thing allowed to shape it -
+                // see includes/audit.php for why that's the password-exclusion
+                // boundary, not this call site.
+                $afterStmt = $pdo->prepare('SELECT * FROM users WHERE id = ?');
+                $afterStmt->execute([$newId]);
+                $after = userAuditSnapshot($afterStmt->fetch());
+
+                logAudit($pdo, $actorId, 'create', 'user', $newId, null, $after);
+                $pdo->commit();
+
+                // Stash the plaintext temp password as a one-time flash message so the
+                // Admin can copy it — never stored anywhere after this request.
+                $_SESSION['new_user_credentials'] = ['name' => $name, 'email' => $email, 'password' => $password];
+                header('Location: ' . BASE_URL . '/user/index.php');
+                exit;
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                error_log('Create user failed: ' . $e->getMessage());
+                $error = __('common_err_transaction_failed');
+            }
         }
     }
 }
@@ -56,10 +79,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'update_role')
     if ($id === (int) $_SESSION['user_id']) {
         $error = __('user_err_self_role');
     } else {
-        $stmt = $pdo->prepare('UPDATE users SET role_id = ? WHERE id = ?');
-        $stmt->execute([$roleId, $id]);
-        header('Location: ' . BASE_URL . '/user/index.php');
-        exit;
+        $actorId = (int) $_SESSION['user_id'];
+        $stmt = $pdo->prepare('SELECT * FROM users WHERE id = ?');
+        $stmt->execute([$id]);
+        $beforeRow = $stmt->fetch();
+
+        try {
+            $pdo->beginTransaction();
+            $stmt = $pdo->prepare('UPDATE users SET role_id = ?, updated_by = ? WHERE id = ?');
+            $stmt->execute([$roleId, $actorId, $id]);
+
+            if ($beforeRow) {
+                $afterStmt = $pdo->prepare('SELECT * FROM users WHERE id = ?');
+                $afterStmt->execute([$id]);
+                $after = userAuditSnapshot($afterStmt->fetch());
+                logAudit($pdo, $actorId, 'update', 'user', $id, userAuditSnapshot($beforeRow), $after);
+            }
+            $pdo->commit();
+            header('Location: ' . BASE_URL . '/user/index.php');
+            exit;
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            error_log('Update role failed: ' . $e->getMessage());
+            $error = __('common_err_transaction_failed');
+        }
     }
 }
 
@@ -74,20 +117,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'reset_passwor
     } elseif (strlen($newPassword) < 6) {
         $error = __('user_err_password_short');
     } else {
-        $stmt = $pdo->prepare('SELECT name, email FROM users WHERE id = ?');
+        // SELECT * (not just name/email) - the full row feeds
+        // userAuditSnapshot() as the before-snapshot below. The raw
+        // password hash passes through this array on its way, but
+        // userAuditSnapshot() never reads that key - see includes/audit.php.
+        $stmt = $pdo->prepare('SELECT * FROM users WHERE id = ?');
         $stmt->execute([$id]);
         $target = $stmt->fetch();
 
         if ($target) {
-            $hashed = password_hash($newPassword, PASSWORD_DEFAULT);
-            $stmt = $pdo->prepare('UPDATE users SET password = ?, must_change_password = ? WHERE id = ?');
-            $stmt->execute([$hashed, $mustChange, $id]);
+            $actorId = (int) $_SESSION['user_id'];
+            try {
+                $hashed = password_hash($newPassword, PASSWORD_DEFAULT);
+                $pdo->beginTransaction();
+                $stmt = $pdo->prepare('UPDATE users SET password = ?, must_change_password = ?, updated_by = ? WHERE id = ?');
+                $stmt->execute([$hashed, $mustChange, $actorId, $id]);
 
-            // Same one-time flash pattern as account creation — plaintext
-            // password is shown once so the Admin can copy it, never stored.
-            $_SESSION['password_reset_credentials'] = ['name' => $target['name'], 'email' => $target['email'], 'password' => $newPassword];
-            header('Location: ' . BASE_URL . '/user/index.php');
-            exit;
+                $afterStmt = $pdo->prepare('SELECT * FROM users WHERE id = ?');
+                $afterStmt->execute([$id]);
+                $after = userAuditSnapshot($afterStmt->fetch());
+
+                // Full before/after, same as every other action - not a
+                // special truncated shape. This still satisfies "no
+                // password field ever appears" because userAuditSnapshot()
+                // excludes it unconditionally, and showing the rest of the
+                // row unchanged is what proves this action touched nothing
+                // but must_change_password (see B3 design doc §4).
+                logAudit($pdo, $actorId, 'update', 'user', $id, userAuditSnapshot($target), $after);
+                $pdo->commit();
+
+                // Same one-time flash pattern as account creation — plaintext
+                // password is shown once so the Admin can copy it, never stored.
+                $_SESSION['password_reset_credentials'] = ['name' => $target['name'], 'email' => $target['email'], 'password' => $newPassword];
+                header('Location: ' . BASE_URL . '/user/index.php');
+                exit;
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                error_log('Reset password failed: ' . $e->getMessage());
+                $error = __('common_err_transaction_failed');
+            }
         }
     }
 }
