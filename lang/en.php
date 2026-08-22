@@ -24,6 +24,7 @@ return [
     'nav_stock_reports' => 'Stock Reports',
     'nav_administration' => 'Administration',
     'nav_users' => 'Users',
+    'nav_settings' => 'Settings',
     'nav_account' => 'Account',
     'nav_profile' => 'Profile',
     'nav_sign_out' => 'Sign out',
@@ -226,6 +227,7 @@ return [
     'pos_print_button' => 'Print Receipt',
     'pos_new_sale_button' => 'New Sale',
     'pos_recent_sales_title' => 'Recent Sales',
+    'pos_total_khr_label' => 'Total (KHR, approx.)',
 
     // Stock Adjustment
     'stockadj_reason_label' => 'Reason *',
@@ -296,4 +298,12 @@ return [
     'user_reset_password_submit' => 'Reset password',
     'user_password_reset_banner_title' => 'Password reset — share this new password with the staff member:',
     'user_err_self_reset' => 'Use the profile page to change your own password.',
+
+    // Settings
+    'settings_title' => 'Settings',
+    'settings_exchange_rate_title' => 'Exchange Rate',
+    'settings_usd_to_khr_label' => 'USD to KHR rate',
+    'settings_exchange_rate_hint' => 'Used to show an approximate Riel total on sale receipts. Update this whenever the rate changes — it is not fetched automatically.',
+    'settings_err_invalid_rate' => 'Enter a rate greater than 0.',
+    'settings_rate_updated' => 'Exchange rate updated.',
 ];

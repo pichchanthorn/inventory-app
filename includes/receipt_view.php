@@ -9,6 +9,9 @@
 //   name/sku/qty/price/subtotal), total, cash_received (float|null),
 //   change_due (float|null) - null means "not recorded" (pre-migration
 //   row), not zero, and is rendered as such rather than as $0.00.
+//   khr_total (float, optional) - approximate Riel total (USD total x the
+//   Admin-configured rate), computed by the caller. Purely additive: only
+//   rendered when the key is present, changes nothing else on the card.
 //
 // Expects $receiptSecondaryAction (optional): a pre-rendered HTML string
 // for the one page-specific action button next to the universal Print
@@ -42,6 +45,12 @@
       <span class="fw-bold"><?= __('pos_total_label') ?></span>
       <span class="mono fw-bold">$<?= number_format($sale['total'], 2) ?></span>
     </div>
+    <?php if (isset($sale['khr_total'])): ?>
+    <div class="d-flex justify-content-between py-1">
+      <span class="text-secondary"><?= __('pos_total_khr_label') ?></span>
+      <span class="mono">៛<?= number_format($sale['khr_total'], 0) ?></span>
+    </div>
+    <?php endif; ?>
     <div class="d-flex justify-content-between py-1">
       <span class="text-secondary"><?= __('pos_cash_received_label') ?></span>
       <span class="mono"><?= $sale['cash_received'] !== null ? '$' . number_format($sale['cash_received'], 2) : __('pos_not_recorded') ?></span>

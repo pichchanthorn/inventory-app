@@ -75,6 +75,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'cash_received' => $cashReceived,
                         'change_due' => $cashReceived - $total,
                     ];
+                    // Additive display-only conversion - no rate configured
+                    // yet (fresh install, before an Admin visits Settings)
+                    // simply omits khr_total, which receipt_view.php treats
+                    // as "don't show the KHR line" rather than an error.
+                    $khrRate = $pdo->query('SELECT usd_to_khr_rate FROM app_settings WHERE id = 1')->fetchColumn();
+                    if ($khrRate !== false) {
+                        $_SESSION['pos_last_sale']['khr_total'] = $total * (float) $khrRate;
+                    }
                     header('Location: ' . BASE_URL . '/pos/index.php');
                     exit;
                 } catch (StockConflictException $e) {
@@ -195,7 +203,7 @@ function productOptions(selected) {
   let html = `<option value="">${T_CHOOSE_PRODUCT}</option>`;
   PRODUCTS.forEach(p => {
     const size = p.package_size ? ` — ${p.package_size}` : '';
-    html += `<option value="${p.id}" data-price="${p.sale_price}" ${String(p.id)===String(selected)?'selected':''}>${p.name}${size} · ${p.sku} (${T_NOW}: ${p.current_stock} ${T_PCS})</option>`;
+    html += `<option value="${p.id}" data-price="${p.sale_price}" ${String(p.id)===String(selected)?'selected':''}>${p.name}${size} (${T_NOW}: ${p.current_stock} ${T_PCS})</option>`;
   });
   return html;
 }
