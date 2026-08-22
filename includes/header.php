@@ -63,6 +63,7 @@ function navClass($page, $active) {
     <div class="sidebar-section"><?= __('nav_administration') ?></div>
     <a class="<?= navClass('user', $activePage) ?>" href="<?= BASE_URL ?>/user/index.php"><i class="bi bi-people me-2"></i><?= __('nav_users') ?></a>
     <a class="<?= navClass('settings', $activePage) ?>" href="<?= BASE_URL ?>/settings/index.php"><i class="bi bi-sliders me-2"></i><?= __('nav_settings') ?></a>
+    <a class="<?= navClass('audit', $activePage) ?>" href="<?= BASE_URL ?>/audit/index.php"><i class="bi bi-clock-history me-2"></i><?= __('nav_audit_log') ?></a>
     <?php endif; ?>
 
     <div class="sidebar-section"><?= __('nav_account') ?></div>

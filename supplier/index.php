@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/auth_check.php';
 require_once __DIR__ . '/../includes/sortable.php';
+require_once __DIR__ . '/../includes/audit.php';
 require_once __DIR__ . '/../config/db.php';
 
 $activePage = 'supplier';
@@ -22,10 +23,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'create') {
         if ($name === '') {
             $error = __('common_err_name_required');
         } else {
-            $stmt = $pdo->prepare('INSERT INTO suppliers (name, phone, email, address, note) VALUES (?, ?, ?, ?, ?)');
-            $stmt->execute([$name, $phone, $email, $address, $note]);
-            header('Location: ' . BASE_URL . '/supplier/index.php');
-            exit;
+            $actorId = (int) $_SESSION['user_id'];
+            try {
+                $pdo->beginTransaction();
+                $stmt = $pdo->prepare('INSERT INTO suppliers (name, phone, email, address, note, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?)');
+                $stmt->execute([$name, $phone, $email, $address, $note, $actorId, $actorId]);
+                $newId = (int) $pdo->lastInsertId();
+                logAudit($pdo, $actorId, 'create', 'supplier', $newId, null, [
+                    'name' => $name, 'phone' => $phone, 'email' => $email, 'address' => $address, 'note' => $note,
+                ]);
+                $pdo->commit();
+                header('Location: ' . BASE_URL . '/supplier/index.php');
+                exit;
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                error_log('Supplier create failed: ' . $e->getMessage());
+                $error = __('common_err_transaction_failed');
+            }
         }
     }
 }
@@ -39,19 +53,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'update') {
         if ($name === '') {
             $error = __('common_err_name_required');
         } else {
-            $stmt = $pdo->prepare('UPDATE suppliers SET name=?, phone=?, email=?, address=?, note=? WHERE id=?');
-            $stmt->execute([$name, trim($_POST['phone']), trim($_POST['email']), trim($_POST['address']), trim($_POST['note']), $id]);
-            header('Location: ' . BASE_URL . '/supplier/index.php');
-            exit;
+            $phone = trim($_POST['phone']);
+            $email = trim($_POST['email']);
+            $address = trim($_POST['address']);
+            $note = trim($_POST['note']);
+            $actorId = (int) $_SESSION['user_id'];
+
+            $stmt = $pdo->prepare('SELECT * FROM suppliers WHERE id = ?');
+            $stmt->execute([$id]);
+            $before = $stmt->fetch();
+
+            try {
+                $pdo->beginTransaction();
+                $stmt = $pdo->prepare('UPDATE suppliers SET name=?, phone=?, email=?, address=?, note=?, updated_by=? WHERE id=?');
+                $stmt->execute([$name, $phone, $email, $address, $note, $actorId, $id]);
+                logAudit($pdo, $actorId, 'update', 'supplier', $id, $before ?: null, [
+                    'name' => $name, 'phone' => $phone, 'email' => $email, 'address' => $address, 'note' => $note,
+                ]);
+                $pdo->commit();
+                header('Location: ' . BASE_URL . '/supplier/index.php');
+                exit;
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                error_log('Supplier update failed: ' . $e->getMessage());
+                $error = __('common_err_transaction_failed');
+            }
         }
     }
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete' && isAdmin()) {
-    $stmt = $pdo->prepare('DELETE FROM suppliers WHERE id = ?');
-    $stmt->execute([(int) $_POST['id']]);
-    header('Location: ' . BASE_URL . '/supplier/index.php');
-    exit;
+    $id = (int) $_POST['id'];
+    $actorId = (int) $_SESSION['user_id'];
+    $stmt = $pdo->prepare('SELECT * FROM suppliers WHERE id = ?');
+    $stmt->execute([$id]);
+    $before = $stmt->fetch();
+
+    try {
+        $pdo->beginTransaction();
+        $stmt = $pdo->prepare('DELETE FROM suppliers WHERE id = ?');
+        $stmt->execute([$id]);
+        if ($before) {
+            logAudit($pdo, $actorId, 'delete', 'supplier', $id, $before, null);
+        }
+        $pdo->commit();
+        header('Location: ' . BASE_URL . '/supplier/index.php');
+        exit;
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        error_log('Supplier delete failed: ' . $e->getMessage());
+        $error = __('common_err_transaction_failed');
+    }
 }
 
 $search = trim($_GET['q'] ?? '');
