@@ -168,6 +168,7 @@ return [
     'product_title' => 'ផលិតផល',
     'product_err_required' => 'ត្រូវការឈ្មោះ និង SKU។',
     'product_err_sku_exists' => 'SKU នេះមានរួចហើយ។',
+    'product_err_delete_has_history' => 'មិនអាចលុបផលិតផលនេះបានទេ ព្រោះវាមានប្រវត្តិប្រតិបត្តិការស្តុក។',
     'product_search_placeholder' => 'ស្វែងរកផលិតផល ឬ SKU...',
     'product_col_cost' => 'ថ្លៃដើម',
     'product_col_price' => 'តម្លៃលក់',

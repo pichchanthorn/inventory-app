@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../includes/auth_check.php';
 require_once __DIR__ . '/../includes/sortable.php';
 require_once __DIR__ . '/../includes/currency.php';
+require_once __DIR__ . '/../includes/audit.php';
 require_once __DIR__ . '/../config/db.php';
 
 $activePage = 'product';
@@ -19,6 +20,23 @@ $khrRateRow = $pdo->query('SELECT usd_to_khr_rate FROM app_settings WHERE id = 1
 $khrRate = $khrRateRow !== false ? (float) $khrRateRow : null;
 
 function nullableInt($v) { return $v === '' ? null : (int) $v; }
+
+// Supplementary, non-authoritative provenance for the audit snapshot:
+// present only when a price field was actually entered in KHR, so an
+// all-USD edit's snapshot has the same shape as Categories/Units/
+// Suppliers' - cost_price/sale_price themselves always stay canonical
+// USD regardless (see includes/currency.php's resolvePriceField(),
+// which this never overrides or duplicates the logic of).
+function priceEntryAuditFields(array $post, string $field): array {
+    $currency = ($post[$field . '_currency'] ?? 'USD') === 'KHR' ? 'KHR' : 'USD';
+    if ($currency !== 'KHR') {
+        return [];
+    }
+    return [
+        $field . '_entry_currency' => 'KHR',
+        $field . '_entry_khr_raw' => (float) ($post[$field] ?? 0),
+    ];
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify();
@@ -38,22 +56,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'create') {
             if ($stmt->fetch()) {
                 $error = __('product_err_sku_exists');
             } else {
+                $actorId = (int) $_SESSION['user_id'];
                 try {
                     $costPrice = resolvePriceField($_POST, 'cost_price', $khrRate);
                     $salePrice = resolvePriceField($_POST, 'sale_price', $khrRate);
 
+                    $barcode = trim($_POST['barcode']);
+                    $categoryId = nullableInt($_POST['category_id']);
+                    $supplierId = nullableInt($_POST['supplier_id']);
+                    $unitId = nullableInt($_POST['unit_id']);
+                    $packageSize = trim($_POST['package_size']);
+                    $note = trim($_POST['note']);
+                    $minStock = (int) $_POST['min_stock'];
+
+                    $pdo->beginTransaction();
                     $stmt = $pdo->prepare('INSERT INTO products
-                        (name, sku, barcode, category_id, supplier_id, unit_id, package_size, note, cost_price, sale_price, min_stock, current_stock)
-                        VALUES (?,?,?,?,?,?,?,?,?,?,?,0)');
+                        (name, sku, barcode, category_id, supplier_id, unit_id, package_size, note, cost_price, sale_price, min_stock, current_stock, created_by, updated_by)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,0,?,?)');
                     $stmt->execute([
-                        $name, $sku, trim($_POST['barcode']),
-                        nullableInt($_POST['category_id']), nullableInt($_POST['supplier_id']), nullableInt($_POST['unit_id']),
-                        trim($_POST['package_size']), trim($_POST['note']), $costPrice, $salePrice, (int) $_POST['min_stock'],
+                        $name, $sku, $barcode, $categoryId, $supplierId, $unitId,
+                        $packageSize, $note, $costPrice, $salePrice, $minStock,
+                        $actorId, $actorId,
                     ]);
+                    $newId = (int) $pdo->lastInsertId();
+
+                    // Read the row back rather than hand-building $after from
+                    // POST values - guarantees every actual column (including
+                    // ones this form doesn't edit, e.g. active_ingredient/
+                    // expiry_date) is represented accurately, not silently
+                    // missing. current_stock excluded - it's hardcoded 0 above
+                    // and owned entirely by Stock In/Out/Adjustment's own
+                    // append-only history, not by Product CRUD. See §9.4.
+                    $afterStmt = $pdo->prepare('SELECT * FROM products WHERE id = ?');
+                    $afterStmt->execute([$newId]);
+                    $after = $afterStmt->fetch();
+                    unset($after['current_stock']);
+                    $after += priceEntryAuditFields($_POST, 'cost_price');
+                    $after += priceEntryAuditFields($_POST, 'sale_price');
+
+                    logAudit($pdo, $actorId, 'create', 'product', $newId, null, $after);
+                    $pdo->commit();
                     header('Location: ' . BASE_URL . '/product/index.php');
                     exit;
                 } catch (PriceConversionException $e) {
+                    if ($pdo->inTransaction()) $pdo->rollBack();
                     $error = $e->getMessage();
+                } catch (Throwable $e) {
+                    if ($pdo->inTransaction()) $pdo->rollBack();
+                    error_log('Product create failed: ' . $e->getMessage());
+                    $error = __('common_err_transaction_failed');
                 }
             }
         }
@@ -70,33 +121,105 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'update') {
         if ($name === '' || $sku === '') {
             $error = __('product_err_required');
         } else {
+            $actorId = (int) $_SESSION['user_id'];
+
+            $stmt = $pdo->prepare('SELECT * FROM products WHERE id = ?');
+            $stmt->execute([$id]);
+            $before = $stmt->fetch();
+            if ($before) {
+                // Product CRUD's audit trail never carries stock state - a
+                // concurrent Stock In/Out changing current_stock must never
+                // show up as part of what THIS edit changed. See §9.4.
+                unset($before['current_stock']);
+            }
+
             try {
                 $costPrice = resolvePriceField($_POST, 'cost_price', $khrRate);
                 $salePrice = resolvePriceField($_POST, 'sale_price', $khrRate);
 
+                $barcode = trim($_POST['barcode']);
+                $categoryId = nullableInt($_POST['category_id']);
+                $supplierId = nullableInt($_POST['supplier_id']);
+                $unitId = nullableInt($_POST['unit_id']);
+                $packageSize = trim($_POST['package_size']);
+                $note = trim($_POST['note']);
+                $minStock = (int) $_POST['min_stock'];
+
+                $pdo->beginTransaction();
                 $stmt = $pdo->prepare('UPDATE products SET
-                    name=?, sku=?, barcode=?, category_id=?, supplier_id=?, unit_id=?, package_size=?, note=?, cost_price=?, sale_price=?, min_stock=?
+                    name=?, sku=?, barcode=?, category_id=?, supplier_id=?, unit_id=?, package_size=?, note=?, cost_price=?, sale_price=?, min_stock=?, updated_by=?
                     WHERE id=?');
                 $stmt->execute([
-                    $name, $sku, trim($_POST['barcode']),
-                    nullableInt($_POST['category_id']), nullableInt($_POST['supplier_id']), nullableInt($_POST['unit_id']),
-                    trim($_POST['package_size']), trim($_POST['note']), $costPrice, $salePrice, (int) $_POST['min_stock'],
-                    $id,
+                    $name, $sku, $barcode, $categoryId, $supplierId, $unitId,
+                    $packageSize, $note, $costPrice, $salePrice, $minStock,
+                    $actorId, $id,
                 ]);
+
+                // Same read-back approach as create - see the comment there.
+                $afterStmt = $pdo->prepare('SELECT * FROM products WHERE id = ?');
+                $afterStmt->execute([$id]);
+                $after = $afterStmt->fetch();
+                unset($after['current_stock']);
+                $after += priceEntryAuditFields($_POST, 'cost_price');
+                $after += priceEntryAuditFields($_POST, 'sale_price');
+
+                logAudit($pdo, $actorId, 'update', 'product', $id, $before ?: null, $after);
+                $pdo->commit();
                 header('Location: ' . BASE_URL . '/product/index.php');
                 exit;
             } catch (PriceConversionException $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
                 $error = $e->getMessage();
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                error_log('Product update failed: ' . $e->getMessage());
+                $error = __('common_err_transaction_failed');
             }
         }
     }
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete' && isAdmin()) {
-    $stmt = $pdo->prepare('DELETE FROM products WHERE id = ?');
-    $stmt->execute([(int) $_POST['id']]);
-    header('Location: ' . BASE_URL . '/product/index.php');
-    exit;
+    $id = (int) $_POST['id'];
+    $actorId = (int) $_SESSION['user_id'];
+
+    $stmt = $pdo->prepare('SELECT * FROM products WHERE id = ?');
+    $stmt->execute([$id]);
+    $before = $stmt->fetch();
+    if ($before) {
+        unset($before['current_stock']);
+    }
+
+    try {
+        $pdo->beginTransaction();
+        $stmt = $pdo->prepare('DELETE FROM products WHERE id = ?');
+        $stmt->execute([$id]);
+        if ($before) {
+            logAudit($pdo, $actorId, 'delete', 'product', $id, $before, null);
+        }
+        $pdo->commit();
+        header('Location: ' . BASE_URL . '/product/index.php');
+        exit;
+    } catch (PDOException $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        // MySQL/MariaDB error 1451: "Cannot delete or update a parent row:
+        // a foreign key constraint fails" - stock_transaction_items.product_id
+        // has no ON DELETE clause (RESTRICT by default), so any product with
+        // stock history (Stock In/Out/Adjustment/Sale - all four write to
+        // that table) hits this. Give a precise message instead of the
+        // generic fallback - same distinction StockConflictException gets
+        // its own catch for elsewhere in this app.
+        if (($e->errorInfo[1] ?? null) === 1451) {
+            $error = __('product_err_delete_has_history');
+        } else {
+            error_log('Product delete failed: ' . $e->getMessage());
+            $error = __('common_err_transaction_failed');
+        }
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        error_log('Product delete failed: ' . $e->getMessage());
+        $error = __('common_err_transaction_failed');
+    }
 }
 
 $search = trim($_GET['q'] ?? '');
