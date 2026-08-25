@@ -180,7 +180,17 @@ body[lang="km"] .form-select{ min-width: 110px; padding-right: 2.5rem; }
 .product-select{ position:relative; }
 .product-search-menu{
   display:none; position:absolute; left:0; right:0; top:100%; z-index:20;
-  margin-top:2px; max-height:220px; overflow-y:auto;
+  margin-top:2px; overflow-y:auto;
+  /* min() with a viewport-height fraction, not a width breakpoint - this
+     is about how much room is actually below the input, which shrinks
+     hardest on a phone with the on-screen keyboard up (easily half the
+     screen), not about how narrow the screen is. Stays exactly 220px on
+     any normal desktop/tablet height (45vh only goes below 220px under
+     ~489px of viewport height) - a partial mitigation, not a guaranteed
+     fix, since a full fix (flipping the list to open upward when short
+     on room below) would need JS duplicated across all 3 pages that use
+     this component; ship the cheap CSS version first. */
+  max-height:min(220px, 45vh);
   background:var(--panel) !important; border:1px solid var(--line-bright);
   border-radius:6px; box-shadow:0 8px 24px rgba(0,0,0,.35);
 }

@@ -116,6 +116,16 @@ if ($search !== '') {
 }
 $suppliers = $stmt->fetchAll();
 
+// Mobile-only "Sort by" <select> fallback - same pattern as
+// product/index.php and category/index.php, see category/index.php for
+// the full rationale.
+function mobileSortUrl(string $column): string {
+    $params = $_GET;
+    $params['sort'] = $column;
+    $params['dir'] = 'asc';
+    return '?' . http_build_query($params);
+}
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
@@ -130,13 +140,17 @@ require_once __DIR__ . '/../includes/header.php';
   <?php endif; ?>
 </div>
 
-<form class="mb-3" method="get">
+<form class="mb-3 d-flex gap-2 flex-wrap" method="get">
   <input type="text" name="q" id="searchInput" class="form-control" style="max-width:300px"
          placeholder="<?= __('common_search_placeholder') ?>" value="<?= htmlspecialchars($search) ?>">
+  <select class="form-select form-select-sm d-md-none" style="max-width:160px" onchange="if (this.value) location.href = this.value">
+    <option value="" <?= empty($_GET['sort']) ? 'selected' : '' ?> disabled><?= __('common_sort_by') ?></option>
+    <option value="<?= htmlspecialchars(mobileSortUrl('name')) ?>" <?= ($_GET['sort'] ?? '') === 'name' ? 'selected' : '' ?>><?= __('common_name') ?></option>
+  </select>
 </form>
 
 <div class="card" id="resultsArea">
-  <table class="table mb-0 align-middle">
+  <table class="table mb-0 align-middle table-cards-mobile">
     <thead class="table-light">
       <tr><th>#</th><th><?= sortHeader('name', __('common_name')) ?></th><th><?= __('common_phone') ?></th><th><?= __('common_email') ?></th><th><?= __('common_address') ?></th><th><?= __('common_note') ?></th><th class="text-end"><?= __('common_actions') ?></th></tr>
     </thead>
@@ -146,12 +160,12 @@ require_once __DIR__ . '/../includes/header.php';
       <?php endif; ?>
       <?php foreach ($suppliers as $i => $s): ?>
       <tr>
-        <td><?= $i + 1 ?></td>
-        <td><?= htmlspecialchars($s['name']) ?></td>
-        <td><?= htmlspecialchars($s['phone']) ?></td>
-        <td><?= htmlspecialchars($s['email']) ?></td>
-        <td><?= htmlspecialchars($s['address']) ?></td>
-        <td><?= htmlspecialchars($s['note']) ?></td>
+        <td class="row-number"><?= $i + 1 ?></td>
+        <td class="row-title"><?= htmlspecialchars($s['name']) ?></td>
+        <td data-label="<?= htmlspecialchars(__('common_phone')) ?>"><?= htmlspecialchars($s['phone']) ?></td>
+        <td data-label="<?= htmlspecialchars(__('common_email')) ?>"><?= htmlspecialchars($s['email']) ?></td>
+        <td data-label="<?= htmlspecialchars(__('common_address')) ?>"><?= htmlspecialchars($s['address']) ?></td>
+        <td data-label="<?= htmlspecialchars(__('common_note')) ?>"><?= htmlspecialchars($s['note']) ?></td>
         <td class="text-end row-actions">
           <?php if (canWrite()): ?>
           <button class="btn btn-sm btn-outline-primary"
