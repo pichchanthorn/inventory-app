@@ -225,6 +225,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
 $search = trim($_GET['q'] ?? '');
 $lowStockOnly = ($_GET['filter'] ?? '') === 'low_stock';
 $orderBy = sortOrderBy(['name' => 'p.name', 'stock' => 'p.current_stock', 'price' => 'p.sale_price'], 'p.id DESC');
+
+// Mobile-only "Sort by" <select> fallback: the table's <thead> (and with
+// it, sortHeader()'s click-to-sort column links) is hidden below the
+// card-layout breakpoint - see .table-cards-mobile in assets/style.css -
+// so this reuses the same ?sort=&dir= URL scheme against the same 3
+// sortable columns, just as a <select> instead of header links.
+function mobileSortUrl(string $column): string {
+    $params = $_GET;
+    $params['sort'] = $column;
+    $params['dir'] = 'asc';
+    return '?' . http_build_query($params);
+}
 $sql = 'SELECT p.*, c.name AS category_name, s.name AS supplier_name
         FROM products p
         LEFT JOIN categories c ON c.id = p.category_id
@@ -256,14 +268,20 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 <?php endif; ?>
 
-<form class="mb-3" method="get">
+<form class="mb-3 d-flex gap-2 flex-wrap" method="get">
   <?php if ($lowStockOnly): ?><input type="hidden" name="filter" value="low_stock"><?php endif; ?>
   <input type="text" name="q" id="searchInput" class="form-control" style="max-width:300px"
          placeholder="<?= __('product_search_placeholder') ?>" value="<?= htmlspecialchars($search) ?>">
+  <select class="form-select form-select-sm d-md-none" style="max-width:160px" onchange="if (this.value) location.href = this.value">
+    <option value="" <?= empty($_GET['sort']) ? 'selected' : '' ?> disabled><?= __('common_sort_by') ?></option>
+    <option value="<?= htmlspecialchars(mobileSortUrl('name')) ?>" <?= ($_GET['sort'] ?? '') === 'name' ? 'selected' : '' ?>><?= __('common_product') ?></option>
+    <option value="<?= htmlspecialchars(mobileSortUrl('price')) ?>" <?= ($_GET['sort'] ?? '') === 'price' ? 'selected' : '' ?>><?= __('product_col_price') ?></option>
+    <option value="<?= htmlspecialchars(mobileSortUrl('stock')) ?>" <?= ($_GET['sort'] ?? '') === 'stock' ? 'selected' : '' ?>><?= __('product_col_stock') ?></option>
+  </select>
 </form>
 
 <div class="card" id="resultsArea">
-  <table class="table mb-0 align-middle">
+  <table class="table mb-0 align-middle table-cards-mobile">
     <thead class="table-light">
       <tr><th>#</th><th><?= sortHeader('name', __('common_product')) ?></th><th><?= __('common_category') ?></th><th><?= __('common_supplier') ?></th><th><?= __('product_col_cost') ?></th><th><?= sortHeader('price', __('product_col_price')) ?></th><th><?= __('product_col_margin') ?></th><th><?= sortHeader('stock', __('product_col_stock')) ?></th><th class="text-end"><?= __('common_actions') ?></th></tr>
     </thead>
@@ -276,18 +294,18 @@ require_once __DIR__ . '/../includes/header.php';
         $low = $p['current_stock'] <= $p['min_stock'];
       ?>
       <tr class="<?= $low ? 'row-low-stock' : '' ?>">
-        <td><?= $i + 1 ?></td>
-        <td>
+        <td class="row-number"><?= $i + 1 ?></td>
+        <td class="row-title">
           <div class="fw-semibold"><?= htmlspecialchars($p['name']) ?></div>
           <span class="slug-pill"><?= htmlspecialchars($p['sku']) ?></span>
           <?php if (!empty($p['package_size'])): ?><span class="text-secondary small ms-1"><?= htmlspecialchars($p['package_size']) ?></span><?php endif; ?>
         </td>
-        <td><?= $p['category_name'] ? htmlspecialchars($p['category_name']) : '<span class="text-secondary">—</span>' ?></td>
-        <td><?= $p['supplier_name'] ? htmlspecialchars($p['supplier_name']) : '<span class="text-secondary">—</span>' ?></td>
-        <td class="mono">$<?= number_format($p['cost_price'], 2) ?></td>
-        <td class="mono">$<?= number_format($p['sale_price'], 2) ?></td>
-        <td style="color:<?= $margin >= 30 ? 'var(--good)' : ($margin >= 15 ? 'var(--warn)' : 'var(--danger)') ?>;"><?= $margin ?>%</td>
-        <td><span class="badge-stock <?= $low ? 'badge-low' : 'badge-normal' ?>"><?= $p['current_stock'] ?> <?= __('common_pcs') ?></span></td>
+        <td data-label="<?= htmlspecialchars(__('common_category')) ?>"><?= $p['category_name'] ? htmlspecialchars($p['category_name']) : '<span class="text-secondary">—</span>' ?></td>
+        <td data-label="<?= htmlspecialchars(__('common_supplier')) ?>"><?= $p['supplier_name'] ? htmlspecialchars($p['supplier_name']) : '<span class="text-secondary">—</span>' ?></td>
+        <td class="mono" data-label="<?= htmlspecialchars(__('product_col_cost')) ?>">$<?= number_format($p['cost_price'], 2) ?></td>
+        <td class="mono" data-label="<?= htmlspecialchars(__('product_col_price')) ?>">$<?= number_format($p['sale_price'], 2) ?></td>
+        <td data-label="<?= htmlspecialchars(__('product_col_margin')) ?>" style="color:<?= $margin >= 30 ? 'var(--good)' : ($margin >= 15 ? 'var(--warn)' : 'var(--danger)') ?>;"><?= $margin ?>%</td>
+        <td data-label="<?= htmlspecialchars(__('product_col_stock')) ?>"><span class="badge-stock <?= $low ? 'badge-low' : 'badge-normal' ?>"><?= $p['current_stock'] ?> <?= __('common_pcs') ?></span></td>
         <td class="text-end row-actions">
           <?php if (canWrite()): ?>
           <button class="btn btn-sm btn-outline-primary"

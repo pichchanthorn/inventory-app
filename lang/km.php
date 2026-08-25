@@ -39,6 +39,7 @@ return [
     'common_phone' => 'លេខទូរស័ព្ទ',
     'common_address' => 'អាសយដ្ឋាន',
     'common_actions' => 'សកម្មភាព',
+    'common_sort_by' => 'តម្រៀបតាម',
     'common_save' => 'រក្សាទុក',
     'common_cancel' => 'បោះបង់',
     'common_search_placeholder' => 'ស្វែងរក...',
