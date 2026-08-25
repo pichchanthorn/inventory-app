@@ -143,7 +143,7 @@ require_once __DIR__ . '/../includes/header.php';
           <div class="bracket-label mb-0"><?= __('common_line_items') ?></div>
           <button type="button" class="btn btn-sm btn-outline-primary" onclick="addRow()"><?= __('common_add_product') ?></button>
         </div>
-        <table class="table" id="lineTable">
+        <table class="table table-cards-mobile" id="lineTable">
           <thead class="table-light">
             <tr><th><?= __('common_product') ?></th><th style="width:100px;"><?= __('common_qty') ?></th><th style="width:130px;"><?= __('stockout_unit_price') ?></th><th style="width:110px;" class="text-end"><?= __('pos_line_total') ?></th><th style="width:40px;"></th></tr>
           </thead>
@@ -198,31 +198,132 @@ const PRODUCTS = <?= json_encode($products) ?>;
 const T_CHOOSE_PRODUCT = <?= json_encode(__('common_choose_product_option')) ?>;
 const T_NOW = <?= json_encode(__('common_now_label')) ?>;
 const T_PCS = <?= json_encode(__('common_pcs')) ?>;
+const T_NO_RESULTS = <?= json_encode(__('common_no_results_found')) ?>;
+const T_QTY = <?= json_encode(__('common_qty')) ?>;
+const T_UNIT_PRICE = <?= json_encode(__('stockout_unit_price')) ?>;
+const T_LINE_TOTAL = <?= json_encode(__('pos_line_total')) ?>;
 
-function productOptions(selected) {
-  let html = `<option value="">${T_CHOOSE_PRODUCT}</option>`;
-  PRODUCTS.forEach(p => {
-    const size = p.package_size ? ` — ${p.package_size}` : '';
-    html += `<option value="${p.id}" data-price="${p.sale_price}" ${String(p.id)===String(selected)?'selected':''}>${p.name}${size} (${T_NOW}: ${p.current_stock} ${T_PCS})</option>`;
+function productLabel(p) {
+  const size = p.package_size ? ` — ${p.package_size}` : '';
+  return `${p.name}${size} (${T_NOW}: ${p.current_stock} ${T_PCS})`;
+}
+function findProduct(id) {
+  return PRODUCTS.find(p => String(p.id) === String(id));
+}
+
+// Renders the filtered option list into `menu` and wires each option's
+// click. mousedown preventDefault keeps the text input focused (so no
+// blur/revert races the click) while the click itself does the select.
+function renderSearchMenu(menu, filterText, onSelect) {
+  const q = filterText.trim().toLowerCase();
+  const matches = q ? PRODUCTS.filter(p => p.name.toLowerCase().includes(q)) : PRODUCTS;
+  menu.innerHTML = '';
+  if (!matches.length) {
+    const empty = document.createElement('div');
+    empty.className = 'product-search-option disabled';
+    empty.textContent = T_NO_RESULTS;
+    menu.appendChild(empty);
+    return;
+  }
+  matches.forEach((p, i) => {
+    const opt = document.createElement('div');
+    opt.className = 'product-search-option' + (i === 0 ? ' active' : '');
+    opt.textContent = productLabel(p);
+    opt.dataset.id = p.id;
+    opt.addEventListener('mousedown', e => e.preventDefault());
+    opt.addEventListener('click', () => onSelect(String(p.id)));
+    menu.appendChild(opt);
   });
-  return html;
+}
+
+// Wires a .product-select container (hidden id input + visible search
+// input + menu) into a searchable dropdown. onSelect(product) fires only
+// on an actual selection, matching the old <select onchange> behavior -
+// never on typing, so a typed-but-unselected string can never reach the
+// hidden input that actually gets submitted. Same component as
+// stock-in/index.php and stock-out/index.php - see those for the
+// original design/verification notes.
+function wireProductSelect(container, onSelect) {
+  const hidden = container.querySelector('input[type="hidden"]');
+  const input = container.querySelector('.product-search-input');
+  const menu = container.querySelector('.product-search-menu');
+
+  function close() { menu.classList.remove('open'); }
+  function open(filterText) { renderSearchMenu(menu, filterText, select); menu.classList.add('open'); }
+  function select(id) {
+    const p = findProduct(id);
+    if (!p) return;
+    hidden.value = String(p.id);
+    input.value = productLabel(p);
+    close();
+    onSelect(p);
+  }
+  // On blur/Escape, snap the visible text back to whatever is actually
+  // in the hidden field - typing never touches the hidden field itself,
+  // this just stops the input showing stale/typed text after the fact.
+  function revert() {
+    const p = findProduct(hidden.value);
+    input.value = p ? productLabel(p) : '';
+  }
+
+  input.addEventListener('focus', () => open(''));
+  input.addEventListener('input', () => open(input.value));
+  input.addEventListener('blur', () => { close(); revert(); });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!menu.classList.contains('open')) { open(input.value); return; }
+      const items = Array.from(menu.querySelectorAll('.product-search-option:not(.disabled)'));
+      if (!items.length) return;
+      let idx = items.findIndex(el => el.classList.contains('active'));
+      if (idx >= 0) items[idx].classList.remove('active');
+      idx = e.key === 'ArrowDown' ? (idx + 1) % items.length : (idx <= 0 ? items.length - 1 : idx - 1);
+      items[idx].classList.add('active');
+      items[idx].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter') {
+      if (menu.classList.contains('open')) {
+        e.preventDefault();
+        const active = menu.querySelector('.product-search-option.active');
+        if (active) select(active.dataset.id);
+      }
+    } else if (e.key === 'Escape') {
+      close();
+      revert();
+    }
+  });
+
+  return {
+    setInitial(id) {
+      if (!id) return;
+      const p = findProduct(id);
+      if (!p) return;
+      hidden.value = String(p.id);
+      input.value = productLabel(p);
+    }
+  };
 }
 
 function addRow(productId = '', qty = 1, price = '') {
   const tr = document.createElement('tr');
   tr.innerHTML = `
-    <td><select name="product_id[]" class="form-select form-select-sm" onchange="fillPrice(this)">${productOptions(productId)}</select></td>
-    <td><input type="number" name="qty[]" class="form-control form-control-sm" value="${qty}" min="1" oninput="updateSubtotal()"></td>
-    <td><input type="number" name="unit_price[]" class="form-control form-control-sm" value="${price}" step="0.01" oninput="updateSubtotal()"></td>
-    <td class="text-end mono line-total">$0.00</td>
-    <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove(); updateSubtotal();">✕</button></td>`;
+    <td class="row-title">
+      <div class="product-select">
+        <input type="hidden" name="product_id[]">
+        <input type="text" class="form-control form-control-sm product-search-input" placeholder="${T_CHOOSE_PRODUCT}" autocomplete="off">
+        <div class="product-search-menu"></div>
+      </div>
+    </td>
+    <td class="row-qty" data-label="${T_QTY}"><input type="number" name="qty[]" class="form-control form-control-sm" value="${qty}" min="1" oninput="updateSubtotal()"></td>
+    <td class="row-price" data-label="${T_UNIT_PRICE}"><input type="number" name="unit_price[]" class="form-control form-control-sm" value="${price}" step="0.01" oninput="updateSubtotal()"></td>
+    <td class="text-end mono line-total row-total" data-label="${T_LINE_TOTAL}">$0.00</td>
+    <td class="row-remove"><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove(); updateSubtotal();">✕</button></td>`;
   document.getElementById('lineBody').appendChild(tr);
+  const controls = wireProductSelect(tr.querySelector('.product-select'), product => fillPrice(tr, product));
+  controls.setInitial(productId);
   updateSubtotal();
 }
-function fillPrice(sel) {
-  const opt = sel.selectedOptions[0];
-  const row = sel.closest('tr');
-  row.querySelector('[name="unit_price[]"]').value = opt.dataset.price || 0;
+function fillPrice(row, product) {
+  row.querySelector('[name="unit_price[]"]').value = product.sale_price || 0;
   updateSubtotal();
 }
 

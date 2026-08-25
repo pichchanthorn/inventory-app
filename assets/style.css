@@ -109,6 +109,21 @@ body[lang="km"] .badge-stock { font-size: .84rem; font-weight: 600; }
    convention used throughout this file. */
 body:not(.theme-light) .sidebar .offcanvas-header .btn-close{ filter: invert(1) grayscale(100%) brightness(200%); }
 
+/* .mobile-content-wrap is the flex item (sibling of the offcanvas
+   sidebar) that holds the mobile topbar + <main>. Flex items default to
+   min-width:auto, meaning they won't shrink below their content's
+   intrinsic width - normally invisible, but any long unbroken run of
+   text deep inside (e.g. Khmer product names, which the browser's line
+   breaker won't wrap mid-run without help) raises that intrinsic width
+   past the viewport, which then balloons this entire flex item (and
+   everything inside it) rather than actually overflowing on its own.
+   min-width:0 is the standard fix: it lets the item shrink to the
+   space the flex row actually has, so its content wraps normally
+   instead of forcing the whole page wider. Found via the Products
+   card-layout work below, but applies to any page's content, not just
+   that one table. */
+.mobile-content-wrap{ min-width:0; }
+
 /* mobile topbar (hamburger trigger) - hidden entirely at >=768px via
    d-md-none in the markup, so it never appears on desktop. */
 .mobile-topbar{ background:var(--panel) !important; border-bottom:1px solid var(--line); }
@@ -196,6 +211,46 @@ table tbody tr.row-low-stock{ background:var(--danger-tint) !important; }
 table tbody tr:hover{ background:var(--panel-alt) !important; }
 table td, table th{ border-color:var(--line) !important; }
 .slug-pill{ font-family:'JetBrains Mono','Kantumruy Pro',monospace; font-size:.76rem; background:var(--bg); border:1px solid var(--line); color:var(--accent); padding:3px 8px; border-radius:3px; }
+
+/* Responsive "table becomes cards" below the same 768px breakpoint the
+   mobile sidebar collapses at (Products, POS line items) - same <table>
+   markup at every width, restyled via CSS rather than duplicated as a
+   second card-shaped structure, so there's one source of truth for the
+   data. Each <td> that needs a visible label carries data-label="..."
+   (reusing the same already-localized strings the desktop <th> uses);
+   cells that don't need one (the row's title, action buttons) simply
+   don't carry the attribute and render with no heading. */
+@media (max-width: 767.98px) {
+  .table-cards-mobile thead{ display:none; }
+  .table-cards-mobile, .table-cards-mobile tbody, .table-cards-mobile tr, .table-cards-mobile td{ display:block; width:100%; }
+  .table-cards-mobile tbody tr{ margin-bottom:.75rem; border:1px solid var(--line) !important; border-radius:8px; padding:.75rem; }
+  .table-cards-mobile tbody tr:last-child{ margin-bottom:0; }
+  .table-cards-mobile td{ border:none !important; padding:.3rem 0; }
+  .table-cards-mobile td[data-label]::before{
+    content:attr(data-label); display:block; font-family:'JetBrains Mono','Kantumruy Pro',monospace;
+    font-size:.64rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);
+  }
+  /* the row number only made sense as a table column - meaningless once
+     each row is its own card */
+  .table-cards-mobile td.row-number{ display:none; }
+  .table-cards-mobile td.row-title{ padding-top:0; padding-bottom:.5rem; border-bottom:1px solid var(--line) !important; margin-bottom:.4rem; }
+  .table-cards-mobile td.text-end{ text-align:left !important; }
+  /* action buttons are the primary (only) way to edit/delete from a card,
+     not a hover-revealed detail on a dense desktop row - keep them at
+     full opacity rather than the desktop hover-to-reveal dimming */
+  .table-cards-mobile .row-actions .btn{ opacity:1; }
+
+  /* POS line items specifically: Qty/Unit Price/Line Total are short
+     numeric fields, not worth a full-width row each the way Products'
+     longer text fields are - keep them in one compact row under the
+     product picker instead. */
+  #lineTable.table-cards-mobile tbody tr{ display:flex; flex-wrap:wrap; align-items:flex-end; gap:.5rem; }
+  #lineTable.table-cards-mobile td.row-title{ flex:1 1 100%; }
+  #lineTable.table-cards-mobile td.row-qty,
+  #lineTable.table-cards-mobile td.row-price,
+  #lineTable.table-cards-mobile td.row-total{ flex:1 1 0; min-width:0; padding-top:0; padding-bottom:0; }
+  #lineTable.table-cards-mobile td.row-remove{ flex:0 0 auto; padding-top:0; padding-bottom:0; }
+}
 
 /* sortable column headers (Products, Categories, Units, Suppliers, Stock
    Report log) - inherit the muted uppercase eyebrow color of the header

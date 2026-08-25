@@ -39,6 +39,7 @@ return [
     'common_phone' => 'Phone',
     'common_address' => 'Address',
     'common_actions' => 'Actions',
+    'common_sort_by' => 'Sort by',
     'common_save' => 'Save',
     'common_cancel' => 'Cancel',
     'common_search_placeholder' => 'Search...',
