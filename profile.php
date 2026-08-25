@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/includes/auth_check.php';
+require_once __DIR__ . '/includes/audit.php';
 require_once __DIR__ . '/config/db.php';
 $activePage = 'profile';
 $infoMsg = ''; $infoErr = '';
@@ -56,13 +57,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_info'])) {
             }
 
             if ($infoErr === '') {
-                $stmt = $pdo->prepare('UPDATE users SET name = ?, email = ?, avatar = ? WHERE id = ?');
-                $stmt->execute([$name, $email, $avatarPath, $user['id']]);
-                $_SESSION['user_name'] = $name;
-                $user['name'] = $name;
-                $user['email'] = $email;
-                $user['avatar'] = $avatarPath;
-                $infoMsg = __('profile_updated_msg');
+                $actorId = (int) $_SESSION['user_id'];
+                // $user was fetched at the top of this file, before any
+                // mutation this request could make - that's the correct
+                // "before" state, same source profile.php's own
+                // update_password handler already trusts for password_verify().
+                $before = userAuditSnapshot($user);
+                try {
+                    $pdo->beginTransaction();
+                    $stmt = $pdo->prepare('UPDATE users SET name = ?, email = ?, avatar = ?, updated_by = ? WHERE id = ?');
+                    $stmt->execute([$name, $email, $avatarPath, $actorId, $user['id']]);
+
+                    // Fresh read-back, same reason as every prior batch -
+                    // never hand-build the snapshot from POST/local values.
+                    $afterStmt = $pdo->prepare('SELECT * FROM users WHERE id = ?');
+                    $afterStmt->execute([$user['id']]);
+                    $after = userAuditSnapshot($afterStmt->fetch());
+
+                    logAudit($pdo, $actorId, 'update', 'user', $user['id'], $before, $after);
+                    $pdo->commit();
+
+                    $_SESSION['user_name'] = $name;
+                    $user['name'] = $name;
+                    $user['email'] = $email;
+                    $user['avatar'] = $avatarPath;
+                    $infoMsg = __('profile_updated_msg');
+                } catch (Throwable $e) {
+                    if ($pdo->inTransaction()) $pdo->rollBack();
+                    error_log('Profile update_info failed: ' . $e->getMessage());
+                    $infoErr = __('common_err_transaction_failed');
+                }
             }
         }
     }
@@ -70,13 +94,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_info'])) {
 
 // ---------- Remove avatar ----------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['remove_avatar'])) {
+    $actorId = (int) $_SESSION['user_id'];
+    $before = userAuditSnapshot($user);
+
     if ($user['avatar'] && file_exists(__DIR__ . '/' . $user['avatar'])) {
         @unlink(__DIR__ . '/' . $user['avatar']);
     }
-    $stmt = $pdo->prepare('UPDATE users SET avatar = NULL WHERE id = ?');
-    $stmt->execute([$user['id']]);
-    $user['avatar'] = null;
-    $infoMsg = __('profile_photo_removed_msg');
+    try {
+        $pdo->beginTransaction();
+        $stmt = $pdo->prepare('UPDATE users SET avatar = NULL, updated_by = ? WHERE id = ?');
+        $stmt->execute([$actorId, $user['id']]);
+
+        $afterStmt = $pdo->prepare('SELECT * FROM users WHERE id = ?');
+        $afterStmt->execute([$user['id']]);
+        $after = userAuditSnapshot($afterStmt->fetch());
+
+        logAudit($pdo, $actorId, 'update', 'user', $user['id'], $before, $after);
+        $pdo->commit();
+
+        $user['avatar'] = null;
+        $infoMsg = __('profile_photo_removed_msg');
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        error_log('Profile remove_avatar failed: ' . $e->getMessage());
+        $infoErr = __('common_err_transaction_failed');
+    }
 }
 
 // ---------- Update password ----------
@@ -92,10 +134,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_password'])) {
     } elseif ($new !== $confirm) {
         $pwErr = __('profile_err_password_mismatch');
     } else {
-        $stmt = $pdo->prepare('UPDATE users SET password = ?, must_change_password = 0 WHERE id = ?');
-        $stmt->execute([password_hash($new, PASSWORD_DEFAULT), $user['id']]);
-        $_SESSION['must_change_password'] = false;
-        $pwMsg = __('profile_password_changed_msg');
+        $actorId = (int) $_SESSION['user_id'];
+        // Full before/after, same as user/index.php's reset_password in
+        // Batch 3a - not a special truncated shape. userAuditSnapshot()
+        // excludes password unconditionally regardless of caller, so this
+        // still guarantees no password field ever appears; showing the
+        // rest of the row unchanged is what proves this action touched
+        // nothing else. A voluntary change (must_change_password already
+        // 0) can legitimately produce a before/after that's identical
+        // apart from updated_at/updated_by - expected, not a bug, see B3b
+        // design doc §4.
+        $before = userAuditSnapshot($user);
+        try {
+            $pdo->beginTransaction();
+            $stmt = $pdo->prepare('UPDATE users SET password = ?, must_change_password = 0, updated_by = ? WHERE id = ?');
+            $stmt->execute([password_hash($new, PASSWORD_DEFAULT), $actorId, $user['id']]);
+
+            $afterStmt = $pdo->prepare('SELECT * FROM users WHERE id = ?');
+            $afterStmt->execute([$user['id']]);
+            $after = userAuditSnapshot($afterStmt->fetch());
+
+            logAudit($pdo, $actorId, 'update', 'user', $user['id'], $before, $after);
+            $pdo->commit();
+
+            $_SESSION['must_change_password'] = false;
+            $pwMsg = __('profile_password_changed_msg');
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            error_log('Profile update_password failed: ' . $e->getMessage());
+            $pwErr = __('common_err_transaction_failed');
+        }
     }
 }
 
