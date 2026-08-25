@@ -110,7 +110,7 @@ require_once __DIR__ . '/../includes/header.php';
           <div class="bracket-label mb-0"><?= __('common_line_items') ?></div>
           <button type="button" class="btn btn-sm btn-outline-primary" onclick="addRow()"><?= __('common_add_product') ?></button>
         </div>
-        <table class="table" id="lineTable">
+        <table class="table table-cards-mobile" id="lineTable">
           <thead class="table-light"><tr><th><?= __('common_product') ?></th><th style="width:100px;"><?= __('common_qty') ?></th><th style="width:130px;"><?= __('stockin_unit_cost') ?></th><th style="width:40px;"></th></tr></thead>
           <tbody id="lineBody"></tbody>
         </table>
@@ -142,6 +142,8 @@ const T_CHOOSE_PRODUCT = <?= json_encode(__('common_choose_product_option')) ?>;
 const T_NOW = <?= json_encode(__('common_now_label')) ?>;
 const T_PCS = <?= json_encode(__('common_pcs')) ?>;
 const T_NO_RESULTS = <?= json_encode(__('common_no_results_found')) ?>;
+const T_QTY = <?= json_encode(__('common_qty')) ?>;
+const T_UNIT_COST = <?= json_encode(__('stockin_unit_cost')) ?>;
 // Live-preview-only KHR<->USD conversion for the Unit Cost currency
 // toggle - the server always resolves the real submitted value via
 // resolvePriceField(), independently of this preview.
@@ -249,15 +251,15 @@ function addRow(productId = '', qty = 1, cost = '') {
   const tr = document.createElement('tr');
   const toggleDisabled = EXCHANGE_RATE ? '' : 'disabled';
   tr.innerHTML = `
-    <td>
+    <td class="row-title">
       <div class="product-select">
         <input type="hidden" name="product_id[]">
         <input type="text" class="form-control form-control-sm product-search-input" placeholder="${T_CHOOSE_PRODUCT}" autocomplete="off">
         <div class="product-search-menu"></div>
       </div>
     </td>
-    <td><input type="number" name="qty[]" class="form-control form-control-sm" value="${qty}" min="1"></td>
-    <td>
+    <td class="row-qty" data-label="${T_QTY}"><input type="number" name="qty[]" class="form-control form-control-sm" value="${qty}" min="1"></td>
+    <td class="row-price" data-label="${T_UNIT_COST}">
       <div class="input-group input-group-sm price-input-group">
         <button type="button" class="btn btn-outline-secondary currency-toggle-btn" onclick="toggleCurrency(this)" ${toggleDisabled}>$</button>
         <input type="number" name="unit_cost[]" class="form-control price-amount-input" value="${cost}" step="0.01" oninput="updatePricePreview(this)">
@@ -265,7 +267,7 @@ function addRow(productId = '', qty = 1, cost = '') {
       </div>
       <div class="text-secondary small price-preview"></div>
     </td>
-    <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()">✕</button></td>`;
+    <td class="row-remove"><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()">✕</button></td>`;
   document.getElementById('lineBody').appendChild(tr);
   const controls = wireProductSelect(tr.querySelector('.product-select'), product => fillCost(tr, product));
   controls.setInitial(productId);

@@ -102,7 +102,7 @@ require_once __DIR__ . '/../includes/header.php';
           <div class="bracket-label mb-0"><?= __('common_line_items') ?></div>
           <button type="button" class="btn btn-sm btn-outline-primary" onclick="addRow()"><?= __('common_add_product') ?></button>
         </div>
-        <table class="table" id="lineTable">
+        <table class="table table-cards-mobile" id="lineTable">
           <thead class="table-light"><tr><th><?= __('common_product') ?></th><th style="width:100px;"><?= __('common_qty') ?></th><th style="width:130px;"><?= __('stockout_unit_price') ?></th><th style="width:40px;"></th></tr></thead>
           <tbody id="lineBody"></tbody>
         </table>
@@ -134,6 +134,8 @@ const T_CHOOSE_PRODUCT = <?= json_encode(__('common_choose_product_option')) ?>;
 const T_NOW = <?= json_encode(__('common_now_label')) ?>;
 const T_PCS = <?= json_encode(__('common_pcs')) ?>;
 const T_NO_RESULTS = <?= json_encode(__('common_no_results_found')) ?>;
+const T_QTY = <?= json_encode(__('common_qty')) ?>;
+const T_UNIT_PRICE = <?= json_encode(__('stockout_unit_price')) ?>;
 
 function productLabel(p) {
   const size = p.package_size ? ` — ${p.package_size}` : '';
@@ -236,16 +238,16 @@ function wireProductSelect(container, onSelect) {
 function addRow(productId = '', qty = 1, price = '') {
   const tr = document.createElement('tr');
   tr.innerHTML = `
-    <td>
+    <td class="row-title">
       <div class="product-select">
         <input type="hidden" name="product_id[]">
         <input type="text" class="form-control form-control-sm product-search-input" placeholder="${T_CHOOSE_PRODUCT}" autocomplete="off">
         <div class="product-search-menu"></div>
       </div>
     </td>
-    <td><input type="number" name="qty[]" class="form-control form-control-sm" value="${qty}" min="1"></td>
-    <td><input type="number" name="unit_price[]" class="form-control form-control-sm" value="${price}" step="0.01"></td>
-    <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()">✕</button></td>`;
+    <td class="row-qty" data-label="${T_QTY}"><input type="number" name="qty[]" class="form-control form-control-sm" value="${qty}" min="1"></td>
+    <td class="row-price" data-label="${T_UNIT_PRICE}"><input type="number" name="unit_price[]" class="form-control form-control-sm" value="${price}" step="0.01"></td>
+    <td class="row-remove"><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()">✕</button></td>`;
   document.getElementById('lineBody').appendChild(tr);
   const controls = wireProductSelect(tr.querySelector('.product-select'), product => fillPrice(tr, product));
   controls.setInitial(productId);
