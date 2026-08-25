@@ -102,6 +102,27 @@ window.addEventListener('pageshow', function () {
     btn.innerHTML = btn.dataset.originalHtml;
   });
 });
+
+// Same bfcache problem as above, for the mobile offcanvas sidebar:
+// bfcache freezes the DOM exactly as it was - including Bootstrap's
+// "show" class, its backdrop element, and the scroll-lock it applies to
+// <body> - and restores that frozen snapshot verbatim on pageshow
+// (event.persisted === true), without re-running DOMContentLoaded or
+// re-evaluating the data-bs-* attributes that only apply on a fresh
+// load. Left unhandled, returning to a page (browser back/forward, or a
+// backgrounded mobile browser tab resuming) where the drawer was open
+// shows it open again, covering the content, instead of the closed
+// default a fresh load would have. Routing through the real Offcanvas
+// instance's hide() - not manual class/DOM surgery - reuses Bootstrap's
+// own teardown (backdrop removal, scroll-lock release, aria state) so
+// it's identical to what closing via the close button already does.
+window.addEventListener('pageshow', function (event) {
+  if (!event.persisted) return;
+  var sidebarEl = document.getElementById('appSidebar');
+  if (!sidebarEl) return;
+  var instance = bootstrap.Offcanvas.getOrCreateInstance(sidebarEl);
+  instance.hide();
+});
 </script>
 </body>
 </html>
