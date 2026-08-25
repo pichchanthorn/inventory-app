@@ -6,6 +6,7 @@ return [
     'theme_toggle_dark' => 'Dark',
     'theme_toggle_light' => 'Light',
     'common_close' => 'Close',
+    'common_menu' => 'Menu',
 
     // Sidebar
     'nav_overview' => 'Overview',

@@ -34,8 +34,20 @@ function navClass($page, $active) {
   }
 </script>
 <div class="d-flex">
-  <!-- SIDEBAR -->
-  <nav class="sidebar p-3" style="width:230px;">
+  <!-- SIDEBAR
+       offcanvas-md: a normal static in-flow sidebar at >=768px (Bootstrap's
+       own CSS neutralizes the fixed-position/backdrop/header behavior at
+       that breakpoint - identical to the old plain <nav>, same .sidebar
+       class and width kept below). Below 768px it becomes a real
+       Bootstrap offcanvas: fixed, hidden by default, slide-in with a
+       backdrop, closeable via the header's close button, backdrop click,
+       or Esc - all through data-bs-* attributes, no custom JS. -->
+  <nav class="sidebar offcanvas-md offcanvas-start" style="width:230px;" tabindex="-1" id="appSidebar" aria-labelledby="appSidebarLabel">
+    <div class="offcanvas-header d-md-none">
+      <span class="offcanvas-title visually-hidden" id="appSidebarLabel"><?= __('app_brand_name') ?></span>
+      <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#appSidebar" aria-label="<?= __('common_close') ?>"></button>
+    </div>
+    <div class="offcanvas-body p-3 d-flex flex-column">
     <div class="d-flex align-items-center gap-2 mb-4">
       <span class="barcode text-primary"><i style="height:60%"></i><i style="height:100%"></i><i style="height:40%"></i><i style="height:80%"></i></span>
       <span class="fs-5 fw-bold"><?= __('app_brand_name') ?></span>
@@ -75,7 +87,17 @@ function navClass($page, $active) {
       <?= $_SESSION['lang'] === 'km' ? 'EN' : 'ខ្មែរ' ?>
     </a>
     <a class="nav-link text-secondary" href="<?= BASE_URL ?>/auth/logout.php"><i class="bi bi-box-arrow-left me-2"></i><?= __('nav_sign_out') ?></a>
+    </div>
   </nav>
 
-  <!-- MAIN CONTENT -->
-  <main class="flex-grow-1 p-4">
+  <div class="flex-grow-1 d-flex flex-column mobile-content-wrap">
+    <!-- MOBILE TOPBAR: hidden at >=768px, matches the sidebar's own d-md-none header -->
+    <div class="mobile-topbar d-md-none d-flex align-items-center gap-2 p-3">
+      <button type="button" class="btn mobile-hamburger-btn" data-bs-toggle="offcanvas" data-bs-target="#appSidebar" aria-controls="appSidebar" aria-label="<?= __('common_menu') ?>">
+        <i class="bi bi-list fs-4"></i>
+      </button>
+      <span class="fs-6 fw-bold"><?= __('app_brand_name') ?></span>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <main class="flex-grow-1 p-4">
