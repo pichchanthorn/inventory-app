@@ -6,6 +6,7 @@ return [
     'theme_toggle_dark' => 'ងងឹត',
     'theme_toggle_light' => 'ភ្លឺ',
     'common_close' => 'បិទ',
+    'common_menu' => 'ម៉ឺនុយ',
 
     // Sidebar
     'nav_overview' => 'ទិដ្ឋភាពទូទៅ',

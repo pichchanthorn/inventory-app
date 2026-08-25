@@ -89,6 +89,32 @@ body[lang="km"] .badge-stock { font-size: .84rem; font-weight: 600; }
 /* icon reads slightly bolder/richer than the label text on the active item */
 .sidebar .nav-link.active i{ color:var(--accent); filter:saturate(1.3) brightness(1.15); }
 
+/* mobile offcanvas sidebar (<768px) - Bootstrap's offcanvas defaults to a
+   white background/border and a 400px width; override via its own CSS
+   vars (same "Bootstrap defaults to light, force it to match the theme"
+   fix already used for .card/table above) so the mobile drawer matches
+   .sidebar's existing panel color instead of flashing white. Only takes
+   effect below the offcanvas-md breakpoint - at >=768px Bootstrap itself
+   neutralizes all of this and .sidebar's own background rule above wins,
+   so desktop is unaffected. */
+.sidebar.offcanvas-md{
+  --bs-offcanvas-width: 260px;
+  --bs-offcanvas-bg: var(--panel);
+  --bs-offcanvas-border-color: var(--line);
+  --bs-offcanvas-color: inherit;
+}
+/* Bootstrap's .btn-close is a black X by default (SVG background, not
+   currentColor) - invert it in dark mode so it's visible against the
+   dark offcanvas-header, same dark-is-default/theme-light-overrides
+   convention used throughout this file. */
+body:not(.theme-light) .sidebar .offcanvas-header .btn-close{ filter: invert(1) grayscale(100%) brightness(200%); }
+
+/* mobile topbar (hamburger trigger) - hidden entirely at >=768px via
+   d-md-none in the markup, so it never appears on desktop. */
+.mobile-topbar{ background:var(--panel) !important; border-bottom:1px solid var(--line); }
+.mobile-hamburger-btn{ background:transparent !important; border:1px solid var(--line) !important; color:inherit !important; padding:.35rem .6rem; border-radius:6px; }
+.mobile-hamburger-btn:hover{ border-color:var(--accent) !important; color:var(--accent) !important; }
+
 /* buttons */
 .btn-primary{ background:var(--accent) !important; border-color:var(--accent) !important; color:#03181C !important; font-weight:600; transition:filter .15s ease; }
 .btn-primary:hover{ filter:brightness(1.1); }
@@ -332,7 +358,7 @@ body.theme-light .form-control::placeholder { color: #8792A0; }
 /* POS receipt printing - hide app chrome and neutralize the dark theme so
    window.print() produces a plain, readable page with just the receipt */
 @media print {
-  .sidebar, .no-print, .toast-container { display:none !important; }
+  .sidebar, .no-print, .toast-container, .mobile-topbar { display:none !important; }
   main { padding:0 !important; margin:0 !important; }
   body { background:#fff !important; color:#000 !important; }
   .card { background:#fff !important; border-color:#ccc !important; color:#000 !important; box-shadow:none !important; }
