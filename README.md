@@ -276,8 +276,9 @@ starts in just a few seconds.
   delete query, so a non-admin can't delete by guessing the URL.
 - New staff accounts are only created by an Admin (via the Users page) with a
   hashed temporary password; public self-registration (`auth/register.php`)
-  is still open for now but should be restricted once Admin-created accounts
-  are in use.
+  is disabled by default and redirects to the login page instead of creating
+  an account, gated behind a `SELF_REGISTRATION_ENABLED` env var so it can be
+  turned back on without a code change if ever needed.
 - Uploaded profile photos are validated by MIME type and size before saving.
 
 ---
