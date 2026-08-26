@@ -6,11 +6,13 @@
 
 **University:** Build Bright University (BBU)
 **Course:** Advanced PHP & MySQL
+**Business:** PCTN Fertilizer Shop, Cambodia — built for real day-to-day shop use, not just as a coursework demo
 **Stack:** PHP (PDO) · MySQL · Bootstrap 5 · Vanilla JS
 
-A full-stack inventory management system for tracking products, suppliers,
-and stock movements — built with plain PHP and MySQL (no framework), using
-prepared statements throughout for SQL-injection safety.
+A full-stack inventory management system for tracking agrochemical products
+(fertilizers, pesticides), suppliers, and stock movements — built with plain
+PHP and MySQL (no framework), using prepared statements throughout for
+SQL-injection safety.
 
 ---
 
@@ -22,19 +24,40 @@ prepared statements throughout for SQL-injection safety.
 | **Roles** | Admin / User / Viewer — delete actions across Categories, Units, Suppliers, and Products are Admin-only |
 | **User management** | Admin-only page to create staff accounts (temporary password, chosen role), and change any user's role |
 | **Forced password reset** | Admin-created accounts can require a password change on first login before the rest of the app is accessible |
+| **Audit Trail** | Every create/update/delete on Categories, Units, Suppliers, Products, Users, and profile changes is logged with a before/after snapshot, actor, and timestamp — viewable on an Admin-only Audit Log page. Password values are structurally excluded from every snapshot by design (allowlist-based, not just hidden). |
 | **Dashboard** | Live totals: products, units in stock, inventory value, low-stock alerts |
-| **Categories** | Full CRUD with search |
-| **Units** | Full CRUD with search |
-| **Suppliers** | Full CRUD with search (phone, email, address) |
-| **Products** | Full CRUD — linked to category/supplier/unit, auto-calculated margin %, low-stock badge |
-| **Stock In** | Multi-line receiving form; increases stock and logs a transaction inside a DB transaction |
-| **Stock Out** | Multi-line issuing form; decreases stock with an availability check |
+| **Categories** | Full CRUD with search, mobile-friendly card layout |
+| **Units** | Full CRUD with search, mobile-friendly card layout |
+| **Suppliers** | Full CRUD with search (phone, email, address), mobile-friendly card layout |
+| **Products** | Full CRUD — linked to category/supplier/unit, auto-calculated margin %, low-stock badge, mobile-friendly card layout, USD/KHR price entry toggle |
+| **Stock In** | Multi-line receiving form; increases stock and logs a transaction inside a DB transaction; searchable product picker; **barcode scanner** (camera-based, matches against product barcode or SKU); USD/KHR cost entry toggle |
+| **Stock Out** | Multi-line issuing form; decreases stock with an availability check; searchable product picker |
 | **Stock Adjustments** | Sets an exact stock count with a required reason (for physical counts / corrections) |
-| **Point of Sale (POS)** | Cart-based checkout — add products, cash received / change due, records a `sale` transaction (same stock-safety guarantees as Stock Out), printable receipt |
+| **Point of Sale (POS)** | Cart-based checkout — add products, cash received / change due, records a `sale` transaction (same stock-safety guarantees as Stock Out), printable receipt with KHR display at the configured exchange rate |
 | **Stock Reports** | Overview, full transaction log (filterable), by-product stock levels, CSV export — includes POS sales alongside Stock In/Out/Adjustments |
+| **Exchange rate** | Admin-configurable global USD→KHR rate used for POS receipts and price-entry toggles |
 | **Profile** | Update name/email, change password, upload a profile photo, view role and member-since date |
 | **Theme** | Light/Dark toggle in the sidebar, saved per browser via `localStorage` |
 | **Localization** | Full bilingual English/Khmer interface — sidebar, forms, errors, dates, and toasts all switch instantly via a session-based language toggle |
+| **Mobile-responsive** | Collapsible off-canvas sidebar, and every major listing/form page (Products, Categories, Units, Suppliers, Stock In, Stock Out, POS) adapts to a stacked card layout below 768px — usable directly from a phone |
+
+---
+
+## 📷 Barcode Scanner
+
+Stock In supports scanning a product's printed barcode with a device camera
+instead of using the searchable dropdown:
+
+- Uses the [html5-qrcode](https://github.com/mebjas/html5-qrcode) library — no server component, matching happens client-side against already-loaded product data.
+- Matches against a product's `barcode` field first, falling back to `sku` if no barcode match is found.
+- If no product matches the scanned code, an inline error is shown and the user can rescan or cancel — no blank row is ever added.
+- The manual searchable dropdown remains fully independent and always works, even if the camera is denied, unavailable, or the library fails to load.
+
+> **Browser requirement:** camera access requires a *secure context* —
+> `https://` or `localhost`. It will **not** work when the app is accessed
+> over plain `http://` on a LAN IP (e.g. `http://192.168.x.x/...`), which is
+> a browser security restriction, not an app bug. This resolves itself
+> automatically once the app is deployed with HTTPS.
 
 ---
 
@@ -60,32 +83,42 @@ prepared statements throughout for SQL-injection safety.
 |---|---|
 | ![Staff Profile](screenshots/chandara_user.png) | ![User Management](screenshots/User_Administration.png) |
 
+| Audit Log (Admin) | Mobile view |
+|---|---|
+| ![Audit Log](screenshots/audit-log.png) | ![Mobile](screenshots/mobile-cards.png) |
+
 ---
 
 ## 🗄️ Database Schema
 
 ```
-roles              (id, name)
-users              (id, name, email, password, role_id, avatar,
-                     must_change_password, created_at)
-categories         (id, name, slug, note, created_at)
-units              (id, name, note)
-suppliers          (id, name, phone, email, address, note)
-products           (id, name, sku, barcode, category_id, supplier_id, unit_id,
-                     note, cost_price, sale_price, min_stock, current_stock, created_at)
-stock_transactions       (id, reference, type, transaction_date, note, supplier_id, user_id, created_at)
+roles                    (id, name)
+users                    (id, name, email, password, role_id, avatar,
+                           must_change_password, created_at)
+categories               (id, name, slug, note, created_at)
+units                    (id, name, note)
+suppliers                (id, name, phone, email, address, note)
+products                 (id, name, sku, barcode, category_id, supplier_id, unit_id,
+                           note, active_ingredient, expiry_date,
+                           cost_price, sale_price, min_stock, current_stock, created_at)
+stock_transactions       (id, reference, type, transaction_date, note, supplier_id,
+                           user_id, created_at)
 stock_transaction_items  (id, transaction_id, product_id, qty, unit_price, subtotal)
+audit_log                (id, entity_type, entity_id, action, before_json, after_json,
+                           actor_user_id, created_at)
 ```
 
 `stock_transactions.type` is one of `in` / `out` / `adjustment` / `sale` — every
 stock change (in, out, manual correction, or a POS sale) is logged here for a
-full audit trail.
+full audit trail. `audit_log` separately tracks create/update/delete actions
+on Categories, Units, Suppliers, Products, and Users/profiles — this is a
+distinct, page-content audit trail, not to be confused with stock movement
+logging.
 
-> **Existing installations:** if your database was set up before
-> `database/schema.sql` included the `sale` transaction type (needed by the
-> Point of Sale module), run
-> `database/migrations/001_add_sale_transaction_type.sql` once against it.
-> Fresh installs using the current `schema.sql` already include it.
+> **Existing installations:** if your database predates any of the migrations
+> in `database/migrations/`, run the ones you're missing, in numeric order,
+> against your existing database. Fresh installs using the current
+> `schema.sql` already include everything.
 
 ---
 
@@ -94,19 +127,22 @@ full audit trail.
 ```
 inventory-app/
 ├── auth/                 Login, register, logout
+├── audit/                Admin-only audit log viewer
 ├── category/             Categories CRUD
 ├── unit/                 Units CRUD
 ├── supplier/             Suppliers CRUD
-├── product/               Products CRUD
-├── stock-in/             Stock In form + logic
+├── product/              Products CRUD
+├── stock-in/             Stock In form + logic + barcode scanner
 ├── stock-out/            Stock Out form + logic
 ├── stock-adjustment/     Stock Adjustments form + logic
+├── pos/                  Point of Sale (cart, checkout, receipts)
 ├── stock-report/         Reports (overview / log / by-product) + CSV export
 ├── user/                 Admin-only user management (create staff, change roles)
-├── includes/             Shared header, footer, auth guard
-├── config/                DB connection + base-URL helper
-├── database/             schema.sql (tables) + seed.sql (sample data)
+├── includes/             Shared header, footer, auth guard, audit.php
+├── config/               DB connection + base-URL helper
+├── database/             schema.sql, seed.sql, migrations/
 ├── assets/               style.css (design system)
+├── lang/                 en.php / km.php translation strings
 ├── uploads/avatars/      Profile photo uploads
 ├── profile.php
 ├── dashboard.php
@@ -165,8 +201,9 @@ panel — no command line needed.
 4. Scroll down and click the **Go** button. You should see a success
    message — this creates the `inventory_db` database and all its tables.
 5. *(Optional but recommended)* Repeat the same Import steps with
-   `database/seed.sql` to load some sample categories, suppliers, and
-   products, so the app isn't completely empty when you first log in.
+   `database/seed.sql` to load sample PCTN-style categories, suppliers, and
+   agrochemical products, so the app isn't completely empty when you first
+   log in.
 
 **Step 4 — Adjust the database password (only if needed)**
 
@@ -186,8 +223,8 @@ $pass    = getenv('DB_PASSWORD') ?: '';   // put your MySQL password between the
 
 > **Note:** the very first account you register through the public
 > **Register** page is a regular **User**, not an **Admin**. To unlock
-> Admin-only features (like the Users page), open phpMyAdmin, go to the
-> `users` table, find your row, and change `role_id` to `1` (Admin).
+> Admin-only features (like the Users page and Audit Log), open phpMyAdmin,
+> go to the `users` table, find your row, and change `role_id` to `1` (Admin).
 
 **XAMPP Troubleshooting**
 
@@ -197,6 +234,7 @@ $pass    = getenv('DB_PASSWORD') ?: '';   // put your MySQL password between the
 | MySQL row turns red / won't start | Another MySQL/MariaDB service (e.g. from Laragon or WAMP) is already running. Stop that other service first, then start XAMPP's MySQL. |
 | Page shows "Database connection failed" | MySQL isn't running — go back to XAMPP Control Panel and check it's green. |
 | Blank white page | Open XAMPP Control Panel → Apache row → **Logs** → **PHP error log**, to see the actual error message. |
+| Barcode scanner says "Camera unavailable" | Expected if you're accessing the app over a LAN IP (`http://192.168.x.x/...`) instead of `http://localhost/...` — camera access requires a secure context. Use `localhost` on the machine with the camera, or wait until the app is deployed with HTTPS. |
 
 ---
 
@@ -245,9 +283,9 @@ starts in just a few seconds.
 > regular **User**. To make yourself an Admin, you'll need a MySQL client
 > (like phpMyAdmin, TablePlus, or DBeaver) connected to `127.0.0.1:3307`
 > (see `docker-compose.yml`), user `root`, password `1234` — then update
-> `role_id` to `1` in the `users` table. If you have `database/seed.sql`
-> in the project, it may already include a ready-made Admin account —
-> check that file first before doing this manually.
+> `role_id` to `1` in the `users` table. If `database/seed.sql` is loaded,
+> it may already include a ready-made Admin account — check that file first
+> before doing this manually.
 
 **Stopping / restarting Docker**
 
@@ -271,15 +309,34 @@ starts in just a few seconds.
 - All queries use **PDO prepared statements** — no raw string concatenation.
 - Passwords are hashed with `password_hash()` / verified with `password_verify()`.
 - Every protected page checks `$_SESSION['user_id']` via `includes/auth_check.php`.
-- Delete actions (Categories, Units, Suppliers, Products) are gated server-side
-  by role, not just hidden in the UI — an `isAdmin()` check runs before every
-  delete query, so a non-admin can't delete by guessing the URL.
+- Delete actions (Categories, Units, Suppliers, Products) and role-gated write
+  actions are checked **server-side**, not just hidden in the UI — a Viewer
+  cannot bypass the UI and submit a form directly.
+- Every create/update/delete on Categories, Units, Suppliers, Products, and
+  Users/profiles is written to `audit_log` inside the same database
+  transaction as the change itself, so a mutation and its audit record either
+  both commit or both roll back together.
+- User audit snapshots use an **explicit field allowlist**, not a
+  blocklist — the `password` column is structurally impossible to include in
+  any snapshot, for any write path, rather than relying on remembering to
+  `unset()` it.
 - New staff accounts are only created by an Admin (via the Users page) with a
   hashed temporary password; public self-registration (`auth/register.php`)
   is disabled by default and redirects to the login page instead of creating
   an account, gated behind a `SELF_REGISTRATION_ENABLED` env var so it can be
   turned back on without a code change if ever needed.
 - Uploaded profile photos are validated by MIME type and size before saving.
+
+---
+
+## 🛣️ Roadmap / Known limitations
+
+- **Barcode scanning** is currently on Stock In only; extending the same
+  pattern to Stock Out and POS is planned.
+- **Stock Reports** does not yet have the mobile card-layout treatment that
+  Products/Categories/Units/Suppliers/Stock In/Stock Out already have.
+- **Production hosting** and HTTPS are required for the barcode scanner to
+  work on phones (currently verified working on `localhost` only).
 
 ---
 
