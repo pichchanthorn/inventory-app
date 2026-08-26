@@ -296,6 +296,7 @@ require_once __DIR__ . '/../includes/header.php';
       <tr class="<?= $low ? 'row-low-stock' : '' ?>">
         <td class="row-number"><?= $i + 1 ?></td>
         <td class="row-title">
+          <?php if ($low): ?><span class="low-stock-badge"><i class="bi bi-exclamation-triangle-fill"></i> <?= __('product_low_stock_badge') ?></span><?php endif; ?>
           <div class="fw-semibold"><?= htmlspecialchars($p['name']) ?></div>
           <span class="slug-pill"><?= htmlspecialchars($p['sku']) ?></span>
           <?php if (!empty($p['package_size'])): ?><span class="text-secondary small ms-1"><?= htmlspecialchars($p['package_size']) ?></span><?php endif; ?>

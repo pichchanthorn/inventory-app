@@ -238,6 +238,12 @@ body[lang="km"] .form-select{ min-width: 110px; padding-right: 2.5rem; }
 .product-search-option.active{ background:var(--accent-tint); }
 .product-search-option.disabled{ cursor:default; color:var(--muted); }
 body.theme-light .product-search-option{ color:#0B1220; }
+/* two-line dropdown options (Stock In/Out, POS product picker) - name on
+   top, SKU/package-size/stock as a smaller muted line below, so a long
+   name doesn't force one long wrapped/hard-to-scan line. Matches the
+   name-then-slug-pill pattern already used on product/index.php's cards. */
+.product-search-option-name{ font-weight:500; }
+.product-search-option-meta{ display:flex; flex-wrap:wrap; align-items:center; gap:.35rem; margin-top:.15rem; font-size:.72rem; color:var(--muted); }
 
 /* cards + tables */
 .card{ background:var(--panel) !important; border:1px solid var(--line) !important; border-radius:8px !important; box-shadow:none !important; color:#E7EDF3; }
@@ -258,6 +264,15 @@ table thead.table-light th{
 table tbody tr{ border-color:var(--line) !important; transition:background-color .12s ease; }
 table tbody tr.row-low-stock{ background:var(--danger-tint) !important; }
 table tbody tr:hover{ background:var(--panel-alt) !important; }
+/* Corner "LOW" badge for low-stock product cards on mobile (<768px) - see
+   the @media block further down. Hidden here by default so desktop keeps
+   the existing full-row tint above as its only low-stock cue, unchanged. */
+.low-stock-badge{
+  display:none; align-items:center; gap:3px;
+  background:var(--danger-tint); color:var(--danger); border:1px solid var(--danger);
+  font-size:.62rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em;
+  padding:.15rem .45rem; border-radius:999px;
+}
 table td, table th{ border-color:var(--line) !important; }
 .slug-pill{ font-family:'JetBrains Mono','Kantumruy Pro',monospace; font-size:.76rem; background:var(--bg); border:1px solid var(--line); color:var(--accent); padding:3px 8px; border-radius:3px; }
 
@@ -307,6 +322,18 @@ table td, table th{ border-color:var(--line) !important; }
 @media (max-width: 767.98px){
   .dash-stat-icon{ width:38px; height:38px; font-size:1rem; margin-bottom:.55rem; }
   .dash-stat-value{ font-size:1.5rem; }
+}
+
+/* Low-stock product cards on mobile (<768px) - swap the full-card danger
+   tint for a small corner badge instead, since a big red-tinted block
+   behind category/cost/price text hurts readability at this width. Desktop
+   keeps the existing full-row tint (table tbody tr.row-low-stock above),
+   untouched - this override only fires once .table-cards-mobile turns the
+   row into a block-level card, and wins via specificity, not !important
+   stacking, so nothing existing had to change. */
+@media (max-width: 767.98px){
+  .table-cards-mobile tbody tr.row-low-stock{ background:transparent !important; position:relative; }
+  .low-stock-badge{ display:inline-flex; position:absolute; top:.6rem; right:.6rem; }
 }
 
 /* sortable column headers (Products, Categories, Units, Suppliers, Stock
