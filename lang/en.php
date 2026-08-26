@@ -105,6 +105,7 @@ return [
     'login_register_link' => 'Register',
     'login_invalid' => 'Invalid email or password.',
     'login_registered_success' => 'Account created — please log in.',
+    'login_registration_closed' => 'Registration is closed — contact your administrator.',
 
     // Register
     'register_title' => 'Create account',

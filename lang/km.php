@@ -105,6 +105,7 @@ return [
     'login_register_link' => 'ចុះឈ្មោះ',
     'login_invalid' => 'អ៊ីមែល ឬពាក្យសម្ងាត់មិនត្រឹមត្រូវ។',
     'login_registered_success' => 'គណនីត្រូវបានបង្កើត — សូមចូលប្រើប្រាស់។',
+    'login_registration_closed' => 'ការចុះឈ្មោះត្រូវបានបិទ — សូមទាក់ទងអ្នកគ្រប់គ្រង។',
 
     // Register
     'register_title' => 'បង្កើតគណនី',

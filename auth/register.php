@@ -1,16 +1,33 @@
 <?php
-// Consider restricting or removing public self-registration once Admin-created
-// accounts are in use, so only approved staff can access the system.
+// Public self-registration is disabled by default - this is a real
+// single-shop business system, so staff accounts should be created by an
+// Admin via user/index.php, not by anyone who finds this URL. Left in
+// place (not deleted) and gated behind an env var rather than removed,
+// in case a future deployment (e.g. a second shop location) ever wants
+// it back - re-enabling then needs an env var, not a code change.
 //
+// Checked and redirected on before any other require/DB work, and on
+// both GET and POST, so a direct POST to this endpoint can't create an
+// account either - hiding the login-page link alone wouldn't close that.
+require_once __DIR__ . '/../config/base_url.php';
+if (!filter_var(getenv('SELF_REGISTRATION_ENABLED'), FILTER_VALIDATE_BOOLEAN)) {
+    header('Location: ' . BASE_URL . '/auth/login.php?registration_closed=1');
+    exit;
+}
+
 // Self-registered accounts default to Viewer (role_id 3), not User —
 // anonymous signups get read-only access until an Admin explicitly
 // upgrades them via the Users page. Previously this defaulted to User
 // (role_id 2), which granted write access (create/edit products,
 // suppliers, stock transactions) to anyone who found the registration
-// page. Viewer is a safer default, but it's still open self-registration;
-// an invite/approval-gated flow would be a stronger fix if that matters
-// for this deployment.
-require_once __DIR__ . '/../config/base_url.php';
+// page.
+//
+// This path isn't audit-logged (see includes/audit.php) - that gap was
+// accepted as low-risk specifically because it only ever creates
+// Viewer (read-only) accounts. That reasoning is unchanged by the flag
+// above: moot while registration is closed (nothing to log), and still
+// holds if this is ever re-enabled, since the role_id stays hardcoded
+// to Viewer below either way.
 require_once __DIR__ . '/../includes/lang.php';
 require_once __DIR__ . '/../includes/csrf.php';
 require_once __DIR__ . '/../config/db.php';

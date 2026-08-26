@@ -320,18 +320,17 @@ starts in just a few seconds.
   blocklist — the `password` column is structurally impossible to include in
   any snapshot, for any write path, rather than relying on remembering to
   `unset()` it.
+- New staff accounts are only created by an Admin (via the Users page) with a
+  hashed temporary password; public self-registration (`auth/register.php`)
+  is disabled by default and redirects to the login page instead of creating
+  an account, gated behind a `SELF_REGISTRATION_ENABLED` env var so it can be
+  turned back on without a code change if ever needed.
 - Uploaded profile photos are validated by MIME type and size before saving.
-- Public self-registration (`auth/register.php`) is still open for now but
-  should be disabled once all staff accounts are created by an Admin — see
-  Roadmap below.
 
 ---
 
 ## 🛣️ Roadmap / Known limitations
 
-- **Public registration** (`auth/register.php`) should be disabled before
-  the app is used live with real staff — recommended to switch to
-  Admin-created accounts only.
 - **Barcode scanning** is currently on Stock In only; extending the same
   pattern to Stock Out and POS is planned.
 - **Stock Reports** does not yet have the mobile card-layout treatment that

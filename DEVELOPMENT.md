@@ -160,8 +160,15 @@ POST.
 
 ## Known limitations / possible next steps
 
-- [ ] Decide whether to restrict or remove public self-registration now
-      that Admin-created accounts exist.
+- [x] ~~Decide whether to restrict or remove public self-registration now
+      that Admin-created accounts exist.~~ **Resolved** — self-registration
+      is now disabled by default, gated behind a `SELF_REGISTRATION_ENABLED`
+      env var. `auth/register.php` redirects to `login.php` (both GET and
+      POST) instead of creating an account whenever the flag is off, and
+      the "Register" link on `login.php` only renders when it's on. Left
+      in place rather than removed, in case a future deployment (e.g. a
+      second shop location) wants it back — re-enabling then needs only the
+      env var, not a code change.
 - [ ] No pagination on list pages yet (fine at current data volume; would
       matter at scale).
 - [x] ~~`Viewer` role exists in the schema but has no read-only enforcement

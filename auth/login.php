@@ -65,6 +65,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <?php if (!empty($_GET['registered'])): ?>
         <div class="alert alert-success py-2"><?= __('login_registered_success') ?></div>
       <?php endif; ?>
+      <?php if (!empty($_GET['registration_closed'])): ?>
+        <div class="alert alert-info py-2"><?= __('login_registration_closed') ?></div>
+      <?php endif; ?>
       <?php if ($error): ?><div class="alert alert-danger py-2"><?= htmlspecialchars($error) ?></div><?php endif; ?>
       <form method="post">
         <div class="mb-3">
@@ -76,7 +79,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           <input type="password" name="password" class="form-control" required>
         </div>
         <button class="btn btn-primary w-100"><?= __('login_button') ?></button>
+        <?php if (filter_var(getenv('SELF_REGISTRATION_ENABLED'), FILTER_VALIDATE_BOOLEAN)): ?>
         <p class="text-center mt-3 mb-0"><?= __('login_no_account') ?> <a href="<?= BASE_URL ?>/auth/register.php"><?= __('login_register_link') ?></a></p>
+        <?php endif; ?>
       </form>
     </div>
   </div>
