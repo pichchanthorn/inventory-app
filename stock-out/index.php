@@ -187,8 +187,33 @@ function renderSearchMenu(menu, filterText, onSelect) {
   matches.forEach((p, i) => {
     const opt = document.createElement('div');
     opt.className = 'product-search-option' + (i === 0 ? ' active' : '');
-    opt.textContent = productLabel(p);
     opt.dataset.id = p.id;
+
+    // Two-line option: name on top, SKU (as a slug-pill, matching the
+    // product list's card pattern) + package size + current stock as a
+    // smaller muted line below - built via createElement/textContent
+    // (never innerHTML) so a product name/SKU can never inject markup.
+    const nameEl = document.createElement('div');
+    nameEl.className = 'product-search-option-name';
+    nameEl.textContent = p.name;
+    opt.appendChild(nameEl);
+
+    const metaEl = document.createElement('div');
+    metaEl.className = 'product-search-option-meta';
+    const skuEl = document.createElement('span');
+    skuEl.className = 'slug-pill';
+    skuEl.textContent = p.sku;
+    metaEl.appendChild(skuEl);
+    if (p.package_size) {
+      const sizeEl = document.createElement('span');
+      sizeEl.textContent = p.package_size;
+      metaEl.appendChild(sizeEl);
+    }
+    const stockEl = document.createElement('span');
+    stockEl.textContent = `${T_NOW}: ${p.current_stock} ${T_PCS}`;
+    metaEl.appendChild(stockEl);
+    opt.appendChild(metaEl);
+
     opt.addEventListener('mousedown', e => e.preventDefault());
     opt.addEventListener('click', () => onSelect(String(p.id)));
     menu.appendChild(opt);

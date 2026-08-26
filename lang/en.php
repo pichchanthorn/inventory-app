@@ -192,6 +192,7 @@ return [
     'product_min_stock' => 'Min stock',
     'product_stock_hint' => 'Stock starts at 0 — add quantity via Stock In.',
     'product_filter_low_stock_active' => 'Showing low-stock products only.',
+    'product_low_stock_badge' => 'LOW',
     'product_filter_clear' => 'Clear filter',
     'product_package_size' => 'Package Size',
     'product_package_size_placeholder' => 'e.g. 50kg, 500ml',

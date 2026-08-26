@@ -192,6 +192,7 @@ return [
     'product_min_stock' => 'ស្តុកអប្បបរមា',
     'product_stock_hint' => 'ស្តុកចាប់ផ្តើមពី 0 — បន្ថែមបរិមាណតាមរយៈ ស្តុកចូល។',
     'product_filter_low_stock_active' => 'កំពុងបង្ហាញតែផលិតផលដែលនៅសល់តិចប៉ុណ្ណោះ។',
+    'product_low_stock_badge' => 'តិច',
     'product_filter_clear' => 'សម្អាតតម្រង',
     'product_package_size' => 'ទំហំវេចខ្ចប់',
     'product_package_size_placeholder' => 'ឧ. 50kg, 500ml',
