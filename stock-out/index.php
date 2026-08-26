@@ -128,6 +128,27 @@ require_once __DIR__ . '/../includes/header.php';
   </div>
 </div>
 
+<div class="modal fade" id="scanModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><?= __('stockout_scan_modal_title') ?></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="<?= __('common_close') ?>"></button>
+      </div>
+      <div class="modal-body">
+        <div id="scanReader"></div>
+        <div id="scanStatus" class="text-secondary small mt-2"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><?= __('common_cancel') ?></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Loaded only on this page, not globally in header.php/footer.php,
+     since barcode scanning is the only feature that needs it so far. -->
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
 const PRODUCTS = <?= json_encode($products) ?>;
 const T_CHOOSE_PRODUCT = <?= json_encode(__('common_choose_product_option')) ?>;
@@ -136,6 +157,10 @@ const T_PCS = <?= json_encode(__('common_pcs')) ?>;
 const T_NO_RESULTS = <?= json_encode(__('common_no_results_found')) ?>;
 const T_QTY = <?= json_encode(__('common_qty')) ?>;
 const T_UNIT_PRICE = <?= json_encode(__('stockout_unit_price')) ?>;
+const T_SCAN_BARCODE = <?= json_encode(__('stockout_scan_barcode')) ?>;
+const T_SCAN_NO_MATCH = <?= json_encode(__('stockout_scan_no_match')) ?>;
+const T_SCAN_CAMERA_ERROR = <?= json_encode(__('stockout_scan_camera_error')) ?>;
+const T_SCAN_LIB_ERROR = <?= json_encode(__('stockout_scan_lib_error')) ?>;
 
 function productLabel(p) {
   const size = p.package_size ? ` — ${p.package_size}` : '';
@@ -231,7 +256,11 @@ function wireProductSelect(container, onSelect) {
       if (!p) return;
       hidden.value = String(p.id);
       input.value = productLabel(p);
-    }
+    },
+    // Used by barcode scanning to select a product the same way a manual
+    // click on a search result would - fills the hidden id, the visible
+    // label, and fires onSelect (so fillPrice still runs).
+    select(id) { select(id); }
   };
 }
 
@@ -240,8 +269,11 @@ function addRow(productId = '', qty = 1, price = '') {
   tr.innerHTML = `
     <td class="row-title">
       <div class="product-select">
-        <input type="hidden" name="product_id[]">
-        <input type="text" class="form-control form-control-sm product-search-input" placeholder="${T_CHOOSE_PRODUCT}" autocomplete="off">
+        <div class="product-select-row">
+          <input type="hidden" name="product_id[]">
+          <input type="text" class="form-control form-control-sm product-search-input" placeholder="${T_CHOOSE_PRODUCT}" autocomplete="off">
+          <button type="button" class="btn btn-outline-secondary btn-sm scan-barcode-btn" data-bs-toggle="modal" data-bs-target="#scanModal" onclick="openScanner(this)" title="${T_SCAN_BARCODE}" aria-label="${T_SCAN_BARCODE}"><i class="bi bi-upc-scan"></i></button>
+        </div>
         <div class="product-search-menu"></div>
       </div>
     </td>
@@ -251,11 +283,73 @@ function addRow(productId = '', qty = 1, price = '') {
   document.getElementById('lineBody').appendChild(tr);
   const controls = wireProductSelect(tr.querySelector('.product-select'), product => fillPrice(tr, product));
   controls.setInitial(productId);
+  tr._productSelectControls = controls;
 }
 function fillPrice(row, product) {
   row.querySelector('[name="unit_price[]"]').value = product.sale_price || 0;
 }
 addRow();
+
+// ---- Barcode scanning (camera-based, Html5Qrcode) ----
+// The scan button on a row just remembers which <tr> to fill and opens
+// the shared #scanModal; the actual camera lifecycle is driven off the
+// modal's own show/hide events so Cancel, the X button, and a backdrop
+// click all stop the camera the same way - no separate cleanup path to
+// keep in sync.
+let scanTargetRow = null;
+let scanInstance = null;
+let scanHandled = false;
+
+function openScanner(btn) {
+  scanTargetRow = btn.closest('tr');
+}
+
+const scanModalEl = document.getElementById('scanModal');
+const scanStatusEl = document.getElementById('scanStatus');
+
+scanModalEl.addEventListener('shown.bs.modal', () => {
+  scanHandled = false;
+  scanStatusEl.textContent = '';
+  if (typeof Html5Qrcode === 'undefined') {
+    scanStatusEl.textContent = T_SCAN_LIB_ERROR;
+    return;
+  }
+  scanInstance = new Html5Qrcode('scanReader');
+  scanInstance.start(
+    { facingMode: 'environment' },
+    { fps: 10, qrbox: { width: 250, height: 150 } },
+    onScanDecoded,
+    () => {} // per-frame "no barcode in this frame" - expected continuously while aiming, not an error
+  ).catch(() => {
+    // Permission denied, no camera, or insecure context (camera requires
+    // HTTPS or localhost) - the manual product dropdown on the row is
+    // completely unaffected by this failing.
+    scanStatusEl.textContent = T_SCAN_CAMERA_ERROR;
+  });
+});
+
+scanModalEl.addEventListener('hidden.bs.modal', () => {
+  if (scanInstance) {
+    scanInstance.stop().then(() => scanInstance.clear()).catch(() => {});
+    scanInstance = null;
+  }
+  scanTargetRow = null;
+});
+
+function onScanDecoded(decodedText) {
+  if (scanHandled) return; // camera keeps decoding frames during the async stop() below
+  const code = decodedText.trim();
+  const product = PRODUCTS.find(p => (p.barcode && p.barcode === code) || (p.sku && p.sku === code));
+  if (!product) {
+    scanStatusEl.textContent = `${T_SCAN_NO_MATCH} ${code}`;
+    return; // keep the scanner running so the user can try again
+  }
+  scanHandled = true;
+  if (scanTargetRow && scanTargetRow._productSelectControls) {
+    scanTargetRow._productSelectControls.select(String(product.id));
+  }
+  bootstrap.Modal.getInstance(scanModalEl)?.hide();
+}
 </script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>

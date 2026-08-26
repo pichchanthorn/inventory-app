@@ -225,6 +225,11 @@ return [
     'stockout_err_insufficient_prefix' => 'ស្តុកមិនគ្រប់គ្រាន់សម្រាប់',
     'stockout_err_insufficient_have' => 'មាន',
     'stockout_err_insufficient_requested' => 'ស្នើសុំ',
+    'stockout_scan_barcode' => 'ស្កេនបាកូដ',
+    'stockout_scan_modal_title' => 'ស្កេនបាកូដ',
+    'stockout_scan_no_match' => 'រកមិនឃើញផលិតផលសម្រាប់បាកូដ/SKU៖',
+    'stockout_scan_camera_error' => 'កាមេរ៉ាមិនអាចប្រើបានទេ — សូមប្រើបញ្ជីផលិតផលជំនួសវិញ។',
+    'stockout_scan_lib_error' => 'ឧបករណ៍ស្កេនបាកូដមិនអាចផ្ទុកបានទេ — សូមប្រើបញ្ជីផលិតផលជំនួសវិញ។',
 
     // POS
     'pos_line_total' => 'សរុបជួរ',

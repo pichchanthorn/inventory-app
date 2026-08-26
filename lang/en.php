@@ -225,6 +225,11 @@ return [
     'stockout_err_insufficient_prefix' => 'Not enough stock for',
     'stockout_err_insufficient_have' => 'have',
     'stockout_err_insufficient_requested' => 'requested',
+    'stockout_scan_barcode' => 'Scan barcode',
+    'stockout_scan_modal_title' => 'Scan Barcode',
+    'stockout_scan_no_match' => 'No product found for barcode/SKU:',
+    'stockout_scan_camera_error' => 'Camera unavailable — use the product list instead.',
+    'stockout_scan_lib_error' => 'Barcode scanner failed to load — use the product list instead.',
 
     // POS
     'pos_line_total' => 'Line Total',
