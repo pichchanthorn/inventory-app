@@ -86,6 +86,8 @@ return [
     'dashboard_units_in_stock' => 'ចំនួនស្តុកមាន',
     'dashboard_inventory_value' => 'តម្លៃស្តុកសរុប',
     'dashboard_low_stock' => 'ស្តុកជិតអស់',
+    'dashboard_status_attention' => 'ត្រូវការការយកចិត្តទុកដាក់',
+    'dashboard_status_good' => 'ធម្មតា',
     'dashboard_chart_movement_title' => 'ចលនាស្តុក (៧ថ្ងៃចុងក្រោយ)',
     'dashboard_chart_category_title' => 'ផលិតផលតាមប្រភេទ',
     'dashboard_uncategorized' => 'គ្មានប្រភេទ',

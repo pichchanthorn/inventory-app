@@ -51,34 +51,39 @@ require_once __DIR__ . '/includes/header.php';
 <h4 class="mb-4"><?= __('dashboard_title') ?></h4>
 <div class="row g-3">
   <div class="col-md-3">
-    <div class="card p-3 kpi-card kpi-card-link">
-      <div class="kpi-card-icon"><i class="bi bi-box"></i></div>
-      <div class="bracket-label mb-2"><i class="bi bi-box kpi-icon"></i><?= __('dashboard_total_products') ?></div>
-      <div class="fs-3 mono fw-bold"><?= $totalProducts ?></div>
+    <div class="card p-3 dash-stat-card dash-stat-card-link">
+      <div class="dash-stat-icon"><i class="bi bi-box"></i></div>
+      <div class="dash-stat-value mono"><?= $totalProducts ?></div>
+      <div class="dash-stat-label"><?= __('dashboard_total_products') ?></div>
       <a href="<?= BASE_URL ?>/product/index.php" class="stretched-link" aria-label="<?= htmlspecialchars(__('dashboard_total_products')) ?>"></a>
     </div>
   </div>
   <div class="col-md-3">
-    <div class="card p-3 kpi-card kpi-card-link">
-      <div class="kpi-card-icon"><i class="bi bi-boxes"></i></div>
-      <div class="bracket-label mb-2"><i class="bi bi-boxes kpi-icon"></i><?= __('dashboard_units_in_stock') ?></div>
-      <div class="fs-3 mono fw-bold"><?= $totalUnits ?></div>
+    <div class="card p-3 dash-stat-card dash-stat-card-link">
+      <div class="dash-stat-icon"><i class="bi bi-boxes"></i></div>
+      <div class="dash-stat-value mono"><?= $totalUnits ?></div>
+      <div class="dash-stat-label"><?= __('dashboard_units_in_stock') ?></div>
       <a href="<?= BASE_URL ?>/product/index.php" class="stretched-link" aria-label="<?= htmlspecialchars(__('dashboard_units_in_stock')) ?>"></a>
     </div>
   </div>
   <div class="col-md-3">
-    <div class="card p-3 kpi-card kpi-card-link">
-      <div class="kpi-card-icon"><i class="bi bi-cash-coin"></i></div>
-      <div class="bracket-label mb-2"><i class="bi bi-cash-stack kpi-icon"></i><?= __('dashboard_inventory_value') ?></div>
-      <div class="fs-3 mono fw-bold">$<?= number_format($totalValue, 2) ?></div>
+    <div class="card p-3 dash-stat-card dash-stat-card-link">
+      <div class="dash-stat-icon"><i class="bi bi-cash-coin"></i></div>
+      <div class="dash-stat-value mono">$<?= number_format($totalValue, 2) ?></div>
+      <div class="dash-stat-label"><?= __('dashboard_inventory_value') ?></div>
       <a href="<?= BASE_URL ?>/stock-report/index.php" class="stretched-link" aria-label="<?= htmlspecialchars(__('dashboard_inventory_value')) ?>"></a>
     </div>
   </div>
   <div class="col-md-3">
-    <div class="card p-3 kpi-card kpi-card-link <?= $lowStock > 0 ? 'border-danger' : '' ?>">
-      <div class="kpi-card-icon icon-danger"><i class="bi bi-exclamation-triangle"></i></div>
-      <div class="bracket-label mb-2" style="color:var(--danger);"><i class="bi bi-exclamation-triangle kpi-icon"></i><?= __('dashboard_low_stock') ?></div>
-      <div class="fs-3 mono fw-bold text-danger"><?= $lowStock ?></div>
+    <div class="card p-3 dash-stat-card dash-stat-card-link <?= $lowStock > 0 ? 'dash-stat-card-danger' : '' ?>">
+      <div class="dash-stat-icon <?= $lowStock > 0 ? 'dash-stat-icon-danger' : '' ?>"><i class="bi bi-exclamation-triangle"></i></div>
+      <div class="dash-stat-value mono <?= $lowStock > 0 ? 'text-danger' : '' ?>"><?= $lowStock ?></div>
+      <div class="dash-stat-label"><?= __('dashboard_low_stock') ?></div>
+      <?php if ($lowStock > 0): ?>
+        <div class="dash-stat-status dash-stat-status-warn"><i class="bi bi-exclamation-circle"></i> <?= __('dashboard_status_attention') ?></div>
+      <?php else: ?>
+        <div class="dash-stat-status dash-stat-status-good"><i class="bi bi-check-circle"></i> <?= __('dashboard_status_good') ?></div>
+      <?php endif; ?>
       <a href="<?= BASE_URL ?>/product/index.php?filter=low_stock" class="stretched-link" aria-label="<?= htmlspecialchars(__('dashboard_low_stock')) ?>"></a>
     </div>
   </div>
