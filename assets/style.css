@@ -178,6 +178,16 @@ body[lang="km"] .form-select{ min-width: 110px; padding-right: 2.5rem; }
    native <select>, styled with the same tokens as .form-control/.dropdown
    so it matches dark/light automatically. */
 .product-select{ position:relative; }
+/* Optional scan button sits beside the search input in its own flex row
+   so .product-select itself stays the positioning context for the
+   full-width dropdown menu below (a sibling of this row, not of the
+   input). min-width:0 on the input is required here for the same reason
+   documented on .mobile-content-wrap elsewhere in this file - without it
+   a long unbroken product name typed into the input can force the flex
+   item wider than its flex-basis allows, pushing the scan button out. */
+.product-select-row{ display:flex; gap:.35rem; }
+.product-select-row .product-search-input{ flex:1 1 auto; min-width:0; }
+.scan-barcode-btn{ flex:0 0 auto; }
 .product-search-menu{
   display:none; position:absolute; left:0; right:0; top:100%; z-index:20;
   margin-top:2px; overflow-y:auto;
