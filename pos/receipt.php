@@ -39,7 +39,8 @@ if ($tx) {
     }
 
     // NULL means "not recorded" (a pre-migration row) - not a real zero -
-    // and stays NULL through to the shared partial, which renders it as such.
+    // and stays NULL through to the shared partial, which renders it as such
+    // (unless this turns out to be a credit sale - see below).
     $cashReceived = $tx['cash_received'] !== null ? (float) $tx['cash_received'] : null;
     $sale = [
         'reference' => $tx['reference'],
@@ -50,6 +51,25 @@ if ($tx) {
         'cash_received' => $cashReceived,
         'change_due' => $cashReceived !== null ? $cashReceived - $total : null,
     ];
+
+    // A credit sale (Batch 2 of the Debt/Customer Credit feature) is a
+    // normal 'sale' stock_transaction with a customer_debts row linking
+    // back to it - see database/migrations/010_add_customer_debt_
+    // tracking.sql. If one exists for this transaction, the shared
+    // receipt partial shows the "paid later" block instead of cash_
+    // received/change_due, matching pos/index.php's fresh-sale receipt.
+    $stmt = $pdo->prepare('SELECT d.reference AS debt_reference, d.due_date, c.name AS customer_name
+                            FROM customer_debts d
+                            JOIN customers c ON c.id = d.customer_id
+                            WHERE d.stock_transaction_id = ?');
+    $stmt->execute([$tx['id']]);
+    $debt = $stmt->fetch();
+    if ($debt) {
+        $sale['is_credit'] = true;
+        $sale['customer_name'] = $debt['customer_name'];
+        $sale['due_date'] = $debt['due_date'];
+        $sale['debt_reference'] = $debt['debt_reference'];
+    }
 }
 
 require_once __DIR__ . '/../includes/header.php';
