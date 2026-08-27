@@ -51,6 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <div class="auth-wrap">
   <div class="auth-left">
     <div>
+      <img src="<?= BASE_URL ?>/assets/logo-192.png" alt="" width="48" height="48" class="mb-3">
       <div class="bracket-label mb-2"><?= __('auth_tagline') ?></div>
       <span class="barcode"><i style="width:2px;height:60%"></i><i style="height:100%"></i><i style="width:2px;height:40%"></i><i style="height:80%"></i><i style="width:4px;height:55%"></i><i style="height:100%"></i><i style="width:2px;height:70%"></i></span>
     </div>
