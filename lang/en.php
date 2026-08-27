@@ -330,6 +330,9 @@ return [
     'settings_exchange_rate_hint' => 'Used to show an approximate Riel total on sale receipts. Update this whenever the rate changes — it is not fetched automatically.',
     'settings_err_invalid_rate' => 'Enter a rate greater than 0.',
     'settings_rate_updated' => 'Exchange rate updated.',
+    'settings_backup_title' => 'Database Backup',
+    'settings_backup_hint' => 'Downloads a complete .sql file (structure and data for every table) that can be restored via phpMyAdmin\'s Import — keep it somewhere safe.',
+    'settings_backup_button' => 'Download Backup',
 
     // Audit Log
     'audit_title' => 'Audit Log',
