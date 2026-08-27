@@ -8,6 +8,20 @@ $totalUnits    = $pdo->query('SELECT COALESCE(SUM(current_stock),0) FROM product
 $totalValue    = $pdo->query('SELECT COALESCE(SUM(current_stock * cost_price),0) FROM products')->fetchColumn();
 $lowStock      = $pdo->query('SELECT COUNT(*) FROM products WHERE current_stock <= min_stock')->fetchColumn();
 
+// A nonzero outstanding balance is the normal steady-state of a
+// credit-sales business, not an anomaly - unlike Low Stock above, the
+// "needs attention" signal here is overdue_count (debts actually past
+// their due_date and still unpaid), not total_outstanding > 0. Same
+// balance/overdue aggregation as customer/index.php's per-customer query,
+// just without the GROUP BY - this is one shop-wide total, not a list.
+$debtRow = $pdo->query("
+    SELECT COALESCE(SUM(CASE WHEN status != 'paid' THEN balance ELSE 0 END), 0) AS total_outstanding,
+           COALESCE(SUM(CASE WHEN status != 'paid' AND due_date IS NOT NULL AND due_date < CURDATE() THEN 1 ELSE 0 END), 0) AS overdue_count
+    FROM customer_debts
+")->fetch();
+$totalOutstanding = (float) $debtRow['total_outstanding'];
+$overdueDebtCount = (int) $debtRow['overdue_count'];
+
 // ---------- Stock movement chart: units in vs out per day, last 7 days ----------
 // POS sales are stock leaving just like a manual Stock Out, so they're folded
 // into the same 'out' bucket here (via IF()) rather than shown as a third
@@ -85,6 +99,19 @@ require_once __DIR__ . '/includes/header.php';
         <div class="dash-stat-status dash-stat-status-good"><i class="bi bi-check-circle"></i> <?= __('dashboard_status_good') ?></div>
       <?php endif; ?>
       <a href="<?= BASE_URL ?>/product/index.php?filter=low_stock" class="stretched-link" aria-label="<?= htmlspecialchars(__('dashboard_low_stock')) ?>"></a>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card p-3 dash-stat-card dash-stat-card-link <?= $overdueDebtCount > 0 ? 'dash-stat-card-danger' : '' ?>">
+      <div class="dash-stat-icon <?= $overdueDebtCount > 0 ? 'dash-stat-icon-danger' : '' ?>"><i class="bi bi-wallet2"></i></div>
+      <div class="dash-stat-value mono <?= $overdueDebtCount > 0 ? 'text-danger' : '' ?>">$<?= number_format($totalOutstanding, 2) ?></div>
+      <div class="dash-stat-label"><?= __('dashboard_outstanding_debts') ?></div>
+      <?php if ($overdueDebtCount > 0): ?>
+        <div class="dash-stat-status dash-stat-status-warn"><i class="bi bi-exclamation-circle"></i> <?= __('dashboard_status_attention') ?></div>
+      <?php else: ?>
+        <div class="dash-stat-status dash-stat-status-good"><i class="bi bi-check-circle"></i> <?= __('dashboard_status_good') ?></div>
+      <?php endif; ?>
+      <a href="<?= BASE_URL ?>/customer/index.php" class="stretched-link" aria-label="<?= htmlspecialchars(__('dashboard_outstanding_debts')) ?>"></a>
     </div>
   </div>
 </div>
