@@ -336,6 +336,32 @@ table td, table th{ border-color:var(--line) !important; }
   .low-stock-badge{ display:inline-flex; position:absolute; top:.6rem; right:.6rem; }
 }
 
+/* Overdue-debt highlighting (Customers & Debts) - identical full-row-tint
+   + corner-badge pattern as low-stock products above, just keyed off
+   due_date < today instead of stock level. Kept as its own class rather
+   than reusing row-low-stock/.low-stock-badge so each feature's CSS name
+   still matches what it actually means. */
+table tbody tr.row-overdue{ background:var(--danger-tint) !important; }
+.overdue-badge{
+  display:none; align-items:center; gap:3px;
+  background:var(--danger-tint); color:var(--danger); border:1px solid var(--danger);
+  font-size:.62rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em;
+  padding:.15rem .45rem; border-radius:999px;
+}
+@media (max-width: 767.98px){
+  .table-cards-mobile tbody tr.row-overdue{ background:transparent !important; position:relative; }
+  .overdue-badge{ display:inline-flex; position:absolute; top:.6rem; right:.6rem; }
+}
+
+/* Customer detail page (customer/view.php): the payment-history collapse
+   sits in its own <tr> directly under the debt row it belongs to - on
+   mobile, where table-cards-mobile turns every row into its own bordered
+   card, pull it up against the debt row above instead of getting a second
+   card shell of its own. */
+@media (max-width: 767.98px){
+  .table-cards-mobile tbody tr.payment-history-row{ margin-top:-.75rem; border:none !important; }
+}
+
 /* sortable column headers (Products, Categories, Units, Suppliers, Stock
    Report log) - inherit the muted uppercase eyebrow color of the header
    cell by default, brighten on hover, and highlight the active column */

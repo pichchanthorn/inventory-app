@@ -88,3 +88,49 @@ function recordCreditSale(PDO $pdo, array $lines, string $date, int $userId, ?in
         throw $e;
     }
 }
+
+// Thrown when the guarded UPDATE in recordDebtPayment() affects 0 rows:
+// the payment would take paid_amount past total_amount, either because
+// the caller's own pre-check was working from a stale $balance (another
+// payment landed first) or because it was skipped entirely. Same "guard
+// condition lives in the UPDATE's WHERE clause, not a separate SELECT
+// beforehand" concurrency pattern as StockConflictException in
+// includes/stock.php - the CHECK constraint on customer_debts.paid_amount
+// is only a backstop, this is what actually prevents two concurrent
+// partial payments from together overpaying a debt.
+class DebtOverpaymentException extends RuntimeException {
+    public $debtId;
+    public function __construct(int $debtId) {
+        parent::__construct('Payment would overpay debt ' . $debtId);
+        $this->debtId = $debtId;
+    }
+}
+
+// Records one payment against an existing debt: increments
+// customer_debts.paid_amount (balance/status recompute automatically -
+// they're GENERATED ALWAYS columns, see the migration), then appends the
+// payment to customer_debt_payments, all in one transaction. Caller is
+// responsible for validating $amount > 0 before calling this, same
+// division of responsibility recordCreditSale() expects of its own
+// caller for $lines.
+function recordDebtPayment(PDO $pdo, int $debtId, float $amount, string $paymentDate, string $note, int $userId): void {
+    try {
+        $pdo->beginTransaction();
+
+        $stmt = $pdo->prepare('UPDATE customer_debts SET paid_amount = paid_amount + ?, updated_by = ? WHERE id = ? AND paid_amount + ? <= total_amount');
+        $stmt->execute([$amount, $userId, $debtId, $amount]);
+        if ($stmt->rowCount() === 0) {
+            throw new DebtOverpaymentException($debtId);
+        }
+
+        $stmt = $pdo->prepare('INSERT INTO customer_debt_payments (debt_id, amount, payment_date, note, created_by) VALUES (?,?,?,?,?)');
+        $stmt->execute([$debtId, $amount, $paymentDate, $note !== '' ? $note : null, $userId]);
+
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
+    }
+}

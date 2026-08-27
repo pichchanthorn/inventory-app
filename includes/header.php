@@ -68,6 +68,7 @@ function navClass($page, $active) {
     <a class="<?= navClass('stock-in', $activePage) ?>" href="<?= BASE_URL ?>/stock-in/index.php"><i class="bi bi-download me-2"></i><?= __('nav_stock_in') ?></a>
     <a class="<?= navClass('stock-out', $activePage) ?>" href="<?= BASE_URL ?>/stock-out/index.php"><i class="bi bi-upload me-2"></i><?= __('nav_stock_out') ?></a>
     <a class="<?= navClass('stock-adjustment', $activePage) ?>" href="<?= BASE_URL ?>/stock-adjustment/index.php"><i class="bi bi-arrow-repeat me-2"></i><?= __('nav_stock_adjustments') ?></a>
+    <a class="<?= navClass('customer', $activePage) ?>" href="<?= BASE_URL ?>/customer/index.php"><i class="bi bi-cash-coin me-2"></i><?= __('nav_customers') ?></a>
 
     <div class="sidebar-section"><?= __('nav_reports') ?></div>
     <a class="<?= navClass('stock-report', $activePage) ?>" href="<?= BASE_URL ?>/stock-report/index.php"><i class="bi bi-bar-chart me-2"></i><?= __('nav_stock_reports') ?></a>
