@@ -1,0 +1,82 @@
+<?php
+// ================================================
+// Pure-PHP full database backup (structure + data, all tables) - no
+// exec()/shell_exec()/mysqldump dependency. Shared hosting (this app's
+// likely deployment target) very commonly disables shell functions
+// outright, and even where allowed, the mysqldump binary may not be on
+// PATH or reachable by the PHP process. Building the dump directly over
+// PDO works identically regardless of hosting restrictions and has zero
+// shell-injection surface, since nothing here is ever passed to a shell.
+//
+// Streams DROP/CREATE/INSERT statements straight to output as they're
+// built (via a dedicated unbuffered connection + periodic flush()),
+// rather than assembling one giant string in memory first - cheap
+// defensive practice for if this app's data ever grows, though at its
+// actual scale (a single small shop) a multi-GB dump isn't a realistic
+// concern today.
+// ================================================
+
+// $pdo: the app's normal (buffered) connection, used for the small
+// introspection queries (SHOW TABLES / SHOW CREATE TABLE). $dsn/$user/
+// $pass: same credentials as config/db.php, used to open a second,
+// dedicated unbuffered connection for the potentially-large SELECT *
+// reads - kept separate from $pdo so this never interferes with (or is
+// interfered by) anything else on the request.
+function streamDatabaseBackup(PDO $pdo, string $dsn, string $user, string $pass): void {
+    $dump = new PDO($dsn, $user, $pass, [
+        PDO::ATTR_ERRMODE                  => PDO::ERRMODE_EXCEPTION,
+        PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => false,
+    ]);
+
+    echo "-- PCTN Inventory System - database backup\n";
+    echo "-- Generated " . date('Y-m-d H:i:s') . "\n";
+    echo "-- Restore via phpMyAdmin's Import, or: mysql -u USER -p DBNAME < this_file.sql\n\n";
+    echo "SET NAMES utf8mb4;\n";
+    echo "SET FOREIGN_KEY_CHECKS=0;\n\n";
+    flush();
+
+    $tables = $pdo->query('SHOW TABLES')->fetchAll(PDO::FETCH_COLUMN);
+
+    foreach ($tables as $table) {
+        $quoted = '`' . str_replace('`', '``', $table) . '`';
+
+        echo "-- --------------------------------------------------\n";
+        echo "-- Table: $table\n";
+        echo "-- --------------------------------------------------\n";
+        echo "DROP TABLE IF EXISTS $quoted;\n";
+        $createRow = $pdo->query("SHOW CREATE TABLE $quoted")->fetch();
+        echo $createRow['Create Table'] . ";\n\n";
+        flush();
+
+        $stmt = $dump->query("SELECT * FROM $quoted");
+        $columnNames = null;
+        $batch = [];
+        $batchSize = 200;
+
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            if ($columnNames === null) {
+                $columnNames = implode(',', array_map(fn($c) => '`' . $c . '`', array_keys($row)));
+            }
+            $values = array_map(fn($v) => $v === null ? 'NULL' : $dump->quote($v), array_values($row));
+            $batch[] = '(' . implode(',', $values) . ')';
+
+            if (count($batch) >= $batchSize) {
+                echo "INSERT INTO $quoted ($columnNames) VALUES\n" . implode(",\n", $batch) . ";\n";
+                flush();
+                $batch = [];
+            }
+        }
+        // $dump only allows one unbuffered result set open at a time, so
+        // this must be closed before the next table's SELECT * reuses it.
+        $stmt->closeCursor();
+
+        if ($batch) {
+            echo "INSERT INTO $quoted ($columnNames) VALUES\n" . implode(",\n", $batch) . ";\n";
+            flush();
+        }
+        echo "\n";
+    }
+
+    echo "SET FOREIGN_KEY_CHECKS=1;\n";
+    flush();
+}

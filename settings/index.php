@@ -21,6 +21,22 @@ unset($_SESSION['settings_flash']);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify();
+    $action = $_POST['action'] ?? 'update_rate';
+
+    if ($action === 'backup') {
+        // Same isAdmin() gate at the top of this file covers this branch
+        // too - it runs unconditionally before REQUEST_METHOD is even
+        // checked, so a non-Admin POSTing here directly never reaches
+        // this point at all.
+        require_once __DIR__ . '/../includes/backup.php';
+        $filename = 'pctn-backup-' . date('Y-m-d_His') . '.sql';
+        header('Content-Type: application/sql');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('X-Content-Type-Options: nosniff');
+        streamDatabaseBackup($pdo, $dsn, $user, $pass);
+        exit;
+    }
+
     $rate = (float) ($_POST['usd_to_khr_rate'] ?? 0);
 
     if ($rate <= 0) {
@@ -51,6 +67,7 @@ require_once __DIR__ . '/../includes/header.php';
   <div class="col-lg-6">
     <form method="post">
       <?= csrf_field() ?>
+      <input type="hidden" name="action" value="update_rate">
       <div class="card p-3">
         <div class="bracket-label mb-3"><?= __('settings_exchange_rate_title') ?></div>
         <div class="mb-1">
@@ -67,6 +84,35 @@ require_once __DIR__ . '/../includes/header.php';
       </div>
     </form>
   </div>
+
+  <div class="col-lg-6">
+    <form method="post" id="backupForm">
+      <?= csrf_field() ?>
+      <input type="hidden" name="action" value="backup">
+      <div class="card p-3">
+        <div class="bracket-label mb-3"><?= __('settings_backup_title') ?></div>
+        <p class="text-secondary small"><?= __('settings_backup_hint') ?></p>
+        <button class="btn btn-primary w-100"><i class="bi bi-download"></i> <?= __('settings_backup_button') ?></button>
+      </div>
+    </form>
+  </div>
 </div>
+
+<script>
+// The global submit-button spinner (footer.php) normally clears itself via
+// page navigation, but a file-download response never navigates the page
+// away - without this, the button would stay stuck showing a spinner
+// after a successful download until the page is manually refreshed.
+document.getElementById('backupForm').addEventListener('submit', function () {
+  const btn = this.querySelector('button[type="submit"], button:not([type])');
+  if (!btn) return;
+  setTimeout(() => {
+    if (btn.disabled && btn.dataset.originalHtml) {
+      btn.disabled = false;
+      btn.innerHTML = btn.dataset.originalHtml;
+    }
+  }, 4000);
+});
+</script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
