@@ -17,7 +17,8 @@ function navClass($page, $active) {
 <meta charset="UTF-8">
 <title><?= __('app_title') ?></title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%2305080D'/><path d='M16 4 27 9.5v13L16 28 5 22.5v-13z' fill='none' stroke='%2322D3EE' stroke-width='2' stroke-linejoin='round'/><path d='M16 4v12M16 16 27 9.5M16 16 5 9.5M16 16v12' stroke='%2322D3EE' stroke-width='2' stroke-linejoin='round'/></svg>">
+<link rel="icon" type="image/png" sizes="32x32" href="<?= BASE_URL ?>/assets/favicon-32.png">
+<link rel="icon" type="image/png" sizes="64x64" href="<?= BASE_URL ?>/assets/favicon-64.png">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
 <link rel="stylesheet" href="<?= BASE_URL ?>/assets/style.css?v=<?= ASSET_VER ?>">
@@ -49,7 +50,7 @@ function navClass($page, $active) {
     </div>
     <div class="offcanvas-body p-3 d-flex flex-column">
     <div class="d-flex align-items-center gap-2 mb-4">
-      <span class="barcode text-primary"><i style="height:60%"></i><i style="height:100%"></i><i style="height:40%"></i><i style="height:80%"></i></span>
+      <img src="<?= BASE_URL ?>/assets/logo-192.png" alt="" width="26" height="26">
       <span class="fs-5 fw-bold"><?= __('app_brand_name') ?></span>
     </div>
 
@@ -96,6 +97,7 @@ function navClass($page, $active) {
       <button type="button" class="btn mobile-hamburger-btn" data-bs-toggle="offcanvas" data-bs-target="#appSidebar" aria-controls="appSidebar" aria-label="<?= __('common_menu') ?>">
         <i class="bi bi-list fs-4"></i>
       </button>
+      <img src="<?= BASE_URL ?>/assets/logo-192.png" alt="" width="22" height="22">
       <span class="fs-6 fw-bold"><?= __('app_brand_name') ?></span>
     </div>
 
