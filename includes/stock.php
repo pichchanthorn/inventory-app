@@ -68,6 +68,28 @@ function recordStockIn(PDO $pdo, array $lines, string $date, ?int $supplierId, s
     }
 }
 
+// Shared inner loop for a stock-decreasing transaction: insert each
+// line item, then guard-decrement current_stock the same
+// UPDATE ... WHERE current_stock >= ? way described above. Does NOT
+// manage its own transaction - must be called from within the caller's
+// own beginTransaction()/commit(). Used by recordStockOut() below and
+// by recordCreditSale() (includes/debt.php), so a credit sale's stock
+// decrement gets the exact same concurrency guarantee as a cash sale or
+// a manual Stock Out, with no duplicated logic to drift out of sync.
+function insertStockOutLines(PDO $pdo, int $txId, array $lines): void {
+    foreach ($lines as $line) {
+        $subtotal = $line['qty'] * $line['price'];
+        $stmt = $pdo->prepare('INSERT INTO stock_transaction_items (transaction_id, product_id, qty, unit_price, subtotal) VALUES (?,?,?,?,?)');
+        $stmt->execute([$txId, $line['product_id'], $line['qty'], $line['price'], $subtotal]);
+
+        $stmt = $pdo->prepare('UPDATE products SET current_stock = current_stock - ? WHERE id = ? AND current_stock >= ?');
+        $stmt->execute([$line['qty'], $line['product_id'], $line['qty']]);
+        if ($stmt->rowCount() === 0) {
+            throw new StockConflictException($line['product_id']);
+        }
+    }
+}
+
 // Stock Out: decreases current_stock for each line via an atomic
 // UPDATE ... WHERE current_stock >= ?, so "is there enough stock" is
 // checked in the same statement as the write, under InnoDB's row lock —
@@ -102,17 +124,7 @@ function recordStockOut(PDO $pdo, array $lines, string $date, string $note, int 
         $stmt->execute([$reference, $type, $date, $note, $userId, $type === 'sale' ? $cashReceived : null]);
         $txId = $pdo->lastInsertId();
 
-        foreach ($lines as $line) {
-            $subtotal = $line['qty'] * $line['price'];
-            $stmt = $pdo->prepare('INSERT INTO stock_transaction_items (transaction_id, product_id, qty, unit_price, subtotal) VALUES (?,?,?,?,?)');
-            $stmt->execute([$txId, $line['product_id'], $line['qty'], $line['price'], $subtotal]);
-
-            $stmt = $pdo->prepare('UPDATE products SET current_stock = current_stock - ? WHERE id = ? AND current_stock >= ?');
-            $stmt->execute([$line['qty'], $line['product_id'], $line['qty']]);
-            if ($stmt->rowCount() === 0) {
-                throw new StockConflictException($line['product_id']);
-            }
-        }
+        insertStockOutLines($pdo, $txId, $lines);
 
         $pdo->commit();
         return $reference;

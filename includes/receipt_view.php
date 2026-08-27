@@ -8,10 +8,20 @@
 //   reference, date, cashier (string|null), lines (array of
 //   name/sku/qty/price/subtotal), total, cash_received (float|null),
 //   change_due (float|null) - null means "not recorded" (pre-migration
-//   row), not zero, and is rendered as such rather than as $0.00.
+//   row) UNLESS is_credit is true, in which case null instead means "no
+//   cash changed hands, this is a credit sale" - a different reason for
+//   the same null, rendered with different messaging below.
 //   khr_total (float, optional) - approximate Riel total (USD total x the
 //   Admin-configured rate), computed by the caller. Purely additive: only
 //   rendered when the key is present, changes nothing else on the card.
+//
+//   is_credit (bool, optional - Batch 2 of the Debt/Customer Credit
+//   feature), customer_name (string, when is_credit), due_date
+//   (string|null, when is_credit), debt_reference (string, when
+//   is_credit) - when is_credit is true, the cash_received/change_due
+//   block below is replaced with a "paid later" block showing who owes
+//   it and when it's expected back, instead of showing a cash amount
+//   that was never actually received.
 //
 // Expects $receiptSecondaryAction (optional): a pre-rendered HTML string
 // for the one page-specific action button next to the universal Print
@@ -51,6 +61,21 @@
       <span class="mono">៛<?= number_format($sale['khr_total'], 0) ?></span>
     </div>
     <?php endif; ?>
+    <?php if (!empty($sale['is_credit'])): ?>
+    <div class="alert alert-warning py-2 mb-3 text-center fw-bold"><?= __('pos_paid_later_label') ?></div>
+    <div class="d-flex justify-content-between py-1">
+      <span class="text-secondary"><?= __('pos_customer_label') ?></span>
+      <span class="mono"><?= htmlspecialchars($sale['customer_name'] ?? '—') ?></span>
+    </div>
+    <div class="d-flex justify-content-between py-1">
+      <span class="text-secondary"><?= __('pos_due_date_label') ?></span>
+      <span class="mono"><?= !empty($sale['due_date']) ? htmlspecialchars($sale['due_date']) : __('pos_due_date_not_set') ?></span>
+    </div>
+    <div class="d-flex justify-content-between py-1">
+      <span class="text-secondary"><?= __('pos_debt_reference_label') ?></span>
+      <span class="mono"><?= htmlspecialchars($sale['debt_reference'] ?? '—') ?></span>
+    </div>
+    <?php else: ?>
     <div class="d-flex justify-content-between py-1">
       <span class="text-secondary"><?= __('pos_cash_received_label') ?></span>
       <span class="mono"><?= $sale['cash_received'] !== null ? '$' . number_format($sale['cash_received'], 2) : __('pos_not_recorded') ?></span>
@@ -59,6 +84,7 @@
       <span class="text-secondary"><?= __('pos_change_due_label') ?></span>
       <span class="mono fw-bold" style="color:var(--good);"><?= $sale['change_due'] !== null ? '$' . number_format($sale['change_due'], 2) : __('pos_not_recorded') ?></span>
     </div>
+    <?php endif; ?>
   </div>
   <div class="d-flex gap-2 mt-4 no-print">
     <button type="button" class="btn btn-outline-primary flex-fill" onclick="window.print()"><i class="bi bi-printer"></i> <?= __('pos_print_button') ?></button>

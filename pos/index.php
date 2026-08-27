@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/auth_check.php';
 require_once __DIR__ . '/../includes/stock.php';
+require_once __DIR__ . '/../includes/debt.php';
 require_once __DIR__ . '/../config/db.php';
 
 $activePage = 'pos';
@@ -17,6 +18,7 @@ $productsById = [];
 foreach ($products as $p) {
     $productsById[$p['id']] = $p;
 }
+$customers = $pdo->query('SELECT * FROM customers ORDER BY name')->fetchAll();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify();
@@ -26,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $productIds = $_POST['product_id'] ?? [];
         $qtys = $_POST['qty'] ?? [];
         $prices = $_POST['unit_price'] ?? [];
-        $cashReceived = (float) ($_POST['cash_received'] ?? 0);
+        $paymentMethod = ($_POST['payment_method'] ?? 'cash') === 'credit' ? 'credit' : 'cash';
 
         $lines = [];
         foreach ($productIds as $i => $pid) {
@@ -47,13 +49,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $total += $line['qty'] * $line['price'];
             }
 
-            if ($cashReceived < $total) {
-                $error = __('pos_err_insufficient_cash');
+            // Payment-method-specific validation. cash_received/customer
+            // fields are only read/validated for the branch that actually
+            // uses them - the other branch's fields are simply never
+            // touched, so neither path can leak state into the other.
+            $cashReceived = null;
+            $customerId = null;
+            $newCustomerName = null;
+            $newCustomerPhone = null;
+            $dueDate = '';
+            if ($paymentMethod === 'credit') {
+                $customerMode = ($_POST['customer_mode'] ?? 'existing') === 'new' ? 'new' : 'existing';
+                if ($customerMode === 'new') {
+                    $newCustomerName = trim($_POST['new_customer_name'] ?? '');
+                    $newCustomerPhone = trim($_POST['new_customer_phone'] ?? '');
+                    if ($newCustomerName === '') {
+                        $error = __('pos_err_customer_required');
+                    }
+                } else {
+                    $customerId = (int) ($_POST['customer_id'] ?? 0);
+                    if ($customerId <= 0) {
+                        $error = __('pos_err_customer_required');
+                    }
+                }
+                $dueDate = trim($_POST['due_date'] ?? '');
             } else {
+                $cashReceived = (float) ($_POST['cash_received'] ?? 0);
+                if ($cashReceived < $total) {
+                    $error = __('pos_err_insufficient_cash');
+                }
+            }
+
+            if (!$error) {
                 // A sale is always "now" - never a client-supplied, backdatable value.
                 $today = date('Y-m-d');
                 try {
-                    $reference = recordStockOut($pdo, $lines, $today, '', $_SESSION['user_id'], 'sale', $cashReceived);
+                    if ($paymentMethod === 'credit') {
+                        $result = recordCreditSale($pdo, $lines, $today, $_SESSION['user_id'], $customerId, $newCustomerName, $newCustomerPhone, $dueDate);
+                        $reference = $result['reference'];
+                    } else {
+                        $reference = recordStockOut($pdo, $lines, $today, '', $_SESSION['user_id'], 'sale', $cashReceived);
+                    }
 
                     $receiptLines = [];
                     foreach ($lines as $line) {
@@ -72,9 +108,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'cashier' => $_SESSION['user_name'] ?? null,
                         'lines' => $receiptLines,
                         'total' => $total,
-                        'cash_received' => $cashReceived,
-                        'change_due' => $cashReceived - $total,
+                        // Neither applies to a credit sale - no cash changed
+                        // hands, so there's nothing to record here (distinct
+                        // from a genuinely-unrecorded legacy row; is_credit
+                        // below is what tells receipt_view.php which case
+                        // this is).
+                        'cash_received' => $paymentMethod === 'credit' ? null : $cashReceived,
+                        'change_due' => $paymentMethod === 'credit' ? null : ($cashReceived - $total),
                     ];
+                    if ($paymentMethod === 'credit') {
+                        $_SESSION['pos_last_sale']['is_credit'] = true;
+                        $_SESSION['pos_last_sale']['customer_name'] = $result['customer_name'];
+                        $_SESSION['pos_last_sale']['due_date'] = $dueDate !== '' ? $dueDate : null;
+                        $_SESSION['pos_last_sale']['debt_reference'] = $result['debt_reference'];
+                    }
                     // Additive display-only conversion - no rate configured
                     // yet (fresh install, before an Admin visits Settings)
                     // simply omits khr_total, which receipt_view.php treats
@@ -161,7 +208,19 @@ require_once __DIR__ . '/../includes/header.php';
 
       <div class="card p-3 mt-3">
         <div class="bracket-label mb-3"><?= __('pos_payment_section_title') ?></div>
-        <div class="row">
+
+        <div class="mb-3">
+          <div class="form-check form-check-inline">
+            <input class="form-check-input" type="radio" name="payment_method" id="posPaymentCash" value="cash" checked onclick="updatePaymentMethodUI()">
+            <label class="form-check-label" for="posPaymentCash"><?= __('pos_payment_cash') ?></label>
+          </div>
+          <div class="form-check form-check-inline">
+            <input class="form-check-input" type="radio" name="payment_method" id="posPaymentCredit" value="credit" onclick="updatePaymentMethodUI()">
+            <label class="form-check-label" for="posPaymentCredit"><?= __('pos_payment_credit') ?></label>
+          </div>
+        </div>
+
+        <div id="posCashFields" class="row">
           <div class="col-md-6 mb-3">
             <label class="form-label"><?= __('pos_cash_received_label') ?></label>
             <input type="number" name="cash_received" id="posCashReceived" class="form-control" step="0.01" min="0" required oninput="updateChange()">
@@ -171,7 +230,40 @@ require_once __DIR__ . '/../includes/header.php';
             <input type="text" class="form-control mono" id="posChangeDue" value="$0.00" disabled>
           </div>
         </div>
-        <button class="btn btn-primary w-100"><i class="bi bi-cash-coin"></i> <?= __('pos_submit_button') ?></button>
+
+        <div id="posCreditFields" style="display:none;">
+          <label class="form-label"><?= __('pos_customer_label') ?></label>
+          <div class="mb-2">
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="radio" name="customer_mode" id="posCustomerModeExisting" value="existing" checked onclick="updateCustomerModeUI()">
+              <label class="form-check-label" for="posCustomerModeExisting"><?= __('pos_customer_mode_existing') ?></label>
+            </div>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="radio" name="customer_mode" id="posCustomerModeNew" value="new" onclick="updateCustomerModeUI()">
+              <label class="form-check-label" for="posCustomerModeNew"><?= __('pos_customer_mode_new') ?></label>
+            </div>
+          </div>
+
+          <div id="posCustomerExistingFields" class="mb-3">
+            <div class="product-select" id="posCustomerSelect">
+              <input type="hidden" name="customer_id">
+              <input type="text" class="form-control product-search-input" placeholder="<?= __('pos_choose_customer_option') ?>" autocomplete="off">
+              <div class="product-search-menu"></div>
+            </div>
+          </div>
+
+          <div id="posCustomerNewFields" class="mb-3" style="display:none;">
+            <input type="text" name="new_customer_name" class="form-control mb-2" placeholder="<?= __('pos_customer_name_label') ?>">
+            <input type="text" name="new_customer_phone" class="form-control" placeholder="<?= __('pos_customer_phone_label') ?>">
+          </div>
+
+          <div class="mb-1">
+            <label class="form-label"><?= __('pos_due_date_label') ?></label>
+            <input type="date" name="due_date" class="form-control">
+          </div>
+        </div>
+
+        <button class="btn btn-primary w-100 mt-2" id="posSubmitButton"><i class="bi bi-cash-coin"></i> <?= __('pos_submit_button') ?></button>
       </div>
     </form>
   </div>
@@ -195,13 +287,16 @@ require_once __DIR__ . '/../includes/header.php';
 
 <script>
 const PRODUCTS = <?= json_encode($products) ?>;
+const CUSTOMERS = <?= json_encode($customers) ?>;
 const T_CHOOSE_PRODUCT = <?= json_encode(__('common_choose_product_option')) ?>;
+const T_CHOOSE_CUSTOMER = <?= json_encode(__('pos_choose_customer_option')) ?>;
 const T_NOW = <?= json_encode(__('common_now_label')) ?>;
 const T_PCS = <?= json_encode(__('common_pcs')) ?>;
 const T_NO_RESULTS = <?= json_encode(__('common_no_results_found')) ?>;
 const T_QTY = <?= json_encode(__('common_qty')) ?>;
 const T_UNIT_PRICE = <?= json_encode(__('stockout_unit_price')) ?>;
 const T_LINE_TOTAL = <?= json_encode(__('pos_line_total')) ?>;
+const T_NO_PHONE = <?= json_encode(__('pos_customer_no_phone')) ?>;
 
 function productLabel(p) {
   const size = p.package_size ? ` — ${p.package_size}` : '';
@@ -376,6 +471,119 @@ function updateChange() {
   changeEl.value = '$' + change.toFixed(2);
   changeEl.classList.toggle('text-danger', change < 0);
 }
+
+// ---- Customer combobox (Credit payment only) ----
+// Parallel-named to wireProductSelect/renderSearchMenu above rather than
+// reusing those names, since both comboboxes live on this same page and
+// share the exact same .product-select/.product-search-* CSS - only the
+// JS backing them differs, by which data source they search.
+function customerLabel(c) {
+  return c.phone ? `${c.name} (${c.phone})` : c.name;
+}
+function findCustomer(id) {
+  return CUSTOMERS.find(c => String(c.id) === String(id));
+}
+function renderCustomerSearchMenu(menu, filterText, onSelect) {
+  const q = filterText.trim().toLowerCase();
+  const matches = q ? CUSTOMERS.filter(c => c.name.toLowerCase().includes(q)) : CUSTOMERS;
+  menu.innerHTML = '';
+  if (!matches.length) {
+    const empty = document.createElement('div');
+    empty.className = 'product-search-option disabled';
+    empty.textContent = T_NO_RESULTS;
+    menu.appendChild(empty);
+    return;
+  }
+  matches.forEach((c, i) => {
+    const opt = document.createElement('div');
+    opt.className = 'product-search-option' + (i === 0 ? ' active' : '');
+    opt.dataset.id = c.id;
+
+    const nameEl = document.createElement('div');
+    nameEl.className = 'product-search-option-name';
+    nameEl.textContent = c.name;
+    opt.appendChild(nameEl);
+
+    const metaEl = document.createElement('div');
+    metaEl.className = 'product-search-option-meta';
+    const phoneEl = document.createElement('span');
+    phoneEl.textContent = c.phone || T_NO_PHONE;
+    metaEl.appendChild(phoneEl);
+    opt.appendChild(metaEl);
+
+    opt.addEventListener('mousedown', e => e.preventDefault());
+    opt.addEventListener('click', () => onSelect(String(c.id)));
+    menu.appendChild(opt);
+  });
+}
+function wireCustomerSelect(container, onSelect) {
+  const hidden = container.querySelector('input[type="hidden"]');
+  const input = container.querySelector('.product-search-input');
+  const menu = container.querySelector('.product-search-menu');
+
+  function close() { menu.classList.remove('open'); }
+  function open(filterText) { renderCustomerSearchMenu(menu, filterText, select); menu.classList.add('open'); }
+  function select(id) {
+    const c = findCustomer(id);
+    if (!c) return;
+    hidden.value = String(c.id);
+    input.value = customerLabel(c);
+    close();
+    onSelect(c);
+  }
+  // On blur/Escape, snap the visible text back to whatever is actually
+  // in the hidden field - typing never touches the hidden field itself.
+  function revert() {
+    const c = findCustomer(hidden.value);
+    input.value = c ? customerLabel(c) : '';
+  }
+
+  input.addEventListener('focus', () => open(''));
+  input.addEventListener('input', () => open(input.value));
+  input.addEventListener('blur', () => { close(); revert(); });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!menu.classList.contains('open')) { open(input.value); return; }
+      const items = Array.from(menu.querySelectorAll('.product-search-option:not(.disabled)'));
+      if (!items.length) return;
+      let idx = items.findIndex(el => el.classList.contains('active'));
+      if (idx >= 0) items[idx].classList.remove('active');
+      idx = e.key === 'ArrowDown' ? (idx + 1) % items.length : (idx <= 0 ? items.length - 1 : idx - 1);
+      items[idx].classList.add('active');
+      items[idx].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter') {
+      if (menu.classList.contains('open')) {
+        e.preventDefault();
+        const active = menu.querySelector('.product-search-option.active');
+        if (active) select(active.dataset.id);
+      }
+    } else if (e.key === 'Escape') {
+      close();
+      revert();
+    }
+  });
+}
+wireCustomerSelect(document.getElementById('posCustomerSelect'), () => {});
+
+// ---- Payment method / customer mode toggling ----
+// Only the fields relevant to the selected payment method are required,
+// so the browser doesn't block submission on a hidden field, and the
+// server (the only real authority) only reads/validates the fields for
+// whichever branch was actually POSTed - see pos/index.php's PHP above.
+function updatePaymentMethodUI() {
+  const isCredit = document.getElementById('posPaymentCredit').checked;
+  document.getElementById('posCashFields').style.display = isCredit ? 'none' : '';
+  document.getElementById('posCreditFields').style.display = isCredit ? '' : 'none';
+  document.getElementById('posCashReceived').required = !isCredit;
+}
+function updateCustomerModeUI() {
+  const isNew = document.getElementById('posCustomerModeNew').checked;
+  document.getElementById('posCustomerExistingFields').style.display = isNew ? 'none' : '';
+  document.getElementById('posCustomerNewFields').style.display = isNew ? '' : 'none';
+}
+updatePaymentMethodUI();
+updateCustomerModeUI();
 
 addRow();
 </script>
