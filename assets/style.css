@@ -82,7 +82,23 @@ h1,h2,h3,h4,h5{ font-family:'Rajdhani','Kantumruy Pro',sans-serif; font-weight:7
 .barcode{ color:var(--accent); }
 
 /* sidebar */
-.sidebar{ background:var(--panel) !important; border-right:1px solid var(--line) !important; }
+/* .sidebar sets width:230px inline (includes/header.php) but, as a flex
+   item of the top-level <div class="d-flex"> it shares with the main
+   content column, that width is only a flex-basis - the browser's default
+   flex-shrink:1 still lets it compress below 230px whenever the main
+   content's own min-content width (dashboard's stat-card row + charts
+   being the main driver) leaves less than 230px of room in the flex
+   container. That's the actual cause of nav labels like "Stock
+   Adjustments"/"Customers & Debts" wrapping onto two lines at everyday
+   desktop/laptop widths (reproduced at 992-1024px, worse by ~900px) - not
+   a theme, font, or breakpoint issue, since nothing here is gated by
+   theme and the shrink already starts well above the 768px offcanvas
+   breakpoint. flex-shrink:0 pins the sidebar to its intended fixed width
+   instead, which is what width:230px already implied; harmless below
+   768px too, since Bootstrap's offcanvas mode there switches the sidebar
+   to position:fixed, taking it out of the flex layout entirely regardless
+   of this property. */
+.sidebar{ background:var(--panel) !important; border-right:1px solid var(--line) !important; flex-shrink:0; }
 .sidebar .fs-5{ color:#fff; }
 .sidebar-section{ color:#3E4C5E !important; font-family:'JetBrains Mono','Kantumruy Pro',monospace; font-size:.64rem; letter-spacing:.1em; }
 /* Khmer script needs more size/contrast than the compact Latin eyebrow style
