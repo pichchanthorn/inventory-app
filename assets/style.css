@@ -489,6 +489,19 @@ body.theme-light table,
 body.theme-light .toast,
 body.theme-light .alert,
 body.theme-light .form-check-label { color: #0B1220 !important; }
+/* .dash-stat-value (dashboard.php's stat-card numbers) hardcodes color:#fff
+   for the dark theme same as the elements above, but as a child element
+   with its own color rule it doesn't pick up the inherited override from
+   body.theme-light .card - it needs its own explicit override, same as
+   the --bs-table-color case below. Without this, Total Products/Units in
+   Stock/Inventory Value/Outstanding Debts render white-on-white in light
+   mode; Low Stock happened to stay visible only because its value carries
+   .text-danger whenever count > 0, which already has its own themed
+   !important color (line 69) - :not(.text-danger) here keeps that rule in
+   control of the danger case instead of this override winning on source
+   order, so the danger-red state (already correct in light mode via the
+   --danger variable) stays untouched in both themes. */
+body.theme-light .dash-stat-value:not(.text-danger) { color: #0B1220 !important; }
 /* --bs-table-color is read directly by Bootstrap's per-cell rule, so the
    plain `color` override above doesn't reach td/th text — override the
    variable itself too, same as the dark-mode fix in the base table{} rule. */
