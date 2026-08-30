@@ -28,6 +28,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!canWrite()) {
         $error = __('common_err_forbidden');
     } else {
+        // Phase I3-B: same per-form-render, single-use idempotency token
+        // as POS (Phase I2-B1) - deliberately separate from the CSRF
+        // token above, claimed exactly once by whichever request reaches
+        // recordStockIn() first. A missing/empty value falls back to a
+        // fresh random one rather than blocking the submission outright -
+        // see pos/index.php for the original reasoning.
+        $idempotencyToken = trim($_POST['idempotency_token'] ?? '');
+        if ($idempotencyToken === '') {
+            $idempotencyToken = bin2hex(random_bytes(32));
+        }
+
         $supplierId = $_POST['supplier_id'] !== '' ? (int) $_POST['supplier_id'] : null;
         $date = $_POST['transaction_date'];
         $note = trim($_POST['note']);
@@ -51,13 +62,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$lines) {
                 $error = __('stockin_err_add_product');
             } else {
-                $reference = recordStockIn($pdo, $lines, $date, $supplierId, $note, $_SESSION['user_id']);
+                $reference = recordStockIn($pdo, $lines, $date, $supplierId, $note, $_SESSION['user_id'], $idempotencyToken);
                 $_SESSION['stockin_flash'] = __('stockin_recorded_prefix') . " $reference " . __('stockin_recorded_suffix');
                 header('Location: ' . BASE_URL . '/stock-in/index.php');
                 exit;
             }
         } catch (PriceConversionException $e) {
             $error = $e->getMessage();
+        } catch (IdempotencyConflictException $e) {
+            // This exact submission already succeeded once (a
+            // double-click, a browser retry, two tabs) - nothing was
+            // recorded a second time. Same handling as POS's identical
+            // catch in pos/index.php.
+            $error = __('stockin_err_duplicate_submission');
         } catch (Throwable $e) {
             error_log('Stock In failed: ' . $e->getMessage());
             $error = __('common_err_transaction_failed');
@@ -82,6 +99,7 @@ require_once __DIR__ . '/../includes/header.php';
   <div class="col-lg-8">
     <form method="post" id="stockInForm">
       <?= csrf_field() ?>
+      <input type="hidden" name="idempotency_token" value="<?= htmlspecialchars(bin2hex(random_bytes(32))) ?>">
       <div class="card p-3 mb-3">
         <div class="bracket-label mb-3"><?= __('common_transaction_details') ?></div>
         <div class="row">

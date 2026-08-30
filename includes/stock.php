@@ -115,9 +115,18 @@ function nextStockReference(PDO $pdo, string $prefix) {
 // Stock In: increases current_stock for each line. No concurrency guard
 // needed — an increment can never drive stock negative no matter what
 // else happens concurrently.
-function recordStockIn(PDO $pdo, array $lines, string $date, ?int $supplierId, string $note, int $userId) {
+// $idempotencyToken (Phase I3-B): stock-in/index.php's per-form-render
+// token, claimed as the very first statement in this transaction - same
+// placement/reasoning as recordStockOut()'s own token above - so a
+// duplicate submission (double-click, browser retry, two tabs) can never
+// double-increment current_stock. Defaults to null so any future direct
+// caller that doesn't pass one behaves exactly as before this phase.
+function recordStockIn(PDO $pdo, array $lines, string $date, ?int $supplierId, string $note, int $userId, ?string $idempotencyToken = null) {
     try {
         $pdo->beginTransaction();
+        if ($idempotencyToken !== null) {
+            claimIdempotencyToken($pdo, $idempotencyToken, $userId);
+        }
         $reference = nextStockReference($pdo, 'STI');
 
         $stmt = $pdo->prepare('INSERT INTO stock_transactions (reference, type, transaction_date, note, supplier_id, user_id) VALUES (?,?,?,?,?,?)');

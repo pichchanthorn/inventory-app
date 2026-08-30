@@ -216,6 +216,7 @@ return [
     'stockin_submit_button' => 'កត់ត្រាស្តុកចូល',
     'stockin_recent_title' => 'ស្តុកចូលថ្មីៗ',
     'stockin_err_add_product' => 'សូមបន្ថែមផលិតផលយ៉ាងតិចមួយ។',
+    'stockin_err_duplicate_submission' => 'ការកត់ត្រាស្តុកចូលនេះហាក់ដូចជាបានដាក់ស្នើម្តងទៀត (បានកត់ត្រារួចហើយ) — គ្មានអ្វីត្រូវបានកត់ត្រាម្តងទៀតទេ។',
     'stockin_recorded_prefix' => 'បានកត់ត្រា',
     'stockin_recorded_suffix' => 'ដោយជោគជ័យ។',
 
@@ -349,6 +350,7 @@ return [
     'customer_payment_col_by' => 'កត់ត្រាដោយ',
     'customer_err_invalid_amount' => 'សូមបញ្ចូលចំនួនទឹកប្រាក់ធំជាង ០។',
     'customer_err_overpayment' => 'ការបង់ប្រាក់នេះលើសពីសមតុល្យនៅសល់។',
+    'customer_err_duplicate_payment' => 'ការបង់ប្រាក់នេះហាក់ដូចជាបានដាក់ស្នើម្តងទៀត (បានកត់ត្រារួចហើយ) — គ្មានអ្វីត្រូវបានកត់ត្រាម្តងទៀតទេ។',
     'customer_err_payment_date_required' => 'ត្រូវការកាលបរិច្ឆេទបង់ប្រាក់។',
     'customer_payment_recorded_msg' => 'បានកត់ត្រាការបង់ប្រាក់។',
 
