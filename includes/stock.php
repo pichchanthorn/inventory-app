@@ -71,12 +71,44 @@ function claimIdempotencyToken(PDO $pdo, string $token, int $userId): void {
     }
 }
 
-// Builds the next "PREFIX-000123" reference — identical logic to what
-// each page already did, just relocated. Left unchanged: reference
-// collisions are already handled safely by the existing UNIQUE constraint
-// on stock_transactions.reference plus the generic catch below.
+// Atomic, per-key sequence counter (Phase I3-A) backing
+// nextStockReference() below and includes/debt.php's nextDebtReference()
+// - see database/migrations/012_add_reference_counters.sql for the
+// schema and full reasoning. Replaces the old SELECT COUNT(*) + 1 read,
+// which raced under concurrent requests (two callers could read the same
+// count and collide on stock_transactions.reference's UNIQUE constraint,
+// failing one caller's otherwise-legitimate transaction).
+//
+// MUST be called after the caller's own beginTransaction() - same
+// requirement claimIdempotencyToken() already has. SELECT ... FOR UPDATE
+// takes an exclusive row lock on the one counter row for $counterKey,
+// held for the rest of the caller's transaction: a second concurrent
+// caller's SELECT ... FOR UPDATE on that same row blocks until this one
+// commits or rolls back, so two callers can never read the same
+// next_value. A rolled-back caller's UPDATE rolls back with it, so a
+// failed attempt never permanently consumes a number.
+function nextReferenceSequence(PDO $pdo, string $counterKey): int {
+    $stmt = $pdo->prepare('SELECT next_value FROM reference_counters WHERE counter_key = ? FOR UPDATE');
+    $stmt->execute([$counterKey]);
+    $n = $stmt->fetchColumn();
+    if ($n === false) {
+        throw new RuntimeException("Missing reference_counters row for '$counterKey' - check migration 012 was applied.");
+    }
+    $n = (int) $n;
+
+    $stmt = $pdo->prepare('UPDATE reference_counters SET next_value = ? WHERE counter_key = ?');
+    $stmt->execute([$n + 1, $counterKey]);
+
+    return $n;
+}
+
+// Builds the next "PREFIX-000123" reference - same format as before
+// Phase I3-A, only the counter underneath changed. All of STI/STO/ADJ/
+// SAL share ONE counter ('stock_transactions'), not one each - matching
+// the original COUNT(*) FROM stock_transactions, which never filtered by
+// type either.
 function nextStockReference(PDO $pdo, string $prefix) {
-    $n = (int) $pdo->query('SELECT COUNT(*) FROM stock_transactions')->fetchColumn() + 1;
+    $n = nextReferenceSequence($pdo, 'stock_transactions');
     return $prefix . '-' . str_pad((string) $n, 6, '0', STR_PAD_LEFT);
 }
 

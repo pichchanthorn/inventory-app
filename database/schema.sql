@@ -373,3 +373,23 @@ CREATE TABLE idempotency_keys (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 );
+
+-- Concurrency-safe backing store for reference-number generation (Phase
+-- I3-A). One row per counter, advanced via SELECT ... FOR UPDATE +
+-- UPDATE inside the caller's own transaction (see includes/stock.php's
+-- nextReferenceSequence()) rather than the old SELECT COUNT(*) + 1,
+-- which raced under concurrent requests. 'stock_transactions' backs the
+-- STI/STO/ADJ/SAL prefixes (one shared counter, matching
+-- nextStockReference()'s original un-filtered COUNT(*) FROM
+-- stock_transactions), 'customer_debts' backs DBT. Seeded at 1 for both
+-- here since a fresh install has no existing rows to count yet - see
+-- database/migrations/012_add_reference_counters.sql for the equivalent
+-- seed against an existing, already-populated database.
+CREATE TABLE reference_counters (
+    counter_key VARCHAR(30) NOT NULL PRIMARY KEY,
+    next_value INT NOT NULL
+);
+
+INSERT INTO reference_counters (counter_key, next_value) VALUES
+    ('stock_transactions', 1),
+    ('customer_debts', 1);
