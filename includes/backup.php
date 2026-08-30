@@ -48,30 +48,52 @@ function streamDatabaseBackup(PDO $pdo, string $dsn, string $user, string $pass)
         echo $createRow['Create Table'] . ";\n\n";
         flush();
 
-        $stmt = $dump->query("SELECT * FROM $quoted");
-        $columnNames = null;
+        // Generated columns (STORED or VIRTUAL - e.g. customer_debts.balance/
+        // status) must never appear in an INSERT: MySQL/MariaDB computes them
+        // itself from the row's other values and rejects an explicit value
+        // outright, which used to abort the restore partway through and
+        // silently drop that table's data. Detected generically via
+        // information_schema rather than naming any table/column here, so
+        // this holds for any current or future generated column.
+        $colStmt = $pdo->prepare(
+            "SELECT COLUMN_NAME FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND EXTRA NOT LIKE '%GENERATED%'
+             ORDER BY ORDINAL_POSITION"
+        );
+        $colStmt->execute([$table]);
+        $insertableColumns = $colStmt->fetchAll(PDO::FETCH_COLUMN);
+
+        // A table where every column is generated has nothing to insert -
+        // not the case anywhere in this app today, but skip cleanly rather
+        // than emit an empty INSERT INTO tbl () VALUES () that wouldn't
+        // even parse.
+        if (!$insertableColumns) {
+            echo "\n";
+            continue;
+        }
+
+        $columnList = implode(',', array_map(fn($c) => '`' . $c . '`', $insertableColumns));
+
+        $stmt = $dump->query("SELECT $columnList FROM $quoted");
         $batch = [];
         $batchSize = 200;
 
         while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-            if ($columnNames === null) {
-                $columnNames = implode(',', array_map(fn($c) => '`' . $c . '`', array_keys($row)));
-            }
             $values = array_map(fn($v) => $v === null ? 'NULL' : $dump->quote($v), array_values($row));
             $batch[] = '(' . implode(',', $values) . ')';
 
             if (count($batch) >= $batchSize) {
-                echo "INSERT INTO $quoted ($columnNames) VALUES\n" . implode(",\n", $batch) . ";\n";
+                echo "INSERT INTO $quoted ($columnList) VALUES\n" . implode(",\n", $batch) . ";\n";
                 flush();
                 $batch = [];
             }
         }
         // $dump only allows one unbuffered result set open at a time, so
-        // this must be closed before the next table's SELECT * reuses it.
+        // this must be closed before the next table's SELECT reuses it.
         $stmt->closeCursor();
 
         if ($batch) {
-            echo "INSERT INTO $quoted ($columnNames) VALUES\n" . implode(",\n", $batch) . ";\n";
+            echo "INSERT INTO $quoted ($columnList) VALUES\n" . implode(",\n", $batch) . ";\n";
             flush();
         }
         echo "\n";
