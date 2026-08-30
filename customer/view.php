@@ -208,7 +208,7 @@ require_once __DIR__ . '/../includes/header.php';
           <div class="modal fade" id="payModal<?= $debt['id'] ?>" tabindex="-1">
             <div class="modal-dialog">
               <div class="modal-content">
-                <form method="post">
+                <form method="post" class="payment-form">
                   <?= csrf_field() ?>
                   <input type="hidden" name="idempotency_token" value="<?= htmlspecialchars(bin2hex(random_bytes(32))) ?>">
                   <input type="hidden" name="action" value="record_payment">
@@ -273,6 +273,36 @@ require_once __DIR__ . '/../includes/header.php';
   </div>
 </div>
 <?php endif; ?>
+
+<script>
+// Low-friction safeguard (UI/UX Batch 1): confirm only when a payment
+// would fully pay off the debt - the amount input's own max attribute
+// already equals the exact remaining balance (see the modal markup
+// above), so comparing the entered value against it is enough to detect
+// this case without any extra data. Every other (partial) payment
+// submits with no extra friction, matching the audit's "don't add a
+// confirmation dialog to every normal submission" guidance.
+//
+// stopPropagation() on cancel is required, not optional: footer.php's
+// global submit handler (a document-level bubble listener that disables
+// the submit button and shows a spinner) would otherwise still fire for
+// a submission this script just blocked, leaving the button stuck
+// disabled with no request actually in flight.
+document.querySelectorAll('form.payment-form').forEach(function (form) {
+  form.addEventListener('submit', function (e) {
+    const amountInput = form.querySelector('input[name="amount"]');
+    if (!amountInput) return;
+    const amount = parseFloat(amountInput.value);
+    const balance = parseFloat(amountInput.max);
+    if (!isNaN(amount) && !isNaN(balance) && Math.abs(amount - balance) < 0.005) {
+      if (!confirm(<?= json_encode(__('customer_confirm_full_payoff')) ?>)) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }
+  });
+});
+</script>
 
 <?php endif; ?>
 

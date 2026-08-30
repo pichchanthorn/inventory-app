@@ -608,6 +608,37 @@ updatePaymentMethodUI();
 updateCustomerModeUI();
 
 addRow();
+
+// ---- Low-friction safeguard against a fat-fingered quantity (UI/UX
+// Batch 1) ----
+// Not a blanket confirmation on every sale (that would slow down normal,
+// fast-paced checkout) - only fires when a single line's quantity is at
+// least half of that product's current stock on hand, a self-scaling
+// per-product signal that catches the "typed an extra digit" case (e.g.
+// 100 instead of 10 against a stock of 52) without ever bothering a
+// normal partial sale (2 of 40 in stock). Products already out of stock
+// are skipped here - the server's own stock guard handles that case.
+//
+// stopPropagation() on cancel is required, not optional: footer.php's
+// global submit handler (a document-level bubble listener that disables
+// the submit button and shows a spinner) would otherwise still fire for
+// a submission this script just blocked, leaving the button stuck
+// disabled with no request actually in flight.
+document.getElementById('posForm').addEventListener('submit', function (e) {
+  let hasLargeQty = false;
+  document.querySelectorAll('#lineBody tr').forEach(function (tr) {
+    const productId = tr.querySelector('[name="product_id[]"]')?.value;
+    const qty = parseFloat(tr.querySelector('[name="qty[]"]')?.value) || 0;
+    const product = productId ? findProduct(productId) : null;
+    if (product && product.current_stock > 0 && qty >= product.current_stock * 0.5) {
+      hasLargeQty = true;
+    }
+  });
+  if (hasLargeQty && !confirm(<?= json_encode(__('pos_confirm_large_qty')) ?>)) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+});
 </script>
 <?php endif; ?>
 
