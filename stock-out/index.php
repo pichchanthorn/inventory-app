@@ -19,6 +19,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!canWrite()) {
         $error = __('common_err_forbidden');
     } else {
+        // Phase SIO-01: same per-form-render, single-use idempotency token
+        // as POS (Phase I2-B1) and Stock In (Phase I3-B) - deliberately
+        // separate from the CSRF token above, claimed exactly once by
+        // whichever request reaches recordStockOut() first. A missing/
+        // empty value falls back to a fresh random one rather than
+        // blocking the submission outright - see pos/index.php for the
+        // original reasoning. recordStockOut() has accepted this
+        // parameter since Phase I2-B1 (added for POS's own cash-sale use
+        // of this same function) - this page just needed to start passing
+        // one, no changes to includes/stock.php required.
+        $idempotencyToken = trim($_POST['idempotency_token'] ?? '');
+        if ($idempotencyToken === '') {
+            $idempotencyToken = bin2hex(random_bytes(32));
+        }
+
         $date = $_POST['transaction_date'];
         $note = trim($_POST['note']);
         $productIds = $_POST['product_id'] ?? [];
@@ -38,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = __('common_err_invalid_price');
         } else {
             try {
-                $reference = recordStockOut($pdo, $lines, $date, $note, $_SESSION['user_id']);
+                $reference = recordStockOut($pdo, $lines, $date, $note, $_SESSION['user_id'], 'out', null, $idempotencyToken);
                 $_SESSION['stockout_flash'] = __('stockout_recorded_prefix') . " $reference " . __('stockout_recorded_suffix');
                 header('Location: ' . BASE_URL . '/stock-out/index.php');
                 exit;
@@ -58,6 +73,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
                 $error = __('stockout_err_insufficient_prefix') . " $name (" . __('stockout_err_insufficient_have') . " $have, " . __('stockout_err_insufficient_requested') . " $requestedQty).";
+            } catch (IdempotencyConflictException $e) {
+                // This exact submission already succeeded once (a
+                // double-click, a browser retry, two tabs) - nothing was
+                // recorded a second time. Same handling as POS's/Stock
+                // In's identical catch in pos/index.php/stock-in/index.php.
+                $error = __('stockout_err_duplicate_submission');
             } catch (Throwable $e) {
                 error_log('Stock Out failed: ' . $e->getMessage());
                 $error = __('common_err_transaction_failed');
@@ -83,6 +104,7 @@ require_once __DIR__ . '/../includes/header.php';
   <div class="col-lg-8">
     <form method="post">
       <?= csrf_field() ?>
+      <input type="hidden" name="idempotency_token" value="<?= htmlspecialchars(bin2hex(random_bytes(32))) ?>">
       <div class="card p-3 mb-3">
         <div class="bracket-label mb-3"><?= __('common_transaction_details') ?></div>
         <div class="row">

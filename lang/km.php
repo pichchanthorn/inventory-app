@@ -227,6 +227,7 @@ return [
     'stockout_submit_button' => 'កត់ត្រាស្តុកចេញ',
     'stockout_recent_title' => 'ស្តុកចេញថ្មីៗ',
     'stockout_err_add_product' => 'សូមបន្ថែមផលិតផលយ៉ាងតិចមួយ។',
+    'stockout_err_duplicate_submission' => 'ការកត់ត្រាស្តុកចេញនេះហាក់ដូចជាបានដាក់ស្នើម្តងទៀត (បានកត់ត្រារួចហើយ) — គ្មានអ្វីត្រូវបានកត់ត្រាម្តងទៀតទេ។',
     'stockout_recorded_prefix' => 'បានកត់ត្រា',
     'stockout_recorded_suffix' => 'ដោយជោគជ័យ។',
     'stockout_err_insufficient_prefix' => 'ស្តុកមិនគ្រប់គ្រាន់សម្រាប់',

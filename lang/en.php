@@ -227,6 +227,7 @@ return [
     'stockout_submit_button' => 'Record Stock Out',
     'stockout_recent_title' => 'Recent Stock Out',
     'stockout_err_add_product' => 'Add at least one product.',
+    'stockout_err_duplicate_submission' => 'This stock out looks like a duplicate submission (already recorded once) — nothing was recorded again.',
     'stockout_recorded_prefix' => 'Recorded',
     'stockout_recorded_suffix' => 'successfully.',
     'stockout_err_insufficient_prefix' => 'Not enough stock for',
