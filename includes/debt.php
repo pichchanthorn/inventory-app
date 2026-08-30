@@ -127,9 +127,23 @@ class DebtOverpaymentException extends RuntimeException {
 // responsible for validating $amount > 0 before calling this, same
 // division of responsibility recordCreditSale() expects of its own
 // caller for $lines.
-function recordDebtPayment(PDO $pdo, int $debtId, float $amount, string $paymentDate, string $note, int $userId): void {
+//
+// $idempotencyToken (Phase I3-B): customer/view.php's per-form-render
+// token, claimed as the very first statement in this transaction - same
+// placement/reasoning as recordStockOut()/recordCreditSale()'s own token
+// in includes/stock.php - so a duplicate submission can never double-
+// credit paid_amount. The overpayment guard just below only rejects a
+// duplicate that would exceed total_amount; it does not, by itself,
+// distinguish a genuine second payment from a repeat of the first when
+// the debt still has room for both - this token is what actually closes
+// that gap. Defaults to null so any future direct caller that doesn't
+// pass one behaves exactly as before this phase.
+function recordDebtPayment(PDO $pdo, int $debtId, float $amount, string $paymentDate, string $note, int $userId, ?string $idempotencyToken = null): void {
     try {
         $pdo->beginTransaction();
+        if ($idempotencyToken !== null) {
+            claimIdempotencyToken($pdo, $idempotencyToken, $userId);
+        }
 
         $stmt = $pdo->prepare('UPDATE customer_debts SET paid_amount = paid_amount + ?, updated_by = ? WHERE id = ? AND paid_amount + ? <= total_amount');
         $stmt->execute([$amount, $userId, $debtId, $amount]);

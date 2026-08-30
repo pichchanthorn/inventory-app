@@ -216,6 +216,7 @@ return [
     'stockin_submit_button' => 'Record Stock In',
     'stockin_recent_title' => 'Recent Stock In',
     'stockin_err_add_product' => 'Add at least one product.',
+    'stockin_err_duplicate_submission' => 'This stock in looks like a duplicate submission (already recorded once) — nothing was recorded again.',
     'stockin_recorded_prefix' => 'Recorded',
     'stockin_recorded_suffix' => 'successfully.',
 
@@ -349,6 +350,7 @@ return [
     'customer_payment_col_by' => 'Recorded by',
     'customer_err_invalid_amount' => 'Enter a payment amount greater than 0.',
     'customer_err_overpayment' => 'This payment would exceed the remaining balance.',
+    'customer_err_duplicate_payment' => 'This payment looks like a duplicate submission (already recorded once) — nothing was recorded again.',
     'customer_err_payment_date_required' => 'Payment date is required.',
     'customer_payment_recorded_msg' => 'Payment recorded.',
 

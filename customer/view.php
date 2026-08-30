@@ -24,6 +24,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'recor
     if (!canWrite()) {
         $error = __('common_err_forbidden');
     } else {
+        // Phase I3-B: same per-form-render, single-use idempotency token
+        // as POS (Phase I2-B1) and Stock In - deliberately separate from
+        // the CSRF token above, claimed exactly once by whichever request
+        // reaches recordDebtPayment() first. A missing/empty value falls
+        // back to a fresh random one rather than blocking the submission
+        // outright - see pos/index.php for the original reasoning.
+        $idempotencyToken = trim($_POST['idempotency_token'] ?? '');
+        if ($idempotencyToken === '') {
+            $idempotencyToken = bin2hex(random_bytes(32));
+        }
+
         $debtId = (int) $_POST['debt_id'];
         $amount = (float) $_POST['amount'];
         $paymentDate = trim($_POST['payment_date']);
@@ -44,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'recor
         } else {
             $actorId = (int) $_SESSION['user_id'];
             try {
-                recordDebtPayment($pdo, $debtId, $amount, $paymentDate, $note, $actorId);
+                recordDebtPayment($pdo, $debtId, $amount, $paymentDate, $note, $actorId, $idempotencyToken);
                 $_SESSION['customer_payment_flash'] = __('customer_payment_recorded_msg');
                 header('Location: ' . BASE_URL . '/customer/view.php?id=' . $id);
                 exit;
@@ -54,6 +65,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'recor
                 // "the DB is the final word, not the PHP-side pre-check"
                 // race handled by StockConflictException elsewhere.
                 $error = __('customer_err_overpayment');
+            } catch (IdempotencyConflictException $e) {
+                // This exact submission already succeeded once (a
+                // double-click, a browser retry, two tabs) - nothing was
+                // recorded a second time. Same handling as POS's identical
+                // catch in pos/index.php.
+                $error = __('customer_err_duplicate_payment');
             } catch (Throwable $e) {
                 error_log('Record debt payment failed: ' . $e->getMessage());
                 $error = __('common_err_transaction_failed');
@@ -193,6 +210,7 @@ require_once __DIR__ . '/../includes/header.php';
               <div class="modal-content">
                 <form method="post">
                   <?= csrf_field() ?>
+                  <input type="hidden" name="idempotency_token" value="<?= htmlspecialchars(bin2hex(random_bytes(32))) ?>">
                   <input type="hidden" name="action" value="record_payment">
                   <input type="hidden" name="debt_id" value="<?= $debt['id'] ?>">
                   <div class="modal-header">
