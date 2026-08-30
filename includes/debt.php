@@ -8,11 +8,14 @@
 // ================================================
 
 // Same "PREFIX-000123" pattern as nextStockReference() in
-// includes/stock.php, just counting customer_debts instead of
-// stock_transactions - debts aren't stock_transactions, so they get
-// their own reference sequence rather than sharing one.
+// includes/stock.php, just its own counter key ('customer_debts')
+// instead of 'stock_transactions' - debts aren't stock_transactions, so
+// they get their own reference sequence rather than sharing one.
+// nextReferenceSequence() (Phase I3-A) is the concurrency-safe counter
+// this draws from - see includes/stock.php for the full reasoning and
+// database/migrations/012_add_reference_counters.sql for the schema.
 function nextDebtReference(PDO $pdo): string {
-    $n = (int) $pdo->query('SELECT COUNT(*) FROM customer_debts')->fetchColumn() + 1;
+    $n = nextReferenceSequence($pdo, 'customer_debts');
     return 'DBT-' . str_pad((string) $n, 6, '0', STR_PAD_LEFT);
 }
 
