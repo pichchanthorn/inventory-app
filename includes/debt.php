@@ -41,9 +41,20 @@ function nextDebtReference(PDO $pdo): string {
 // receipt: sale reference, debt reference, resolved customer id/name,
 // and the server-computed total (same "server total is the only one
 // that decides anything" principle as pos/index.php's cash-sale path).
-function recordCreditSale(PDO $pdo, array $lines, string $date, int $userId, ?int $customerId, ?string $newCustomerName, ?string $newCustomerPhone, ?string $dueDate): array {
+//
+// $idempotencyToken (Phase I2-B1): POS's credit-sale path passes its
+// per-form-render token here, claimed as the very first statement in
+// this transaction - before even the possible new-customer insert - so
+// a duplicate submission can never create a second customer row, a
+// second sale, or a second debt. See includes/stock.php's
+// claimIdempotencyToken() for how the claim itself works.
+function recordCreditSale(PDO $pdo, array $lines, string $date, int $userId, ?int $customerId, ?string $newCustomerName, ?string $newCustomerPhone, ?string $dueDate, ?string $idempotencyToken = null): array {
     try {
         $pdo->beginTransaction();
+
+        if ($idempotencyToken !== null) {
+            claimIdempotencyToken($pdo, $idempotencyToken, $userId);
+        }
 
         if ($customerId === null) {
             $stmt = $pdo->prepare('INSERT INTO customers (name, phone, created_by, updated_by) VALUES (?, ?, ?, ?)');

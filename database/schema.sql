@@ -351,3 +351,25 @@ CREATE TABLE audit_log (
     INDEX idx_entity (entity_type, entity_id),
     INDEX idx_created_at (created_at)
 );
+
+-- Server-side idempotency for POS sale submissions (Phase I2-B1). A
+-- UNIQUE constraint on `token` is the entire mechanism - claiming a
+-- token is one INSERT, done as the first statement inside
+-- recordStockOut()/recordCreditSale()'s own transaction (see
+-- includes/stock.php's claimIdempotencyToken()), so InnoDB's own
+-- uniqueness enforcement under the row lock is what makes the claim
+-- atomic across genuinely concurrent requests - the same "let the
+-- database's own constraint do the concurrency-safety work" principle
+-- already used by the guarded UPDATEs elsewhere in that file. Because
+-- the claim shares the sale's own transaction, a failed/rolled-back
+-- attempt takes its claim back out with it, leaving the token claimable
+-- again for a legitimate retry; only a committed sale permanently
+-- consumes it. No expiry/cleanup job - this grows at the same rate as
+-- stock_transactions itself, which nothing in this schema prunes either.
+CREATE TABLE idempotency_keys (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    token VARCHAR(64) NOT NULL UNIQUE,
+    user_id INT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+);

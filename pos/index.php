@@ -25,6 +25,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!canWrite()) {
         $error = __('common_err_forbidden');
     } else {
+        // Phase I2-B1: a per-form-render, single-use idempotency token -
+        // deliberately separate from the CSRF token above (which is
+        // session-scoped and intentionally reusable across many
+        // submissions; this one is claimed exactly once, by whichever
+        // request reaches recordStockOut()/recordCreditSale() first - see
+        // includes/stock.php's claimIdempotencyToken()). A missing/empty
+        // value (a stale cached page, or a request with it stripped)
+        // falls back to a fresh random one rather than blocking the sale
+        // outright - it just means that one submission has no duplicate
+        // protection, same tradeoff as any other optional hardening.
+        $idempotencyToken = trim($_POST['idempotency_token'] ?? '');
+        if ($idempotencyToken === '') {
+            $idempotencyToken = bin2hex(random_bytes(32));
+        }
+
         $productIds = $_POST['product_id'] ?? [];
         $qtys = $_POST['qty'] ?? [];
         $prices = $_POST['unit_price'] ?? [];
@@ -85,10 +100,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $today = date('Y-m-d');
                 try {
                     if ($paymentMethod === 'credit') {
-                        $result = recordCreditSale($pdo, $lines, $today, $_SESSION['user_id'], $customerId, $newCustomerName, $newCustomerPhone, $dueDate);
+                        $result = recordCreditSale($pdo, $lines, $today, $_SESSION['user_id'], $customerId, $newCustomerName, $newCustomerPhone, $dueDate, $idempotencyToken);
                         $reference = $result['reference'];
                     } else {
-                        $reference = recordStockOut($pdo, $lines, $today, '', $_SESSION['user_id'], 'sale', $cashReceived);
+                        $reference = recordStockOut($pdo, $lines, $today, '', $_SESSION['user_id'], 'sale', $cashReceived, $idempotencyToken);
                     }
 
                     $receiptLines = [];
@@ -149,6 +164,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                     }
                     $error = __('stockout_err_insufficient_prefix') . " $name (" . __('stockout_err_insufficient_have') . " $have, " . __('stockout_err_insufficient_requested') . " $requestedQty).";
+                } catch (IdempotencyConflictException $e) {
+                    // This exact submission already succeeded once (a
+                    // double-click, a browser retry, two tabs) - nothing
+                    // was recorded a second time. Not an error the
+                    // cashier needs to act on, just a heads-up.
+                    $error = __('pos_err_duplicate_submission');
                 } catch (Throwable $e) {
                     error_log('POS sale failed: ' . $e->getMessage());
                     $error = __('common_err_transaction_failed');
@@ -185,6 +206,7 @@ require_once __DIR__ . '/../includes/header.php';
   <div class="col-lg-8">
     <form method="post" id="posForm">
       <?= csrf_field() ?>
+      <input type="hidden" name="idempotency_token" value="<?= htmlspecialchars(bin2hex(random_bytes(32))) ?>">
       <div class="card p-3">
         <div class="d-flex justify-content-between align-items-center mb-3">
           <div class="bracket-label mb-0"><?= __('common_line_items') ?></div>

@@ -245,6 +245,7 @@ return [
     'pos_change_due_label' => 'Change Due',
     'pos_submit_button' => 'Complete Sale',
     'pos_err_insufficient_cash' => 'Cash received is less than the total due.',
+    'pos_err_duplicate_submission' => 'This sale looks like a duplicate submission (already recorded once) — nothing was recorded again.',
     'pos_receipt_title' => 'Sale Complete',
     'pos_receipt_view_title' => 'Sale Receipt',
     'pos_cashier_label' => 'Cashier',
