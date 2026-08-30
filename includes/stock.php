@@ -28,6 +28,49 @@ class StockConflictException extends RuntimeException {
     }
 }
 
+// Thrown when claimIdempotencyToken() finds its token already claimed -
+// i.e. this exact submission (a double-click, a browser retry, two
+// tabs, a network timeout followed by a resubmit) was already recorded.
+// Callers catch this specifically to show a "this looks like a repeat
+// submission" message instead of the generic transaction-failed
+// fallback - see pos/index.php.
+class IdempotencyConflictException extends RuntimeException {}
+
+// Server-side idempotency for POS sale submissions (Phase I2-B1) -
+// lives here rather than in a POS-specific file since both POS's cash
+// path (recordStockOut, below) and its credit path (recordCreditSale,
+// includes/debt.php) need it, and debt.php already requires this file.
+//
+// The entire mechanism is one INSERT into idempotency_keys, whose
+// UNIQUE constraint on `token` makes the claim atomic across genuinely
+// concurrent requests under InnoDB's row lock - the same "let the
+// database's own constraint carry the concurrency guarantee" principle
+// as the guarded UPDATEs elsewhere in this file, rather than a
+// SELECT-then-INSERT check in PHP that a second request could race past.
+//
+// MUST be called as the first statement inside the caller's own
+// beginTransaction() block (not before it) - that's what makes a failed/
+// rolled-back sale attempt release its claim automatically: if anything
+// later in the same transaction fails, the whole transaction (including
+// this INSERT) rolls back together, leaving the token claimable again
+// for a legitimate retry. Only a transaction that actually commits
+// permanently consumes its token.
+function claimIdempotencyToken(PDO $pdo, string $token, int $userId): void {
+    try {
+        $stmt = $pdo->prepare('INSERT INTO idempotency_keys (token, user_id) VALUES (?, ?)');
+        $stmt->execute([$token, $userId]);
+    } catch (PDOException $e) {
+        // MySQL/MariaDB error 1062: "Duplicate entry ... for key" - the
+        // UNIQUE constraint on token rejected a repeat, same precise-
+        // error-code check as product/index.php's delete-has-history
+        // (1451) and customer/index.php's delete-has-debts (1451) cases.
+        if (($e->errorInfo[1] ?? null) === 1062) {
+            throw new IdempotencyConflictException('Idempotency token already claimed');
+        }
+        throw $e;
+    }
+}
+
 // Builds the next "PREFIX-000123" reference — identical logic to what
 // each page already did, just relocated. Left unchanged: reference
 // collisions are already handled safely by the existing UNIQUE constraint
@@ -107,13 +150,24 @@ function insertStockOutLines(PDO $pdo, int $txId, array $lines): void {
 // ("only sale rows have this populated") doesn't depend on caller
 // discipline. Defaults to null, so the existing Stock Out call site
 // (which never passes it) is unaffected.
-function recordStockOut(PDO $pdo, array $lines, string $date, string $note, int $userId, string $type = 'out', ?float $cashReceived = null) {
+// $idempotencyToken: POS's cash-sale path (Phase I2-B1) passes its
+// per-form-render token here; Stock Out's own call site never passes
+// one, so it defaults to null and claimIdempotencyToken() is skipped
+// entirely for that caller - Stock Out's behavior is completely
+// unchanged.
+function recordStockOut(PDO $pdo, array $lines, string $date, string $note, int $userId, string $type = 'out', ?float $cashReceived = null, ?string $idempotencyToken = null) {
     if (!in_array($type, ['out', 'sale'], true)) {
         throw new InvalidArgumentException("Invalid stock-out type '$type' - must be 'out' or 'sale'.");
     }
 
     try {
         $pdo->beginTransaction();
+        // Claimed first, before anything else in this transaction (even
+        // before a reference number is generated) - a duplicate
+        // submission is rejected immediately, without side effects.
+        if ($idempotencyToken !== null) {
+            claimIdempotencyToken($pdo, $idempotencyToken, $userId);
+        }
         // Reference prefix follows the transaction type: a POS sale gets
         // SAL-, a manual Stock Out keeps the existing STO- prefix. $type
         // already defaults to 'out', so this is a no-op for every existing

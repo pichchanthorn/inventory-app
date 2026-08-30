@@ -245,6 +245,7 @@ return [
     'pos_change_due_label' => 'ប្រាក់អាប់',
     'pos_submit_button' => 'បញ្ចប់ការលក់',
     'pos_err_insufficient_cash' => 'ប្រាក់ទទួលបានមិនគ្រប់ចំនួនសរុបទេ។',
+    'pos_err_duplicate_submission' => 'ការលក់នេះហាក់ដូចជាបានដាក់ស្នើម្តងទៀត (បានកត់ត្រារួចហើយ) — គ្មានអ្វីត្រូវបានកត់ត្រាម្តងទៀតទេ។',
     'pos_receipt_title' => 'ការលក់បានជោគជ័យ',
     'pos_receipt_view_title' => 'បង្កាន់ដៃលក់',
     'pos_cashier_label' => 'អ្នកគិតលុយ',
