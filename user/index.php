@@ -235,7 +235,7 @@ require_once __DIR__ . '/../includes/header.php';
           <?php if ($u['id'] === (int) $_SESSION['user_id']): ?>
             <span class="text-secondary small"><?= __('user_this_is_you') ?></span>
           <?php else: ?>
-            <form method="post" class="d-flex gap-2">
+            <form method="post" class="d-flex gap-2 role-change-form">
               <?= csrf_field() ?>
               <input type="hidden" name="action" value="update_role">
               <input type="hidden" name="id" value="<?= $u['id'] ?>">
@@ -349,5 +349,25 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 <?php endif; ?>
+
+<script>
+// Same localized confirm() as the delete actions elsewhere in the app,
+// but wired via addEventListener + explicit stopPropagation() (like the
+// POS/Debt Payment safeguards in this same batch) rather than a static
+// onsubmit="return confirm(...)" attribute - the latter's "return false"
+// only calls preventDefault(), it does not stop the event from still
+// reaching footer.php's global submit handler (a document-level bubble
+// listener that disables the submit button and shows a spinner), which
+// left the Save button stuck disabled after Cancel with no request
+// actually in flight.
+document.querySelectorAll('form.role-change-form').forEach(function (form) {
+  form.addEventListener('submit', function (e) {
+    if (!confirm(<?= json_encode(__('user_confirm_role_change')) ?>)) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  });
+});
+</script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
