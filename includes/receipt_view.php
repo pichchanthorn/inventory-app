@@ -30,6 +30,7 @@
 ?>
 <div class="card p-4" id="posReceipt">
   <div class="text-center mb-3">
+    <img src="<?= BASE_URL ?>/assets/logo-192.png" alt="" width="44" height="44" class="mb-2">
     <div class="bracket-label mb-1"><?= __('pos_receipt_title') ?></div>
     <div class="fs-4 mono fw-bold text-primary"><?= htmlspecialchars($sale['reference']) ?></div>
     <div class="text-secondary small mono"><?= htmlspecialchars($sale['date']) ?></div>
