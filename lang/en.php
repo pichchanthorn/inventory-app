@@ -275,6 +275,21 @@ return [
     'pos_paid_later_label' => 'PAID LATER',
     'pos_debt_reference_label' => 'Debt Reference',
 
+    // Sale Invoice (reuses most pos_/common_ labels above - these are
+    // the ones the invoice header/totals need that don't exist yet)
+    'invoice_title' => 'Invoice',
+    'invoice_number_label' => 'Invoice No',
+    'invoice_status_label' => 'Status',
+    'invoice_grand_total_label' => 'Grand Total',
+    'invoice_paid_label' => 'Paid',
+    'invoice_balance_label' => 'Balance',
+    'invoice_status_paid' => 'PAID',
+    'invoice_status_partial' => 'PARTIALLY PAID',
+    'invoice_status_unpaid' => 'UNPAID',
+    'invoice_col_package' => 'Package',
+    'invoice_footer_thanks' => 'Thank you for your business!',
+    'invoice_signature_label' => 'Authorized Signature',
+
     // Stock Adjustment
     'stockadj_reason_label' => 'Reason *',
     'stockadj_reason_placeholder' => 'e.g. Physical count correction',
@@ -394,6 +409,13 @@ return [
     'settings_backup_title' => 'Database Backup',
     'settings_backup_hint' => 'Downloads a complete .sql file (structure and data for every table) that can be restored via phpMyAdmin\'s Import — keep it somewhere safe.',
     'settings_backup_button' => 'Download Backup',
+    'settings_business_info_title' => 'Business Information',
+    'settings_business_info_hint' => 'Shown on the printed Sale Invoice header, alongside the system logo. Leave a field blank to omit it from the invoice.',
+    'settings_business_name_label' => 'Business name',
+    'settings_business_address_label' => 'Address',
+    'settings_business_phone_label' => 'Phone',
+    'settings_business_email_label' => 'Email',
+    'settings_business_info_updated' => 'Business information updated.',
 
     // Audit Log
     'audit_title' => 'Audit Log',

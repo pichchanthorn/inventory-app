@@ -275,6 +275,20 @@ return [
     'pos_paid_later_label' => 'បង់ពេលក្រោយ',
     'pos_debt_reference_label' => 'លេខយោងបំណុល',
 
+    // Sale Invoice
+    'invoice_title' => 'វិក្កយបត្រ',
+    'invoice_number_label' => 'លេខវិក្កយបត្រ',
+    'invoice_status_label' => 'ស្ថានភាព',
+    'invoice_grand_total_label' => 'សរុបទាំងអស់',
+    'invoice_paid_label' => 'បានបង់',
+    'invoice_balance_label' => 'នៅសល់',
+    'invoice_status_paid' => 'ទូទាត់រួច',
+    'invoice_status_partial' => 'ទូទាត់ខ្លះ',
+    'invoice_status_unpaid' => 'មិនទាន់ទូទាត់',
+    'invoice_col_package' => 'ទំហំវេចខ្ចប់',
+    'invoice_footer_thanks' => 'សូមអរគុណសម្រាប់ការគាំទ្រ!',
+    'invoice_signature_label' => 'ហត្ថលេខាអនុញ្ញាត',
+
     // Stock Adjustment
     'stockadj_reason_label' => 'មូលហេតុ *',
     'stockadj_reason_placeholder' => 'ឧ. កែតម្រូវការរាប់ស្តុកជាក់ស្តែង',
@@ -394,6 +408,13 @@ return [
     'settings_backup_title' => 'បម្រុងទុកទិន្នន័យ',
     'settings_backup_hint' => 'ទាញយកឯកសារ .sql ពេញលេញ (រចនាសម្ព័ន្ធ និងទិន្នន័យគ្រប់តារាង) ដែលអាចនាំចូលវិញបានតាមរយៈ phpMyAdmin Import — សូមរក្សាទុកនៅកន្លែងមានសុវត្ថិភាព។',
     'settings_backup_button' => 'ទាញយកទិន្នន័យបម្រុង',
+    'settings_business_info_title' => 'ព័ត៌មានហាង',
+    'settings_business_info_hint' => 'បង្ហាញនៅលើក្បាលវិក្កយបត្រលក់ ជាមួយនឹងស្លាកសញ្ញាប្រព័ន្ធ។ ទុកចន្លោះទទេ ដើម្បីលុបចោលពីវិក្កយបត្រ។',
+    'settings_business_name_label' => 'ឈ្មោះហាង',
+    'settings_business_address_label' => 'អាសយដ្ឋាន',
+    'settings_business_phone_label' => 'លេខទូរស័ព្ទ',
+    'settings_business_email_label' => 'អ៊ីមែល',
+    'settings_business_info_updated' => 'ព័ត៌មានហាងត្រូវបានធ្វើបច្ចុប្បន្នភាព។',
 
     // Audit Log
     'audit_title' => 'កំណត់ត្រាសវនកម្ម',

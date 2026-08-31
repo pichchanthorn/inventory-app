@@ -37,6 +37,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    if ($action === 'update_business') {
+        // Same singleton-row pattern as the rate below, touching only
+        // the business_* columns - a fresh row is created with a 0
+        // placeholder rate if none exists yet (the exchange-rate form's
+        // own ON DUPLICATE KEY UPDATE never overwrites these fields,
+        // and vice versa, since each statement only lists the columns
+        // it actually owns). All four fields are optional and shown on
+        // the Sale Invoice header only when non-empty - see
+        // includes/receipt_view.php.
+        $businessName = trim($_POST['business_name'] ?? '');
+        $businessAddress = trim($_POST['business_address'] ?? '');
+        $businessPhone = trim($_POST['business_phone'] ?? '');
+        $businessEmail = trim($_POST['business_email'] ?? '');
+
+        $stmt = $pdo->prepare('INSERT INTO app_settings (id, usd_to_khr_rate, business_name, business_address, business_phone, business_email)
+                                VALUES (1, 0, ?, ?, ?, ?)
+                                ON DUPLICATE KEY UPDATE business_name = VALUES(business_name),
+                                    business_address = VALUES(business_address),
+                                    business_phone = VALUES(business_phone),
+                                    business_email = VALUES(business_email)');
+        $stmt->execute([
+            $businessName !== '' ? $businessName : null,
+            $businessAddress !== '' ? $businessAddress : null,
+            $businessPhone !== '' ? $businessPhone : null,
+            $businessEmail !== '' ? $businessEmail : null,
+        ]);
+        $_SESSION['settings_flash'] = __('settings_business_info_updated');
+        header('Location: ' . BASE_URL . '/settings/index.php');
+        exit;
+    }
+
     $rate = (float) ($_POST['usd_to_khr_rate'] ?? 0);
 
     if ($rate <= 0) {
@@ -93,6 +124,40 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="bracket-label mb-3"><?= __('settings_backup_title') ?></div>
         <p class="text-secondary small"><?= __('settings_backup_hint') ?></p>
         <button class="btn btn-primary w-100"><i class="bi bi-download"></i> <?= __('settings_backup_button') ?></button>
+      </div>
+    </form>
+  </div>
+
+  <div class="col-lg-8">
+    <form method="post">
+      <?= csrf_field() ?>
+      <input type="hidden" name="action" value="update_business">
+      <div class="card p-3">
+        <div class="bracket-label mb-3"><?= __('settings_business_info_title') ?></div>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label"><?= __('settings_business_name_label') ?></label>
+            <input type="text" name="business_name" class="form-control"
+                   value="<?= $settings ? htmlspecialchars($settings['business_name'] ?? '') : '' ?>">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label"><?= __('settings_business_phone_label') ?></label>
+            <input type="text" name="business_phone" class="form-control"
+                   value="<?= $settings ? htmlspecialchars($settings['business_phone'] ?? '') : '' ?>">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label"><?= __('settings_business_address_label') ?></label>
+            <input type="text" name="business_address" class="form-control"
+                   value="<?= $settings ? htmlspecialchars($settings['business_address'] ?? '') : '' ?>">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label"><?= __('settings_business_email_label') ?></label>
+            <input type="email" name="business_email" class="form-control"
+                   value="<?= $settings ? htmlspecialchars($settings['business_email'] ?? '') : '' ?>">
+          </div>
+        </div>
+        <p class="text-secondary small mt-3 mb-3"><?= __('settings_business_info_hint') ?></p>
+        <button class="btn btn-primary w-100"><?= __('common_save') ?></button>
       </div>
     </form>
   </div>
