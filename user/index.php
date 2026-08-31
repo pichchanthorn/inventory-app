@@ -259,7 +259,7 @@ require_once __DIR__ . '/../includes/header.php';
 
       <!-- Reset password modal for this user -->
       <?php if ($u['id'] !== (int) $_SESSION['user_id']): ?>
-      <div class="modal fade" id="resetPwModal<?= $u['id'] ?>" tabindex="-1">
+      <div class="modal fade" id="resetPwModal<?= $u['id'] ?>" tabindex="-1" data-bs-backdrop="static">
         <div class="modal-dialog">
           <div class="modal-content">
             <form method="post">
@@ -296,7 +296,7 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <!-- Create user modal -->
-<div class="modal fade" id="createUserModal" tabindex="-1">
+<div class="modal fade" id="createUserModal" tabindex="-1" data-bs-backdrop="static">
   <div class="modal-dialog">
     <div class="modal-content">
       <form method="post">
