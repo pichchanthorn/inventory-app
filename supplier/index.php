@@ -183,42 +183,44 @@ require_once __DIR__ . '/../includes/header.php';
           <?php endif; ?>
         </td>
       </tr>
-
-      <div class="modal fade" id="editModal<?= $s['id'] ?>" tabindex="-1">
-        <div class="modal-dialog">
-          <div class="modal-content">
-            <form method="post">
-              <?= csrf_field() ?>
-              <input type="hidden" name="action" value="update">
-              <input type="hidden" name="id" value="<?= $s['id'] ?>">
-              <div class="modal-header">
-                <h5 class="modal-title"><?= __('supplier_edit_title') ?></h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="<?= __('common_close') ?>"></button>
-              </div>
-              <div class="modal-body">
-                <div class="mb-3"><label class="form-label"><?= __('common_name') ?></label>
-                  <input type="text" name="name" class="form-control" value="<?= htmlspecialchars($s['name']) ?>" required></div>
-                <div class="mb-3"><label class="form-label"><?= __('common_phone') ?></label>
-                  <input type="text" name="phone" class="form-control" value="<?= htmlspecialchars($s['phone']) ?>"></div>
-                <div class="mb-3"><label class="form-label"><?= __('common_email') ?></label>
-                  <input type="text" name="email" class="form-control" value="<?= htmlspecialchars($s['email']) ?>"></div>
-                <div class="mb-3"><label class="form-label"><?= __('common_address') ?></label>
-                  <textarea name="address" class="form-control"><?= htmlspecialchars($s['address']) ?></textarea></div>
-                <div class="mb-3"><label class="form-label"><?= __('common_note') ?></label>
-                  <textarea name="note" class="form-control"><?= htmlspecialchars($s['note']) ?></textarea></div>
-              </div>
-              <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><?= __('common_cancel') ?></button>
-                <button class="btn btn-primary"><?= __('common_save') ?></button>
-              </div>
-            </form>
-          </div>
-        </div>
-      </div>
       <?php endforeach; ?>
     </tbody>
   </table>
 </div>
+
+<?php foreach ($suppliers as $i => $s): ?>
+<div class="modal fade" id="editModal<?= $s['id'] ?>" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post">
+        <?= csrf_field() ?>
+        <input type="hidden" name="action" value="update">
+        <input type="hidden" name="id" value="<?= $s['id'] ?>">
+        <div class="modal-header">
+          <h5 class="modal-title"><?= __('supplier_edit_title') ?></h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="<?= __('common_close') ?>"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3"><label class="form-label"><?= __('common_name') ?></label>
+            <input type="text" name="name" class="form-control" value="<?= htmlspecialchars($s['name']) ?>" required></div>
+          <div class="mb-3"><label class="form-label"><?= __('common_phone') ?></label>
+            <input type="text" name="phone" class="form-control" value="<?= htmlspecialchars($s['phone']) ?>"></div>
+          <div class="mb-3"><label class="form-label"><?= __('common_email') ?></label>
+            <input type="text" name="email" class="form-control" value="<?= htmlspecialchars($s['email']) ?>"></div>
+          <div class="mb-3"><label class="form-label"><?= __('common_address') ?></label>
+            <textarea name="address" class="form-control"><?= htmlspecialchars($s['address']) ?></textarea></div>
+          <div class="mb-3"><label class="form-label"><?= __('common_note') ?></label>
+            <textarea name="note" class="form-control"><?= htmlspecialchars($s['note']) ?></textarea></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><?= __('common_cancel') ?></button>
+          <button class="btn btn-primary"><?= __('common_save') ?></button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<?php endforeach; ?>
 
 <div class="modal fade" id="createModal" tabindex="-1">
   <div class="modal-dialog">
