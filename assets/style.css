@@ -557,4 +557,13 @@ body.theme-light .form-control::placeholder { color: #8792A0; }
   body { background:#fff !important; color:#000 !important; }
   .card { background:#fff !important; border-color:#ccc !important; color:#000 !important; box-shadow:none !important; }
   table { color:#000 !important; }
+  /* thead.table-light's own background/color (further up this file) is
+     pinned to the dark-theme --panel/--muted variables, which print mode
+     doesn't redefine - left alone it prints as a dark band on an
+     otherwise white page. Match Bootstrap's own light-table look instead. */
+  table thead.table-light th { background:#f8f9fa !important; color:#000 !important; }
+  /* Sale Invoice only occupies col-lg-7 (~58%) on screen, alongside room
+     for a second column that print doesn't need - let it use the full
+     printable width instead of wasting most of the page. */
+  .invoice-col { flex:0 0 100% !important; max-width:100% !important; width:100% !important; }
 }

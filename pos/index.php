@@ -19,6 +19,10 @@ foreach ($products as $p) {
     $productsById[$p['id']] = $p;
 }
 $customers = $pdo->query('SELECT * FROM customers ORDER BY name')->fetchAll();
+$customersById = [];
+foreach ($customers as $c) {
+    $customersById[$c['id']] = $c;
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify();
@@ -112,6 +116,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $receiptLines[] = [
                             'name' => $p['name'] ?? '',
                             'sku' => $p['sku'] ?? '',
+                            'package' => $p['package_size'] ?? '',
                             'qty' => $line['qty'],
                             'price' => $line['price'],
                             'subtotal' => $line['qty'] * $line['price'],
@@ -134,15 +139,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if ($paymentMethod === 'credit') {
                         $_SESSION['pos_last_sale']['is_credit'] = true;
                         $_SESSION['pos_last_sale']['customer_name'] = $result['customer_name'];
+                        // Existing customer: looked up from the list already
+                        // fetched above. New customer: not in that list yet
+                        // (fetched before recordCreditSale()'s insert), so
+                        // fall back to the phone just typed into the form.
+                        $_SESSION['pos_last_sale']['customer_phone'] = $customersById[$result['customer_id']]['phone']
+                            ?? ($newCustomerPhone !== null && $newCustomerPhone !== '' ? $newCustomerPhone : null);
                         $_SESSION['pos_last_sale']['due_date'] = $dueDate !== '' ? $dueDate : null;
                         $_SESSION['pos_last_sale']['debt_reference'] = $result['debt_reference'];
+                        // A debt freshly created by this same request can only
+                        // ever be fully unpaid - recordDebtPayment() runs in
+                        // its own separate request, later, from
+                        // customer/view.php - so these are safe invariants,
+                        // not values that need querying customer_debts again.
+                        $_SESSION['pos_last_sale']['paid_amount'] = 0.0;
+                        $_SESSION['pos_last_sale']['balance'] = $total;
+                        $_SESSION['pos_last_sale']['debt_status'] = 'open';
                     }
                     // Additive display-only conversion - no rate configured
-                    // yet (fresh install, before an Admin visits Settings)
-                    // simply omits khr_total, which receipt_view.php treats
-                    // as "don't show the KHR line" rather than an error.
+                    // yet (fresh install, before an Admin visits Settings,
+                    // or a placeholder 0 left by saving Settings' Business
+                    // Information before ever setting a real rate) simply
+                    // omits khr_total, which receipt_view.php treats as
+                    // "don't show the KHR line" rather than an error.
                     $khrRate = $pdo->query('SELECT usd_to_khr_rate FROM app_settings WHERE id = 1')->fetchColumn();
-                    if ($khrRate !== false) {
+                    if ($khrRate !== false && (float) $khrRate > 0) {
                         $_SESSION['pos_last_sale']['khr_total'] = $total * (float) $khrRate;
                     }
                     header('Location: ' . BASE_URL . '/pos/index.php');
@@ -185,6 +206,11 @@ $recentSales = $pdo->query("SELECT t.*, COUNT(i.id) items, SUM(i.qty) total_qty,
                         WHERE t.type = 'sale'
                         GROUP BY t.id ORDER BY t.id DESC LIMIT 5")->fetchAll();
 
+// Shop identity for the Sale Invoice header (includes/receipt_view.php) -
+// same singleton app_settings row the exchange rate lives on. Any
+// unconfigured field is simply omitted from the printed invoice.
+$business = $pdo->query('SELECT business_name, business_address, business_phone, business_email FROM app_settings WHERE id = 1')->fetch();
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
@@ -193,7 +219,7 @@ require_once __DIR__ . '/../includes/header.php';
 
 <?php if ($sale): ?>
 <div class="row g-3">
-  <div class="col-lg-7">
+  <div class="col-lg-7 invoice-col">
     <?php
     $receiptSecondaryAction = '<a href="' . BASE_URL . '/pos/index.php" class="btn btn-primary flex-fill"><i class="bi bi-plus-lg"></i> ' . htmlspecialchars(__('pos_new_sale_button')) . '</a>';
     require __DIR__ . '/../includes/receipt_view.php';

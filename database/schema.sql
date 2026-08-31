@@ -303,16 +303,29 @@ CREATE TABLE customer_debt_payments (
     CONSTRAINT chk_customer_debt_payments_amount_positive CHECK (amount > 0)
 );
 
--- App-wide settings. Currently just the USD->KHR display rate - not a
--- generic key-value config framework, just the minimal shape this one
--- Admin-configurable value needs. Always exactly one row (id=1); the app
--- always reads/writes WHERE id=1 rather than enforcing singularity with
--- a CHECK, same "trust the one call site" spirit as the rest of this
--- schema. KHR is calculated at render time from this rate and is never
--- stored on any transaction - underlying data stays USD-only.
+-- App-wide settings. Currently the USD->KHR display rate plus the
+-- shop's own business identity (name/address/phone/email, shown on the
+-- printed Sale Invoice header) - not a generic key-value config
+-- framework, just the minimal shape these Admin-configurable values
+-- need. Always exactly one row (id=1); the app always reads/writes
+-- WHERE id=1 rather than enforcing singularity with a CHECK, same
+-- "trust the one call site" spirit as the rest of this schema. KHR is
+-- calculated at render time from this rate and is never stored on any
+-- transaction - underlying data stays USD-only.
+--
+-- business_* columns are nullable and independent of any one shop
+-- (PCTN or otherwise) - a fresh install has none of them set, and the
+-- invoice template simply omits a blank field rather than requiring
+-- them. This is deliberately the smallest structure that lets a
+-- different shop reuse this same software later by editing Settings,
+-- without building a multi-tenant system now.
 CREATE TABLE app_settings (
     id INT NOT NULL DEFAULT 1 PRIMARY KEY,
     usd_to_khr_rate DECIMAL(10,2) NOT NULL,
+    business_name VARCHAR(150) DEFAULT NULL,
+    business_address VARCHAR(255) DEFAULT NULL,
+    business_phone VARCHAR(30) DEFAULT NULL,
+    business_email VARCHAR(150) DEFAULT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
