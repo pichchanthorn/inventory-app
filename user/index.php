@@ -256,44 +256,46 @@ require_once __DIR__ . '/../includes/header.php';
           <?php endif; ?>
         </td>
       </tr>
-
-      <!-- Reset password modal for this user -->
-      <?php if ($u['id'] !== (int) $_SESSION['user_id']): ?>
-      <div class="modal fade" id="resetPwModal<?= $u['id'] ?>" tabindex="-1" data-bs-backdrop="static">
-        <div class="modal-dialog">
-          <div class="modal-content">
-            <form method="post">
-              <?= csrf_field() ?>
-              <input type="hidden" name="action" value="reset_password">
-              <input type="hidden" name="id" value="<?= $u['id'] ?>">
-              <div class="modal-header">
-                <h5 class="modal-title"><?= __('user_reset_password_modal_title') ?> — <?= htmlspecialchars($u['name']) ?></h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="<?= __('common_close') ?>"></button>
-              </div>
-              <div class="modal-body">
-                <div class="mb-3">
-                  <label class="form-label"><?= __('user_temp_password_label') ?></label>
-                  <input type="text" name="new_password" class="form-control" required minlength="6">
-                  <div style="font-size:.72rem; color:var(--muted); margin-top:6px;"><?= __('user_temp_password_hint') ?></div>
-                </div>
-                <div class="form-check">
-                  <input type="checkbox" class="form-check-input" name="must_change_password" id="resetMustChange<?= $u['id'] ?>" checked>
-                  <label class="form-check-label" for="resetMustChange<?= $u['id'] ?>"><?= __('user_force_reset_label') ?></label>
-                </div>
-              </div>
-              <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><?= __('common_cancel') ?></button>
-                <button class="btn btn-primary"><?= __('user_reset_password_submit') ?></button>
-              </div>
-            </form>
-          </div>
-        </div>
-      </div>
-      <?php endif; ?>
       <?php endforeach; ?>
     </tbody>
   </table>
 </div>
+
+<!-- Reset password modals (placed outside the table to keep the Bootstrap backdrop working correctly) -->
+<?php foreach ($users as $i => $u): ?>
+<?php if ($u['id'] !== (int) $_SESSION['user_id']): ?>
+<div class="modal fade" id="resetPwModal<?= $u['id'] ?>" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post">
+        <?= csrf_field() ?>
+        <input type="hidden" name="action" value="reset_password">
+        <input type="hidden" name="id" value="<?= $u['id'] ?>">
+        <div class="modal-header">
+          <h5 class="modal-title"><?= __('user_reset_password_modal_title') ?> — <?= htmlspecialchars($u['name']) ?></h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="<?= __('common_close') ?>"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label"><?= __('user_temp_password_label') ?></label>
+            <input type="text" name="new_password" class="form-control" required minlength="6">
+            <div style="font-size:.72rem; color:var(--muted); margin-top:6px;"><?= __('user_temp_password_hint') ?></div>
+          </div>
+          <div class="form-check">
+            <input type="checkbox" class="form-check-input" name="must_change_password" id="resetMustChange<?= $u['id'] ?>" checked>
+            <label class="form-check-label" for="resetMustChange<?= $u['id'] ?>"><?= __('user_force_reset_label') ?></label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><?= __('common_cancel') ?></button>
+          <button class="btn btn-primary"><?= __('user_reset_password_submit') ?></button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<?php endif; ?>
+<?php endforeach; ?>
 
 <!-- Create user modal -->
 <div class="modal fade" id="createUserModal" tabindex="-1" data-bs-backdrop="static">
