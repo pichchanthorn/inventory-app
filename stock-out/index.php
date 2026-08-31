@@ -333,7 +333,11 @@ function addRow(productId = '', qty = 1, price = '') {
   tr._productSelectControls = controls;
 }
 function fillPrice(row, product) {
-  row.querySelector('[name="unit_price[]"]').value = product.sale_price || 0;
+  // Stock Out covers non-sale movements (damaged, lost, internal use,
+  // transfer) - it should default to what the product cost us, not what
+  // POS would charge a customer. Same field stock-in/index.php's own
+  // fillPrice() already uses.
+  row.querySelector('[name="unit_price[]"]').value = product.cost_price || 0;
 }
 addRow();
 
