@@ -102,7 +102,7 @@ require_once __DIR__ . '/../includes/header.php';
 
 <div class="row g-3">
   <div class="col-lg-8">
-    <form method="post">
+    <form method="post" id="stockOutForm">
       <?= csrf_field() ?>
       <input type="hidden" name="idempotency_token" value="<?= htmlspecialchars(bin2hex(random_bytes(32))) ?>">
       <div class="card p-3 mb-3">
@@ -336,6 +336,38 @@ function fillPrice(row, product) {
   row.querySelector('[name="unit_price[]"]').value = product.sale_price || 0;
 }
 addRow();
+
+// ---- Low-friction safeguard against a fat-fingered quantity (UI/UX
+// Batch 2 - mirrors pos/index.php's identical Batch 1 safeguard) ----
+// Not a blanket confirmation on every Stock Out (that would add friction
+// to routine, frequent entries) - only fires when a single line's
+// quantity is at least half of that product's current stock on hand, a
+// self-scaling per-product signal that catches the "typed an extra
+// digit" case (e.g. 100 instead of 10 against a stock of 52) without
+// ever bothering a normal partial removal (2 of 40 in stock). Products
+// already out of stock are skipped here - the server's own stock guard
+// handles that case.
+//
+// preventDefault()+stopPropagation() on cancel keeps the submit button
+// from being left stuck disabled - footer.php's global submit handler
+// now also checks e.defaultPrevented (Batch 2's other fix) so
+// stopPropagation() here is belt-and-suspenders, not strictly required,
+// but kept for consistency with the exact proven POS pattern.
+document.getElementById('stockOutForm').addEventListener('submit', function (e) {
+  let hasLargeQty = false;
+  document.querySelectorAll('#lineBody tr').forEach(function (tr) {
+    const productId = tr.querySelector('[name="product_id[]"]')?.value;
+    const qty = parseFloat(tr.querySelector('[name="qty[]"]')?.value) || 0;
+    const product = productId ? findProduct(productId) : null;
+    if (product && product.current_stock > 0 && qty >= product.current_stock * 0.5) {
+      hasLargeQty = true;
+    }
+  });
+  if (hasLargeQty && !confirm(<?= json_encode(__('stockout_confirm_large_qty')) ?>)) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+});
 
 // ---- Barcode scanning (camera-based, Html5Qrcode) ----
 // The scan button on a row just remembers which <tr> to fill and opens

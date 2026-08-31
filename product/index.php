@@ -325,7 +325,7 @@ require_once __DIR__ . '/../includes/header.php';
         </td>
       </tr>
 
-      <div class="modal fade" id="editModal<?= $p['id'] ?>" tabindex="-1">
+      <div class="modal fade" id="editModal<?= $p['id'] ?>" tabindex="-1" data-bs-backdrop="static">
         <div class="modal-dialog">
           <div class="modal-content">
             <form method="post">
@@ -404,7 +404,7 @@ require_once __DIR__ . '/../includes/header.php';
   </table>
 </div>
 
-<div class="modal fade" id="createModal" tabindex="-1">
+<div class="modal fade" id="createModal" tabindex="-1" data-bs-backdrop="static">
   <div class="modal-dialog">
     <div class="modal-content">
       <form method="post">

@@ -88,6 +88,12 @@ document.addEventListener('DOMContentLoaded', () => {
 document.addEventListener('submit', function (e) {
   const form = e.target;
   if (!(form instanceof HTMLFormElement) || form.method.toLowerCase() !== 'post') return;
+  // A submission already cancelled (e.g. "Cancel" on one of the app's
+  // confirm() dialogs - the static onsubmit="return confirm(...)" ones
+  // and the conditional ones alike) must not be treated as "in flight" -
+  // otherwise this handler still disables the button below even though
+  // no request was actually sent, leaving it stuck until a page reload.
+  if (e.defaultPrevented) return;
   const btn = form.querySelector('button[type="submit"], button:not([type])');
   if (!btn || btn.disabled) return;
   btn.dataset.originalHtml = btn.innerHTML;
