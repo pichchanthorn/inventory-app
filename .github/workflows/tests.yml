@@ -1,0 +1,71 @@
+name: Tests
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+jobs:
+  phpunit:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root_ci_password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -proot_ci_password"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      APP_ENV: test
+      DB_HOST: 127.0.0.1
+      DB_DATABASE: inventory_test
+      DB_USERNAME: test_user
+      DB_PASSWORD: test_pass
+      DB_DATABASE_MIGRATIONS_TEST: inventory_test_migrations
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo, pdo_mysql, curl, json
+          coverage: none
+
+      - name: Install Composer dependencies
+        run: composer install --prefer-dist --no-progress
+
+      - name: Wait for MySQL and provision test databases/user
+        run: |
+          set -e
+          for i in $(seq 1 30); do
+            if mysqladmin ping -h127.0.0.1 -uroot -proot_ci_password --silent; then
+              echo "MySQL is ready."
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "MySQL did not become ready in time." >&2
+              exit 1
+            fi
+            sleep 2
+          done
+          mysql -h127.0.0.1 -uroot -proot_ci_password -e "
+            CREATE DATABASE IF NOT EXISTS inventory_test CHARACTER SET utf8mb4;
+            CREATE DATABASE IF NOT EXISTS inventory_test_migrations CHARACTER SET utf8mb4;
+            CREATE USER IF NOT EXISTS 'test_user'@'%' IDENTIFIED BY 'test_pass';
+            GRANT ALL PRIVILEGES ON inventory_test.* TO 'test_user'@'%';
+            GRANT ALL PRIVILEGES ON inventory_test_migrations.* TO 'test_user'@'%';
+            FLUSH PRIVILEGES;"
+
+      - name: Run J1 test suite
+        run: vendor/bin/phpunit
