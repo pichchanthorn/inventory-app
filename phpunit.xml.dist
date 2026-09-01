@@ -22,5 +22,8 @@
         <testsuite name="schema">
             <directory>tests/Schema</directory>
         </testsuite>
+        <testsuite name="backup">
+            <directory>tests/Backup</directory>
+        </testsuite>
     </testsuites>
 </phpunit>
