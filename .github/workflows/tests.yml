@@ -62,9 +62,11 @@ jobs:
           mysql -h127.0.0.1 -uroot -proot_ci_password -e "
             CREATE DATABASE IF NOT EXISTS inventory_test CHARACTER SET utf8mb4;
             CREATE DATABASE IF NOT EXISTS inventory_test_migrations CHARACTER SET utf8mb4;
+            CREATE DATABASE IF NOT EXISTS inventory_test_backup_restore CHARACTER SET utf8mb4;
             CREATE USER IF NOT EXISTS 'test_user'@'%' IDENTIFIED BY 'test_pass';
             GRANT ALL PRIVILEGES ON inventory_test.* TO 'test_user'@'%';
             GRANT ALL PRIVILEGES ON inventory_test_migrations.* TO 'test_user'@'%';
+            GRANT ALL PRIVILEGES ON inventory_test_backup_restore.* TO 'test_user'@'%';
             FLUSH PRIVILEGES;"
 
       - name: Run J1 test suite
