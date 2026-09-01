@@ -145,16 +145,181 @@ with a new `sale` transaction type
 parallel code path. Cart entry, display-only cash received / change due,
 and a printable receipt.
 
-**Phase E — stabilization:** A follow-up audit of the shipped POS module
-found three gaps: `sale` transactions were invisible to the dashboard
-movement chart and stock-report KPIs (both only queried `in`/`out`/
-`adjustment`); there was no server-side floor on `unit_price` in POS or
-Stock Out; and a browser refresh right after checkout could resubmit the
-sale. Fixed by widening the reporting queries to include `sale`, rejecting
-negative unit prices server-side (zero remains valid), and switching POS's
-success path to Post/Redirect/Get with the receipt held in a one-time
-session flash, so a refresh re-fetches the GET instead of resubmitting the
-POST.
+---
+
+## Phase E — Reporting Integration, Price Validation, and Duplicate-Sale Prevention
+
+A follow-up audit of the shipped POS module found three gaps: `sale`
+transactions were invisible to the dashboard movement chart and
+stock-report KPIs (both only queried `in`/`out`/`adjustment`); there was
+no server-side floor on `unit_price` in POS or Stock Out; and a browser
+refresh right after checkout could resubmit the sale. Fixed by widening
+the reporting queries to include `sale`, rejecting negative unit prices
+server-side in `resolvePriceField()` (zero remains valid — a free/
+promotional line), and switching POS's success path to Post/Redirect/Get
+with the receipt held in a one-time session flash, so a refresh
+re-fetches the GET instead of resubmitting the POST.
+
+---
+
+## Phase F — UI/UX Polish and Khmer/English Localization
+
+Added full bilingual support: `includes/lang.php` reads `$_SESSION['lang']`
+(defaulting to `en`, switchable via a `?lang=` query param) and loads the
+matching `lang/en.php` or `lang/km.php` translation table, with every
+user-facing string in the app routed through a `__($key)` helper rather
+than hardcoded text. `localizedDate()` additionally localizes the
+month-name portion of a formatted date into Khmer (PHP's own `date()` has
+no built-in Khmer locale), leaving every other date component and
+English-locale output as a pure pass-through.
+
+Alongside localization, a series of UI/UX polish passes improved Khmer
+typography and product-modal sizing, consolidated role badges, added a
+search loading state, fixed a validation gap in the modal-based edit
+forms, localized the brand/title/theme labels/dates/close-button labels
+throughout the app, corrected dark-theme alert styling, and polished the
+login/register screens (autofill theming, a password-strength meter).
+
+---
+
+## Phase H — POS Cash/Change Persistence and Receipt Lookup
+
+`stock_transactions.cash_received` (`database/migrations/002_add_pos_cash_received.sql`)
+persists the cash tendered for a POS sale, so a receipt can be reopened
+later and still show what the customer paid and was given in change —
+previously this was display-only at the moment of sale and lost
+afterward. `change_due` is deliberately not stored alongside it; it is
+always derived at read time as cash received minus the line-item total,
+the same way every other total in the app is computed from line items
+rather than cached. `pos/receipt.php` adds a standalone, read-only
+lookup for any past sale's receipt by reference number, reusing the same
+receipt markup POS's own post-checkout flash renders
+(`includes/receipt_view.php`), so the two views can never drift apart. A
+`NULL` `cash_received` on an older, pre-migration row is rendered as "not
+recorded," never as a false $0.00.
+
+---
+
+## Business Invoice & Business Settings
+
+The shared receipt/invoice partial (`includes/receipt_view.php`) was
+extended into a printable, professional-looking business invoice, used
+both by a fresh POS checkout and by the past-sale receipt lookup:
+
+- **Business identity** — shop name, address, phone, and email, plus the
+  app logo, rendered in the invoice header. These four fields
+  (`app_settings.business_name` / `business_address` / `business_phone` /
+  `business_email`, added in
+  `database/migrations/013_add_business_settings.sql`) are nullable and
+  independent of any one shop; an Admin sets them from Settings, and a
+  blank field is simply omitted from the printed invoice rather than
+  showing an empty line.
+- **Package information** — a dedicated column shows each line item's
+  `package_size` (e.g. "50kg"), falling back to an em dash when not set.
+- **Payment status and due date** — for a credit sale, the invoice shows
+  a payment-status badge (Paid / Partially Paid / Unpaid, driven by the
+  same generated `customer_debts.status` column the Customers/Debts page
+  reads) and, when set, the debt's due date. For a cash sale it always
+  shows Paid.
+- **Customer/debt information** — a credit sale's invoice additionally
+  shows the customer's name and phone, the linked debt's own reference
+  number, and the amount paid/remaining balance so far, in place of the
+  cash-received/change-due lines a cash sale shows instead.
+- **Print-friendly layout** — a dedicated Print Receipt button
+  (`window.print()`) and print-only CSS rules keep the on-screen action
+  buttons out of the printed page.
+
+---
+
+## Phase J — Production Reliability & Quality Hardening
+
+A dedicated phase focused on verifying — not redesigning — the
+application's core reliability guarantees: automated regression coverage,
+continuous integration, and backup/restore recoverability, plus a manual
+smoke check of the running application.
+
+### J1 — Automated Regression Testing
+
+Added a PHPUnit test suite (`tests/`, `composer.json`, `phpunit.xml.dist`)
+covering the business-critical paths identified as highest-priority for
+this application: stock in/out/adjustment integrity and negative-stock
+prevention, transaction rollback, POS cash sales, idempotency protection,
+customer debt creation/payment (including overpayment rejection), RBAC
+and CSRF enforcement driven over real HTTP requests, reference-number
+generation, and migration/schema integrity — each of the concurrency-
+sensitive behaviors (stock-out races, debt-payment races, reference-number
+generation races) verified using genuinely separate OS processes and
+database connections, not simulated sequential calls. The suite runs
+against a dedicated, disposable test database selected purely via
+environment variables that `config/db.php` already supported, with a
+hard safety guard that refuses to run unless the target database name is
+explicitly test-scoped. At the end of J1, the suite comprised 65 tests
+and 227 assertions, all passing.
+
+### J2 — GitHub Actions CI
+
+Added `.github/workflows/tests.yml`, the project's first GitHub Actions
+workflow: it runs on pull requests targeting `main` and on pushes to
+`main`, provisioning a disposable MySQL 8.4 service container (matching
+the version already used by `docker-compose.yml`) and a scoped,
+CI-local database user before running the full PHPUnit suite. No
+production secrets or credentials are used anywhere in the workflow. An
+initial version of the workflow was missing the database-provisioning
+step for the scratch database J3's restore test needs (see below); this
+was identified from an actual CI run and corrected in a follow-up commit.
+
+### J3 — Backup & Restore Verification
+
+Added `tests/Backup/BackupRestoreTest.php`, which exercises the real,
+unmodified production backup function
+(`includes/backup.php::streamDatabaseBackup()`) end to end: seeds a
+representative dataset, captures a real backup, restores it into a
+completely separate disposable database via the real `mysql` CLI client
+(not a simulated import), and verifies the restored data — including
+Khmer text, decimal/money precision, generated columns, foreign-key
+relationships, `AUTO_INCREMENT` continuity, and that a database `CHECK`
+constraint is still actually enforced post-restore, not merely present.
+This added 2 tests and 79 assertions, bringing the full suite to **67
+tests and 306 assertions, all passing** locally. A companion runbook,
+`RECOVERY.md`, documents the manual recovery procedure for this
+application's actual deployment model (a local machine, not a managed
+cloud host).
+
+The CI workflow initially failed the first time these tests ran on
+GitHub Actions: the provisioning step created and granted access to the
+two databases J1 already needed, but not the third, separate database
+J3's restore test uses as its disposable restore target. This was
+diagnosed from the actual CI error and fixed by extending the same
+provisioning step to also create and grant that third database — a
+two-line change to `.github/workflows/tests.yml`, with no change to any
+test or application code.
+
+### J4 — Local Smoke Verification
+
+A manual-style smoke check of the application's business-critical pages
+and flows (authentication, dashboard, product catalog, Stock In/Out/
+Adjustment forms, POS, Customers & Debts, Stock Reports, User Management,
+Settings, Audit Log, Profile, the Khmer/English language toggle, and the
+availability of the backup action) — run against a freshly seeded
+instance of the current codebase to confirm every page loads without a
+PHP or SQL error and shows real data, rather than exercising the
+automated test suite again. This was a smoke check, not a full audit,
+and not a substitute for verifying the application on a real deployment
+target directly.
+
+---
+
+## Current Engineering Status
+
+PCTN Inventory V1 is a working small-business inventory, POS, and
+customer-debt management system, built and hardened incrementally on a
+plain PHP + MySQL/MariaDB architecture — no framework migration is
+planned. Current engineering priorities, in order, are: accurate stock,
+accurate sales, accurate debt/payment records, accurate invoices,
+auditability, backup/recovery, security, and maintainability. Phase J
+work verified the reliability side of that list (automated regression
+coverage, CI, and backup/restore recoverability); the two known,
+non-blocking gaps that remain are tracked below under Known Limitations.
 
 ---
 
@@ -175,6 +340,23 @@ POST.
       yet — currently behaves the same as `User`.~~ **Resolved in Phase 6**
       — enforced via `canWrite()`/`isViewer()` across all 8 write-capable
       modules.
-- [ ] No automated tests — all verification so far has been manual /
+- [x] ~~No automated tests — all verification so far has been manual /
       scripted `curl` and direct-PHP checks during development sessions,
-      not a committed test suite.
+      not a committed test suite.~~ **Resolved in Phase J1/J3** — a
+      committed PHPUnit suite (`tests/`) now covers stock, POS, debt,
+      RBAC/CSRF, reference-generation, migration/schema, and
+      backup/restore behavior against a disposable test database, wired
+      into GitHub Actions CI (Phase J2). See "Phase J — Production
+      Reliability & Quality Hardening" above.
+- [ ] Backup failure/error handling — `settings/index.php`'s backup
+      action calls `includes/backup.php::streamDatabaseBackup()` with no
+      `try`/`catch` around it, unlike every other mutating action in the
+      app. A failure here would produce a truncated download with no
+      on-screen explanation, not data loss or corruption. **Severity:
+      LOW, deferred** — not a blocker to using the backup feature today.
+- [ ] Backup audit logging — creating a database backup does not call
+      `logAudit()`, so there is currently no audit-trail record of who
+      exported a full copy of the database and when, unlike every other
+      sensitive Admin action in the app. **Severity: MEDIUM, deferred**
+      — a real accountability gap, not a data-safety or correctness
+      issue; does not affect the backup feature's own reliability.
