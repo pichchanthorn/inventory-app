@@ -1,3 +1,9 @@
 uploads/avatars/*
 !uploads/avatars/.gitkeep
 .DS_Store
+
+# J1 automated test suite (PHPUnit)
+/vendor/
+/composer.lock
+/.phpunit.cache/
+/.phpunit.result.cache
