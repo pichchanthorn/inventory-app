@@ -346,6 +346,21 @@ table td, table th{ border-color:var(--line) !important; }
   #lineTable.table-cards-mobile td.row-price,
   #lineTable.table-cards-mobile td.row-total{ flex:1 1 0; min-width:0; padding-top:0; padding-bottom:0; }
   #lineTable.table-cards-mobile td.row-remove{ flex:0 0 auto; padding-top:0; padding-bottom:0; }
+
+  /* UI-2 / F3: POS's Qty/Unit Price inputs specifically (the
+     .pos-line-table class added to POS's own #lineTable, alongside the
+     shared #lineTable id also reused as-is by Stock In/Out - scoping on
+     the class rather than the id keeps this POS-only, since an
+     id-based rule here would silently also resize Stock In/Out's own
+     qty/cost inputs, which is out of scope for this finding). Bumps the
+     .form-control-sm height/font-size the JS-generated rows already use
+     from ~31px to a comfortable ~44px tap target, without touching
+     .row-total (plain text, not an input) or the row's flex/width
+     rules above, so nothing about horizontal layout changes. */
+  .pos-line-table td.row-qty input,
+  .pos-line-table td.row-price input{
+    min-height:44px; font-size:1rem; padding:.5rem .65rem;
+  }
 }
 
 /* dashboard.php stat cards at mobile widths - a separate block (rather than

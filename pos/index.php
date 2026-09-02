@@ -238,7 +238,7 @@ require_once __DIR__ . '/../includes/header.php';
           <div class="bracket-label mb-0"><?= __('common_line_items') ?></div>
           <button type="button" class="btn btn-sm btn-outline-primary" onclick="addRow()"><?= __('common_add_product') ?></button>
         </div>
-        <table class="table table-cards-mobile" id="lineTable">
+        <table class="table table-cards-mobile pos-line-table" id="lineTable">
           <thead class="table-light">
             <tr><th><?= __('common_product') ?></th><th style="width:100px;"><?= __('common_qty') ?></th><th style="width:130px;"><?= __('stockout_unit_price') ?></th><th style="width:110px;" class="text-end"><?= __('pos_line_total') ?></th><th style="width:40px;"></th></tr>
           </thead>
