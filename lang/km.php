@@ -243,6 +243,11 @@ return [
     // POS
     'pos_line_total' => 'សរុបជួរ',
     'pos_subtotal_label' => 'សរុបរង',
+    'pos_scan_barcode' => 'ស្កេនបាកូដ',
+    'pos_scan_modal_title' => 'ស្កេនបាកូដ',
+    'pos_scan_no_match' => 'រកមិនឃើញផលិតផលសម្រាប់បាកូដ/SKU៖',
+    'pos_scan_camera_error' => 'កាមេរ៉ាមិនអាចប្រើបានទេ — សូមប្រើបញ្ជីផលិតផលជំនួសវិញ។',
+    'pos_scan_lib_error' => 'ឧបករណ៍ស្កេនបាកូដមិនអាចផ្ទុកបានទេ — សូមប្រើបញ្ជីផលិតផលជំនួសវិញ។',
     'pos_payment_section_title' => 'ការទូទាត់',
     'pos_cash_received_label' => 'ប្រាក់ទទួលបាន',
     'pos_change_due_label' => 'ប្រាក់អាប់',

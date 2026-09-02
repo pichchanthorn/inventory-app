@@ -236,7 +236,10 @@ require_once __DIR__ . '/../includes/header.php';
       <div class="card p-3">
         <div class="d-flex justify-content-between align-items-center mb-3">
           <div class="bracket-label mb-0"><?= __('common_line_items') ?></div>
-          <button type="button" class="btn btn-sm btn-outline-primary" onclick="addRow()"><?= __('common_add_product') ?></button>
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#scanModal" title="<?= __('pos_scan_barcode') ?>" aria-label="<?= __('pos_scan_barcode') ?>"><i class="bi bi-upc-scan"></i></button>
+            <button type="button" class="btn btn-sm btn-outline-primary" onclick="addRow()"><?= __('common_add_product') ?></button>
+          </div>
         </div>
         <table class="table table-cards-mobile pos-line-table" id="lineTable">
           <thead class="table-light">
@@ -333,6 +336,28 @@ require_once __DIR__ . '/../includes/header.php';
   </div>
 </div>
 
+<div class="modal fade" id="scanModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><?= __('pos_scan_modal_title') ?></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="<?= __('common_close') ?>"></button>
+      </div>
+      <div class="modal-body">
+        <div id="scanReader"></div>
+        <div id="scanStatus" class="text-secondary small mt-2"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><?= __('common_cancel') ?></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Loaded only on this page, not globally in header.php/footer.php,
+     same as Stock In/Out - barcode scanning is the only feature that
+     needs it here either. -->
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
 const PRODUCTS = <?= json_encode($products) ?>;
 const CUSTOMERS = <?= json_encode($customers) ?>;
@@ -345,6 +370,9 @@ const T_QTY = <?= json_encode(__('common_qty')) ?>;
 const T_UNIT_PRICE = <?= json_encode(__('stockout_unit_price')) ?>;
 const T_LINE_TOTAL = <?= json_encode(__('pos_line_total')) ?>;
 const T_NO_PHONE = <?= json_encode(__('pos_customer_no_phone')) ?>;
+const T_SCAN_NO_MATCH = <?= json_encode(__('pos_scan_no_match')) ?>;
+const T_SCAN_CAMERA_ERROR = <?= json_encode(__('pos_scan_camera_error')) ?>;
+const T_SCAN_LIB_ERROR = <?= json_encode(__('pos_scan_lib_error')) ?>;
 
 function productLabel(p) {
   const size = p.package_size ? ` — ${p.package_size}` : '';
@@ -665,6 +693,85 @@ document.getElementById('posForm').addEventListener('submit', function (e) {
     e.stopPropagation();
   }
 });
+
+// ---- Barcode scanning (camera-based, Html5Qrcode) ----
+// Same library/version and shown.bs.modal/hidden.bs.modal-driven camera
+// lifecycle as Stock In/Out's scanner (see those files) - Cancel, the X
+// button, and a backdrop click all stop the camera the same way, no
+// separate cleanup path to keep in sync.
+//
+// Unlike Stock In/Out, this is one persistent cart-level scan action
+// rather than a per-row button, so there is no scanTargetRow to track -
+// a decoded product is resolved directly against the cart in
+// addScannedProduct() instead of being handed to one specific row.
+let scanInstance = null;
+let scanHandled = false;
+
+const scanModalEl = document.getElementById('scanModal');
+const scanStatusEl = document.getElementById('scanStatus');
+
+scanModalEl.addEventListener('shown.bs.modal', () => {
+  scanHandled = false;
+  scanStatusEl.textContent = '';
+  if (typeof Html5Qrcode === 'undefined') {
+    scanStatusEl.textContent = T_SCAN_LIB_ERROR;
+    return;
+  }
+  scanInstance = new Html5Qrcode('scanReader');
+  scanInstance.start(
+    { facingMode: 'environment' },
+    { fps: 10, qrbox: { width: 250, height: 150 } },
+    onScanDecoded,
+    () => {} // per-frame "no barcode in this frame" - expected continuously while aiming, not an error
+  ).catch(() => {
+    // Permission denied, no camera, or insecure context (camera requires
+    // HTTPS or localhost) - the manual product dropdown is completely
+    // unaffected by this failing.
+    scanStatusEl.textContent = T_SCAN_CAMERA_ERROR;
+  });
+});
+
+scanModalEl.addEventListener('hidden.bs.modal', () => {
+  if (scanInstance) {
+    scanInstance.stop().then(() => scanInstance.clear()).catch(() => {});
+    scanInstance = null;
+  }
+});
+
+function onScanDecoded(decodedText) {
+  if (scanHandled) return; // camera keeps decoding frames during the async stop() below
+  const code = decodedText.trim();
+  const product = PRODUCTS.find(p => (p.barcode && p.barcode === code) || (p.sku && p.sku === code));
+  if (!product) {
+    scanStatusEl.textContent = `${T_SCAN_NO_MATCH} ${code}`;
+    return; // keep the scanner running so the user can try again
+  }
+  scanHandled = true;
+  addScannedProduct(product);
+  bootstrap.Modal.getInstance(scanModalEl)?.hide();
+}
+
+// Cart-aware add: increments qty on the first existing row that already
+// holds this product (deterministic top-to-bottom DOM order, same order
+// updateSubtotal() already iterates in - if a product were ever manually
+// added to more than one row, the earliest one wins, matching how a
+// cashier would expect "the" line for a product to be the first one they
+// see), otherwise appends a fresh row via the same addRow() manual
+// selection already uses, pre-filled the same way fillPrice() would
+// (qty=1, unit_price=sale_price) - addRow() already calls
+// updateSubtotal() itself, so this only needs to call it explicitly on
+// the increment path.
+function addScannedProduct(product) {
+  const existingRow = Array.from(document.querySelectorAll('#lineBody tr'))
+    .find(tr => tr.querySelector('[name="product_id[]"]').value === String(product.id));
+  if (existingRow) {
+    const qtyInput = existingRow.querySelector('[name="qty[]"]');
+    qtyInput.value = (parseFloat(qtyInput.value) || 0) + 1;
+    updateSubtotal();
+  } else {
+    addRow(String(product.id), 1, product.sale_price || 0);
+  }
+}
 </script>
 <?php endif; ?>
 

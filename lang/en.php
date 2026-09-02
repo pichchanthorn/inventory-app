@@ -243,6 +243,11 @@ return [
     // POS
     'pos_line_total' => 'Line Total',
     'pos_subtotal_label' => 'Subtotal',
+    'pos_scan_barcode' => 'Scan barcode',
+    'pos_scan_modal_title' => 'Scan Barcode',
+    'pos_scan_no_match' => 'No product found for barcode/SKU:',
+    'pos_scan_camera_error' => 'Camera unavailable — use the product list instead.',
+    'pos_scan_lib_error' => 'Barcode scanner failed to load — use the product list instead.',
     'pos_payment_section_title' => 'Payment',
     'pos_cash_received_label' => 'Cash Received',
     'pos_change_due_label' => 'Change Due',
