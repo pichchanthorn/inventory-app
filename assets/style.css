@@ -519,6 +519,30 @@ table td, table th{ border-color:var(--line) !important; }
   }
 }
 
+/* U5-4 / U5-5: same fix as F2 above, extended to Stock In's and Stock
+   Out's own Save buttons - identical structural problem (a line-item
+   table that can grow, with the single submit button at the very
+   bottom of the last card), same reasoning throughout: CSS-only, one
+   real submit control each (no duplicate to keep in sync), z-index and
+   box-shadow match #posSubmitButton exactly, and width:auto !important
+   is required for the same reason - left/right insets, not each
+   button's own .w-100, now determine its width. Kept as two separate
+   id-scoped rules (not a shared class) since #stockInSubmitButton and
+   #stockOutSubmitButton are each already page-unique ids - no
+   #lineTable-style collision risk here to design around. */
+@media (max-width: 767.98px){
+  #stockInForm{ padding-bottom: 4.5rem; }
+  #stockInSubmitButton{
+    position:fixed; left:.75rem; right:.75rem; bottom:.75rem; width:auto !important;
+    z-index:1030; box-shadow:0 8px 24px rgba(0,0,0,.35);
+  }
+  #stockOutForm{ padding-bottom: 4.5rem; }
+  #stockOutSubmitButton{
+    position:fixed; left:.75rem; right:.75rem; bottom:.75rem; width:auto !important;
+    z-index:1030; box-shadow:0 8px 24px rgba(0,0,0,.35);
+  }
+}
+
 /* Low-stock product cards on mobile (<768px) - swap the full-card danger
    tint for a small corner badge instead, since a big red-tinted block
    behind category/cost/price text hurts readability at this width. Desktop
@@ -651,6 +675,19 @@ table tbody tr:hover .row-actions .btn,
   .auth-left .auth-footer-meta{ display:none; }
   .auth-right{ flex:none; padding:24px; }
   .auth-form{ max-width:none; }
+
+  /* U5-1: the padding above only cleared the toggle visually, not for
+     clicks/taps. .auth-left is position:relative with z-index:auto and
+     comes later in the DOM than the toggle link, so per normal CSS
+     stacking rules it still painted (and hit-tested) above the toggle
+     wherever their boxes overlap - the toggle text remained visible,
+     but the tap landed on .auth-left instead, silently doing nothing.
+     A positive z-index lifts the toggle out of that auto-level stacking
+     step so it wins regardless of DOM order. body > selects only the
+     auth pages' own toggle - .theme-toggle-btn is a shared class also
+     used by the sidebar's theme/language controls elsewhere in the app,
+     which are nested (never a direct child of body) and unaffected. */
+  body > a.theme-toggle-btn{ z-index:2; }
 }
 
 /* nav-pills (Stock Reports tabs) - Bootstrap defaults are unreadable on dark backgrounds */

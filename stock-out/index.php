@@ -128,7 +128,7 @@ require_once __DIR__ . '/../includes/header.php';
           <thead class="table-light"><tr><th><?= __('common_product') ?></th><th style="width:100px;"><?= __('common_qty') ?></th><th style="width:130px;"><?= __('stockout_unit_price') ?></th><th style="width:40px;"></th></tr></thead>
           <tbody id="lineBody"></tbody>
         </table>
-        <button class="btn text-white w-100 mt-2" style="background:var(--danger);"><i class="bi bi-upload"></i> <?= __('stockout_submit_button') ?></button>
+        <button id="stockOutSubmitButton" class="btn text-white w-100 mt-2" style="background:var(--danger);"><i class="bi bi-upload"></i> <?= __('stockout_submit_button') ?></button>
       </div>
     </form>
   </div>

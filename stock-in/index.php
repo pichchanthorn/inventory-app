@@ -132,7 +132,7 @@ require_once __DIR__ . '/../includes/header.php';
           <thead class="table-light"><tr><th><?= __('common_product') ?></th><th style="width:100px;"><?= __('common_qty') ?></th><th style="width:130px;"><?= __('stockin_unit_cost') ?></th><th style="width:40px;"></th></tr></thead>
           <tbody id="lineBody"></tbody>
         </table>
-        <button class="btn btn-primary w-100 mt-2"><i class="bi bi-download"></i> <?= __('stockin_submit_button') ?></button>
+        <button id="stockInSubmitButton" class="btn btn-primary w-100 mt-2"><i class="bi bi-download"></i> <?= __('stockin_submit_button') ?></button>
       </div>
     </form>
   </div>
