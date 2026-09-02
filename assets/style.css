@@ -134,6 +134,22 @@ body[lang="km"] .badge-stock { font-size: .84rem; font-weight: 600; }
 /* icon reads slightly bolder/richer than the label text on the active item */
 .sidebar .nav-link.active i{ color:var(--accent); filter:saturate(1.3) brightness(1.15); }
 
+/* NEW-F1: the scrollable middle section of the sidebar nav (Overview
+   through Administration), as opposed to the brand row above it and the
+   Account section (Profile/theme/language/Sign Out) below it, both of
+   which stay outside this container. .offcanvas-body is already
+   d-flex flex-column (see markup), so this just claims the remaining
+   space and scrolls internally instead of pushing the footer links off
+   the bottom of the mobile drawer - which is what happened in Khmer,
+   where the larger lang=km nav font/line-height (see the Khmer
+   typography block below) makes the full link list taller than a phone
+   viewport. min-height:0 is required on a flex child for its own
+   overflow:auto to actually engage instead of growing to fit content.
+   At >=768px (static sidebar, not offcanvas) there's already enough
+   height for everything to fit without scrolling, so this is a no-op
+   there - nothing to preserve, since nothing visibly changes. */
+.sidebar-nav-scroll{ flex:1 1 auto; overflow-y:auto; min-height:0; }
+
 /* mobile offcanvas sidebar (<768px) - Bootstrap's offcanvas defaults to a
    white background/border and a 400px width; override via its own CSS
    vars (same "Bootstrap defaults to light, force it to match the theme"

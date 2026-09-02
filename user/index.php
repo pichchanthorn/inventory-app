@@ -217,7 +217,7 @@ require_once __DIR__ . '/../includes/header.php';
 </form>
 
 <div class="card">
-  <table class="table mb-0 align-middle">
+  <table class="table mb-0 align-middle table-cards-mobile">
     <thead class="table-light">
       <tr><th>#</th><th><?= __('common_name') ?></th><th><?= __('common_email') ?></th><th><?= __('user_col_role') ?></th><th style="width:260px;"><?= __('user_col_change_role') ?></th><th style="width:170px;"><?= __('common_actions') ?></th></tr>
     </thead>
@@ -227,11 +227,11 @@ require_once __DIR__ . '/../includes/header.php';
       <?php endif; ?>
       <?php foreach ($users as $i => $u): ?>
       <tr>
-        <td><?= $i + 1 ?></td>
-        <td><?= htmlspecialchars($u['name']) ?></td>
-        <td><?= htmlspecialchars($u['email']) ?></td>
-        <td><span class="badge-stock <?= $roleBadgeClass[$u['role_name']] ?? 'badge-muted' ?>"><?= htmlspecialchars($roleLabels[$u['role_name']] ?? $u['role_name']) ?></span></td>
-        <td>
+        <td class="row-number"><?= $i + 1 ?></td>
+        <td class="row-title"><?= htmlspecialchars($u['name']) ?></td>
+        <td data-label="<?= htmlspecialchars(__('common_email')) ?>"><?= htmlspecialchars($u['email']) ?></td>
+        <td data-label="<?= htmlspecialchars(__('user_col_role')) ?>"><span class="badge-stock <?= $roleBadgeClass[$u['role_name']] ?? 'badge-muted' ?>"><?= htmlspecialchars($roleLabels[$u['role_name']] ?? $u['role_name']) ?></span></td>
+        <td data-label="<?= htmlspecialchars(__('user_col_change_role')) ?>">
           <?php if ($u['id'] === (int) $_SESSION['user_id']): ?>
             <span class="text-secondary small"><?= __('user_this_is_you') ?></span>
           <?php else: ?>
@@ -248,7 +248,7 @@ require_once __DIR__ . '/../includes/header.php';
             </form>
           <?php endif; ?>
         </td>
-        <td>
+        <td class="row-actions">
           <?php if ($u['id'] !== (int) $_SESSION['user_id']): ?>
             <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#resetPwModal<?= $u['id'] ?>">
               <i class="bi bi-key"></i> <?= __('user_reset_password_button') ?>

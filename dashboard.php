@@ -64,7 +64,7 @@ require_once __DIR__ . '/includes/header.php';
 ?>
 <h4 class="mb-4"><?= __('dashboard_title') ?></h4>
 <div class="row g-3">
-  <div class="col-md-3">
+  <div class="col-6 col-md-3">
     <div class="card p-3 dash-stat-card dash-stat-card-link">
       <div class="dash-stat-icon"><i class="bi bi-box"></i></div>
       <div class="dash-stat-value mono"><?= $totalProducts ?></div>
@@ -72,7 +72,7 @@ require_once __DIR__ . '/includes/header.php';
       <a href="<?= BASE_URL ?>/product/index.php" class="stretched-link" aria-label="<?= htmlspecialchars(__('dashboard_total_products')) ?>"></a>
     </div>
   </div>
-  <div class="col-md-3">
+  <div class="col-6 col-md-3">
     <div class="card p-3 dash-stat-card dash-stat-card-link">
       <div class="dash-stat-icon"><i class="bi bi-boxes"></i></div>
       <div class="dash-stat-value mono"><?= $totalUnits ?></div>
@@ -80,7 +80,7 @@ require_once __DIR__ . '/includes/header.php';
       <a href="<?= BASE_URL ?>/product/index.php" class="stretched-link" aria-label="<?= htmlspecialchars(__('dashboard_units_in_stock')) ?>"></a>
     </div>
   </div>
-  <div class="col-md-3">
+  <div class="col-6 col-md-3">
     <div class="card p-3 dash-stat-card dash-stat-card-link">
       <div class="dash-stat-icon"><i class="bi bi-cash-coin"></i></div>
       <div class="dash-stat-value mono">$<?= number_format($totalValue, 2) ?></div>
@@ -88,7 +88,7 @@ require_once __DIR__ . '/includes/header.php';
       <a href="<?= BASE_URL ?>/stock-report/index.php" class="stretched-link" aria-label="<?= htmlspecialchars(__('dashboard_inventory_value')) ?>"></a>
     </div>
   </div>
-  <div class="col-md-3">
+  <div class="col-6 col-md-3">
     <div class="card p-3 dash-stat-card dash-stat-card-link <?= $lowStock > 0 ? 'dash-stat-card-danger' : '' ?>">
       <div class="dash-stat-icon <?= $lowStock > 0 ? 'dash-stat-icon-danger' : '' ?>"><i class="bi bi-exclamation-triangle"></i></div>
       <div class="dash-stat-value mono <?= $lowStock > 0 ? 'text-danger' : '' ?>"><?= $lowStock ?></div>
@@ -101,7 +101,7 @@ require_once __DIR__ . '/includes/header.php';
       <a href="<?= BASE_URL ?>/product/index.php?filter=low_stock" class="stretched-link" aria-label="<?= htmlspecialchars(__('dashboard_low_stock')) ?>"></a>
     </div>
   </div>
-  <div class="col-md-3">
+  <div class="col-6 col-md-3">
     <div class="card p-3 dash-stat-card dash-stat-card-link <?= $overdueDebtCount > 0 ? 'dash-stat-card-danger' : '' ?>">
       <div class="dash-stat-icon <?= $overdueDebtCount > 0 ? 'dash-stat-icon-danger' : '' ?>"><i class="bi bi-wallet2"></i></div>
       <div class="dash-stat-value mono <?= $overdueDebtCount > 0 ? 'text-danger' : '' ?>">$<?= number_format($totalOutstanding, 2) ?></div>

@@ -38,7 +38,7 @@ require_once __DIR__ . '/../includes/header.php';
 <h4 class="mb-4"><?= __('audit_title') ?></h4>
 
 <div class="card">
-  <table class="table mb-0 align-middle">
+  <table class="table mb-0 align-middle table-cards-mobile">
     <thead class="table-light">
       <tr>
         <th><?= __('audit_col_time') ?></th>
@@ -59,11 +59,11 @@ require_once __DIR__ . '/../includes/header.php';
         $entityName = ($after['name'] ?? null) ?? ($before['name'] ?? '—');
       ?>
       <tr>
-        <td class="mono text-secondary small"><?= htmlspecialchars($row['created_at']) ?></td>
-        <td><?= htmlspecialchars($row['actor_name'] ?? '—') ?></td>
-        <td><span class="badge-stock <?= $actionBadgeClass[$row['action']] ?? 'badge-normal' ?>"><?= htmlspecialchars($actionLabels[$row['action']] ?? $row['action']) ?></span></td>
-        <td><?= htmlspecialchars($entityTypeLabels[$row['entity_type']] ?? $row['entity_type']) ?></td>
-        <td><?= htmlspecialchars($entityName) ?></td>
+        <td class="mono text-secondary small" data-label="<?= htmlspecialchars(__('audit_col_time')) ?>"><?= htmlspecialchars($row['created_at']) ?></td>
+        <td data-label="<?= htmlspecialchars(__('audit_col_actor')) ?>"><?= htmlspecialchars($row['actor_name'] ?? '—') ?></td>
+        <td data-label="<?= htmlspecialchars(__('audit_col_action')) ?>"><span class="badge-stock <?= $actionBadgeClass[$row['action']] ?? 'badge-normal' ?>"><?= htmlspecialchars($actionLabels[$row['action']] ?? $row['action']) ?></span></td>
+        <td data-label="<?= htmlspecialchars(__('audit_col_entity_type')) ?>"><?= htmlspecialchars($entityTypeLabels[$row['entity_type']] ?? $row['entity_type']) ?></td>
+        <td data-label="<?= htmlspecialchars(__('audit_col_entity')) ?>"><?= htmlspecialchars($entityName) ?></td>
         <td>
           <details>
             <summary class="text-primary" style="cursor:pointer;"><?= __('audit_view_details') ?></summary>

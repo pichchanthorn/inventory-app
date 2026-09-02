@@ -54,6 +54,7 @@ function navClass($page, $active) {
       <span class="fs-5 fw-bold"><?= __('app_brand_name') ?></span>
     </div>
 
+    <div class="sidebar-nav-scroll">
     <div class="sidebar-section"><?= __('nav_overview') ?></div>
     <a class="<?= navClass('dashboard', $activePage) ?>" href="<?= BASE_URL ?>/dashboard.php"><i class="bi bi-speedometer2 me-2"></i><?= __('nav_dashboard') ?></a>
 
@@ -79,6 +80,7 @@ function navClass($page, $active) {
     <a class="<?= navClass('settings', $activePage) ?>" href="<?= BASE_URL ?>/settings/index.php"><i class="bi bi-sliders me-2"></i><?= __('nav_settings') ?></a>
     <a class="<?= navClass('audit', $activePage) ?>" href="<?= BASE_URL ?>/audit/index.php"><i class="bi bi-clock-history me-2"></i><?= __('nav_audit_log') ?></a>
     <?php endif; ?>
+    </div>
 
     <div class="sidebar-section"><?= __('nav_account') ?></div>
     <a class="<?= navClass('profile', $activePage) ?>" href="<?= BASE_URL ?>/profile.php"><i class="bi bi-person-circle me-2"></i><?= __('nav_profile') ?></a>

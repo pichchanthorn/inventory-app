@@ -40,10 +40,10 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <div class="row g-3 mb-4">
-  <div class="col-md-3"><div class="card p-3"><div class="bracket-label mb-2"><i class="bi bi-download kpi-icon"></i><?= __('stockreport_units_in') ?></div><div class="fs-4 mono fw-bold" style="color:var(--good);"><?= $unitsIn ?></div></div></div>
-  <div class="col-md-3"><div class="card p-3"><div class="bracket-label mb-2"><i class="bi bi-upload kpi-icon"></i><?= __('stockreport_units_out') ?></div><div class="fs-4 mono fw-bold" style="color:var(--danger);"><?= $unitsOut ?></div></div></div>
-  <div class="col-md-3"><div class="card p-3"><div class="bracket-label mb-2"><i class="bi bi-arrow-left-right kpi-icon"></i><?= __('stockreport_net_flow') ?></div><div class="fs-4 mono fw-bold"><?= ($unitsIn - $unitsOut >= 0 ? '+' : '') . ($unitsIn - $unitsOut) ?></div></div></div>
-  <div class="col-md-3"><div class="card p-3"><div class="bracket-label mb-2"><i class="bi bi-receipt kpi-icon"></i><?= __('stockreport_transactions') ?></div><div class="fs-4 mono fw-bold"><?= $txCount ?></div></div></div>
+  <div class="col-6 col-md-3"><div class="card p-3"><div class="bracket-label mb-2"><i class="bi bi-download kpi-icon"></i><?= __('stockreport_units_in') ?></div><div class="fs-4 mono fw-bold" style="color:var(--good);"><?= $unitsIn ?></div></div></div>
+  <div class="col-6 col-md-3"><div class="card p-3"><div class="bracket-label mb-2"><i class="bi bi-upload kpi-icon"></i><?= __('stockreport_units_out') ?></div><div class="fs-4 mono fw-bold" style="color:var(--danger);"><?= $unitsOut ?></div></div></div>
+  <div class="col-6 col-md-3"><div class="card p-3"><div class="bracket-label mb-2"><i class="bi bi-arrow-left-right kpi-icon"></i><?= __('stockreport_net_flow') ?></div><div class="fs-4 mono fw-bold"><?= ($unitsIn - $unitsOut >= 0 ? '+' : '') . ($unitsIn - $unitsOut) ?></div></div></div>
+  <div class="col-6 col-md-3"><div class="card p-3"><div class="bracket-label mb-2"><i class="bi bi-receipt kpi-icon"></i><?= __('stockreport_transactions') ?></div><div class="fs-4 mono fw-bold"><?= $txCount ?></div></div></div>
 </div>
 
 <ul class="nav nav-pills mb-3">
@@ -74,26 +74,26 @@ require_once __DIR__ . '/../includes/header.php';
                         GROUP BY t.id ORDER BY $logOrderBy")->fetchAll();
 ?>
   <div class="card">
-    <table class="table mb-0 align-middle">
+    <table class="table mb-0 align-middle table-cards-mobile">
       <thead class="table-light"><tr><th><?= __('common_reference') ?></th><th><?= sortHeader('date', __('common_date')) ?></th><th><?= __('common_type') ?></th><th><?= __('stockreport_col_products') ?></th><th><?= __('stockreport_col_units') ?></th><th><?= sortHeader('value', __('common_value')) ?></th><th><?= __('stockreport_col_by') ?></th><th><?= __('common_note') ?></th></tr></thead>
       <tbody>
         <?php if (!$rows): ?><tr><td colspan="8" class="text-center text-secondary py-4"><i class="bi bi-inbox fs-3 d-block mb-2"></i><?= __('common_no_transactions') ?></td></tr><?php endif; ?>
         <?php foreach ($rows as $r): ?>
         <tr>
-          <td class="mono text-primary">
+          <td class="mono text-primary row-title">
             <?php if ($r['type'] === 'sale'): ?>
               <a href="<?= BASE_URL ?>/pos/receipt.php?ref=<?= urlencode($r['reference']) ?>" class="text-primary"><?= htmlspecialchars($r['reference']) ?></a>
             <?php else: ?>
               <a href="<?= BASE_URL ?>/stock-transaction/view.php?ref=<?= urlencode($r['reference']) ?>" class="text-primary"><?= htmlspecialchars($r['reference']) ?></a>
             <?php endif; ?>
           </td>
-          <td class="mono"><?= $r['transaction_date'] ?></td>
-          <td><span class="badge-stock <?= $typeBadgeClass[$r['type']] ?? 'badge-normal' ?>"><?= htmlspecialchars($typeLabels[$r['type']] ?? $r['type']) ?></span></td>
-          <td><?= $r['items'] ?></td>
-          <td><?= (int) $r['qty'] ?></td>
-          <td class="mono">$<?= number_format($r['value'], 2) ?></td>
-          <td><?= $r['performed_by'] ? htmlspecialchars($r['performed_by']) : '<span class="text-secondary">—</span>' ?></td>
-          <td class="text-secondary small"><?= htmlspecialchars($r['note']) ?></td>
+          <td class="mono" data-label="<?= htmlspecialchars(__('common_date')) ?>"><?= $r['transaction_date'] ?></td>
+          <td data-label="<?= htmlspecialchars(__('common_type')) ?>"><span class="badge-stock <?= $typeBadgeClass[$r['type']] ?? 'badge-normal' ?>"><?= htmlspecialchars($typeLabels[$r['type']] ?? $r['type']) ?></span></td>
+          <td data-label="<?= htmlspecialchars(__('stockreport_col_products')) ?>"><?= $r['items'] ?></td>
+          <td data-label="<?= htmlspecialchars(__('stockreport_col_units')) ?>"><?= (int) $r['qty'] ?></td>
+          <td class="mono" data-label="<?= htmlspecialchars(__('common_value')) ?>">$<?= number_format($r['value'], 2) ?></td>
+          <td data-label="<?= htmlspecialchars(__('stockreport_col_by')) ?>"><?= $r['performed_by'] ? htmlspecialchars($r['performed_by']) : '<span class="text-secondary">—</span>' ?></td>
+          <td class="text-secondary small" data-label="<?= htmlspecialchars(__('common_note')) ?>"><?= htmlspecialchars($r['note']) ?></td>
         </tr>
         <?php endforeach; ?>
       </tbody>
@@ -104,19 +104,19 @@ require_once __DIR__ . '/../includes/header.php';
   $rows = $pdo->query('SELECT p.*, c.name category_name FROM products p LEFT JOIN categories c ON c.id = p.category_id ORDER BY p.name')->fetchAll();
 ?>
   <div class="card">
-    <table class="table mb-0 align-middle">
+    <table class="table mb-0 align-middle table-cards-mobile">
       <thead class="table-light"><tr><th><?= __('common_product') ?></th><th><?= __('common_category') ?></th><th><?= __('stockreport_col_current_stock') ?></th><th><?= __('stockreport_col_level') ?></th></tr></thead>
       <tbody>
         <?php if (!$rows): ?><tr><td colspan="4" class="text-center text-secondary py-4"><i class="bi bi-inbox fs-3 d-block mb-2"></i><?= __('product_empty') ?></td></tr><?php endif; ?>
         <?php foreach ($rows as $p): $low = $p['current_stock'] <= $p['min_stock']; ?>
         <tr>
-          <td>
+          <td class="row-title">
             <div class="fw-semibold"><?= htmlspecialchars($p['name']) ?></div>
             <?php if (!empty($p['package_size'])): ?><div class="text-secondary small"><?= htmlspecialchars($p['package_size']) ?></div><?php endif; ?>
           </td>
-          <td><?= $p['category_name'] ? htmlspecialchars($p['category_name']) : '<span class="text-secondary">—</span>' ?></td>
-          <td><?= $p['current_stock'] ?></td>
-          <td><span class="badge-stock <?= $low ? 'badge-low' : 'badge-normal' ?>"><?= $low ? __('stockreport_badge_low') : __('stockreport_badge_normal') ?></span></td>
+          <td data-label="<?= htmlspecialchars(__('common_category')) ?>"><?= $p['category_name'] ? htmlspecialchars($p['category_name']) : '<span class="text-secondary">—</span>' ?></td>
+          <td data-label="<?= htmlspecialchars(__('stockreport_col_current_stock')) ?>"><?= $p['current_stock'] ?></td>
+          <td data-label="<?= htmlspecialchars(__('stockreport_col_level')) ?>"><span class="badge-stock <?= $low ? 'badge-low' : 'badge-normal' ?>"><?= $low ? __('stockreport_badge_low') : __('stockreport_badge_normal') ?></span></td>
         </tr>
         <?php endforeach; ?>
       </tbody>
