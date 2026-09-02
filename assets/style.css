@@ -356,6 +356,37 @@ table td, table th{ border-color:var(--line) !important; }
   .dash-stat-value{ font-size:1.5rem; }
 }
 
+/* UI-2 / F2: POS checkout button stays reachable on mobile without
+   scrolling to the bottom of a long cart. #posSubmitButton is the same
+   single button that already submits #posForm (fat-finger-qty
+   safeguard, CSRF, idempotency, server-side validation - see
+   pos/index.php's own submit listener) - only its on-screen position
+   changes here, nothing about how or what it submits. Kept CSS-only
+   (no markup/JS change) so there is exactly one submit control, not a
+   second one to keep in sync.
+   Reuses the same "floating panel" treatment already established for
+   .product-search-menu (rounded corners, identical box-shadow recipe)
+   rather than inventing a new edge-to-edge app-bar look. width:auto
+   !important is required to win over the button's own .w-100 (also
+   !important) now that left/right insets - not w-100 - determine its
+   width; #posForm's padding-bottom reserves exactly enough space so
+   the fixed button can never sit on top of the last field above it
+   (the due-date field in credit mode, or the cash fields otherwise).
+   z-index:1030 matches Bootstrap's own fixed-element convention and
+   sits below the offcanvas nav (1045) and its backdrop (1040), so the
+   mobile nav drawer still layers above this when open, and well below
+   the toast stack (1090, top-right, footer.php) so error/success
+   feedback is never covered either. Only active <768px - at >=768px
+   the button stays exactly where it always was, in normal flow at the
+   bottom of the payment card. */
+@media (max-width: 767.98px){
+  #posForm{ padding-bottom: 4.5rem; }
+  #posSubmitButton{
+    position:fixed; left:.75rem; right:.75rem; bottom:.75rem; width:auto !important;
+    z-index:1030; box-shadow:0 8px 24px rgba(0,0,0,.35);
+  }
+}
+
 /* Low-stock product cards on mobile (<768px) - swap the full-card danger
    tint for a small corner badge instead, since a big red-tinted block
    behind category/cost/price text hurts readability at this width. Desktop
