@@ -102,3 +102,18 @@ function streamDatabaseBackup(PDO $pdo, string $dsn, string $user, string $pass)
     echo "SET FOREIGN_KEY_CHECKS=1;\n";
     flush();
 }
+
+// Called by settings/index.php when streamDatabaseBackup() throws partway
+// through - the download headers are already sent by that point (a file
+// download response can't be downgraded to an HTML error page once
+// started), so this is the one remaining safe way to tell the Admin
+// something went wrong. Logs the real exception server-side, where an
+// operator can actually see it, and returns a short, fixed, generic
+// message to append to the still-open output stream - the raw exception
+// message is never used here, since it can contain table/column/schema
+// or connection details (confirmed directly against a real MySQL
+// permission-denied error) that must never reach the browser.
+function backupFailureMessage(Throwable $e): string {
+    error_log('Database backup failed: ' . $e->getMessage());
+    return "\n-- ERROR: the backup did not complete successfully. Contact an administrator.\n";
+}

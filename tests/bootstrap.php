@@ -56,6 +56,7 @@ require APP_ROOT . '/includes/stock.php';
 require APP_ROOT . '/includes/debt.php';
 require APP_ROOT . '/includes/currency.php';
 require APP_ROOT . '/includes/audit.php';
+require APP_ROOT . '/includes/backup.php';
 require TESTS_ROOT . '/SchemaBuilder.php';
 require TESTS_ROOT . '/TestCase.php';
 require TESTS_ROOT . '/fixtures/seed_helpers.php';

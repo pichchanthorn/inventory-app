@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/auth_check.php';
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../includes/audit.php';
 
 // Admin-only (isAdmin(), not canWrite()) - system-level configuration,
 // not a daily operation. A wrong/accidental rate change from a
@@ -33,7 +34,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Content-Type: application/sql');
         header('Content-Disposition: attachment; filename="' . $filename . '"');
         header('X-Content-Type-Options: nosniff');
-        streamDatabaseBackup($pdo, $dsn, $user, $pass);
+        try {
+            streamDatabaseBackup($pdo, $dsn, $user, $pass);
+        } catch (Throwable $e) {
+            // Headers announcing a file download are already sent above -
+            // there is no way back to a normal HTML error page at this
+            // point. backupFailureMessage() logs the real error and
+            // returns a safe, generic message for the still-open stream.
+            echo backupFailureMessage($e);
+            exit;
+        }
+
+        // Only reached on a genuinely successful backup. Kept in its own
+        // try/catch, separate from the one above - a failure writing this
+        // audit row must never retroactively mark an already fully
+        // streamed, successful backup as failed. Snapshot is limited to
+        // the filename: never the SQL content, never credentials.
+        try {
+            logAudit($pdo, (int) $_SESSION['user_id'], 'create', 'backup', 0, null, ['filename' => $filename]);
+        } catch (Throwable $e) {
+            error_log('Failed to write audit log for database backup: ' . $e->getMessage());
+        }
         exit;
     }
 
