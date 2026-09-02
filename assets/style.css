@@ -543,6 +543,63 @@ table td, table th{ border-color:var(--line) !important; }
   }
 }
 
+/* UI-6: mobile-only Bottom Navigation (markup + hide-on-transaction-pages
+   logic in includes/footer.php / header.php's $hasBottomNav). z-index:1020
+   sits just below the UI-5a sticky transaction buttons above (1030 -
+   reserved for the single most urgent action on the pages where one
+   exists; this bar and those buttons never actually appear on the same
+   page, but the ordering is kept intentional rather than incidental),
+   below the offcanvas backdrop/panel (1040/1045, so opening the sidebar
+   via "More" correctly layers above this bar), and below the toast stack
+   (1090). Colors reuse the same --panel/--line/--accent custom properties
+   as .sidebar and .mobile-topbar, so body.theme-light's existing variable
+   overrides handle both themes automatically - no separate light-mode
+   block needed here, same as those two. env(safe-area-inset-bottom)
+   defaults to 0px on browsers/pages without viewport-fit=cover (this app
+   doesn't set it), so this is a no-op today and only helps if that's ever
+   added later. main.has-bottom-nav (header.php) reserves just enough
+   space for this bar's own height so page content can't end up hidden
+   underneath it - only applied on pages where the bar actually renders,
+   so pos/stock-in/stock-out (no bottom nav) keep their existing
+   UI-5a-only bottom padding on #posForm/#stockInForm/#stockOutForm,
+   completely unchanged. */
+@media (max-width: 767.98px){
+  main.has-bottom-nav{ padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px)); }
+
+  .bottom-nav{
+    display:flex; position:fixed; left:0; right:0; bottom:0; z-index:1020;
+    background:var(--panel); border-top:1px solid var(--line);
+    padding-bottom:env(safe-area-inset-bottom, 0px);
+  }
+  .bottom-nav-link, .bottom-nav-item-wrap{ flex:1 1 0%; min-width:0; }
+  .bottom-nav-link{
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
+    width:100%; min-height:48px; padding:.4rem .2rem; border:none; background:transparent;
+    color:var(--muted); text-decoration:none; font-size:.62rem;
+    font-family:'JetBrains Mono','Kantumruy Pro',monospace; text-transform:uppercase; letter-spacing:.02em;
+  }
+  .bottom-nav-link i{ font-size:1.15rem; line-height:1; }
+  .bottom-nav-link.active{ color:var(--accent); }
+  .bottom-nav-link:hover, .bottom-nav-link:focus{ color:var(--accent); }
+  .bottom-nav-item-wrap{ display:flex; }
+
+  /* Stock dropup menu - same "floating panel" treatment already used for
+     .product-search-menu (rounded corners, identical box-shadow recipe,
+     identical dark/light text-color split) rather than a new visual
+     language for menus. */
+  .bottom-nav-stock-menu{
+    background:var(--panel); border:1px solid var(--line-bright); border-radius:6px;
+    box-shadow:0 8px 24px rgba(0,0,0,.35); min-width:180px;
+  }
+  .bottom-nav-stock-menu .dropdown-item{ color:#E7EDF3; font-size:.85rem; padding:.5rem .75rem; }
+  .bottom-nav-stock-menu .dropdown-item:hover, .bottom-nav-stock-menu .dropdown-item:focus{ background:var(--accent-tint); color:#E7EDF3; }
+  body.theme-light .bottom-nav-stock-menu .dropdown-item{ color:#0B1220; }
+  body.theme-light .bottom-nav-stock-menu .dropdown-item:hover,
+  body.theme-light .bottom-nav-stock-menu .dropdown-item:focus{ color:#0B1220; }
+
+  body[lang="km"] .bottom-nav-link{ font-size:.68rem; }
+}
+
 /* Low-stock product cards on mobile (<768px) - swap the full-card danger
    tint for a small corner badge instead, since a big red-tinted block
    behind category/cost/price text hurts readability at this width. Desktop
@@ -795,7 +852,7 @@ body.theme-light .form-control::placeholder { color: #8792A0; }
 /* POS receipt printing - hide app chrome and neutralize the dark theme so
    window.print() produces a plain, readable page with just the receipt */
 @media print {
-  .sidebar, .no-print, .toast-container, .mobile-topbar { display:none !important; }
+  .sidebar, .no-print, .toast-container, .mobile-topbar, .bottom-nav { display:none !important; }
   main { padding:0 !important; margin:0 !important; }
   body { background:#fff !important; color:#000 !important; }
   .card { background:#fff !important; border-color:#ccc !important; color:#000 !important; box-shadow:none !important; }

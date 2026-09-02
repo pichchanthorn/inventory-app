@@ -32,6 +32,11 @@ return [
     'nav_profile' => 'Profile',
     'nav_sign_out' => 'Sign out',
 
+    // Bottom Navigation (mobile only) — short labels for narrow tabs;
+    // Home reuses nav_dashboard, More reuses common_menu
+    'nav_bottom_pos' => 'POS',
+    'nav_bottom_stock' => 'Stock',
+
     // Common / shared words
     'common_name' => 'Name',
     'common_email' => 'Email',

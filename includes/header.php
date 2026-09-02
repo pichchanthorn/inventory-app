@@ -5,6 +5,11 @@ $activePage = $activePage ?? '';
 function navClass($page, $active) {
     return $page === $active ? 'nav-link active fw-semibold' : 'nav-link text-secondary';
 }
+// UI-6: pages with their own UI-5a sticky transaction button don't get the
+// mobile Bottom Navigation (two fixed bottom bars would overlap) - computed
+// once here since both <main>'s padding (below) and the nav markup itself
+// (footer.php) need the same answer.
+$hasBottomNav = !in_array($activePage, ['pos', 'stock-in', 'stock-out'], true);
 ?>
 <!DOCTYPE html>
 <html lang="<?= htmlspecialchars($_SESSION['lang']) ?>">
@@ -105,4 +110,4 @@ function navClass($page, $active) {
     </div>
 
     <!-- MAIN CONTENT -->
-    <main class="flex-grow-1 p-4">
+    <main class="flex-grow-1 p-4<?= $hasBottomNav ? ' has-bottom-nav' : '' ?>">

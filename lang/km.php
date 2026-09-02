@@ -32,6 +32,11 @@ return [
     'nav_profile' => 'ប្រវត្តិរូប',
     'nav_sign_out' => 'ចាកចេញ',
 
+    // Bottom Navigation (mobile only) — short labels for narrow tabs;
+    // Home reuses nav_dashboard, More reuses common_menu
+    'nav_bottom_pos' => 'ចំណុចលក់',
+    'nav_bottom_stock' => 'ស្តុក',
+
     // Common / shared words
     'common_name' => 'ឈ្មោះ',
     'common_email' => 'អ៊ីមែល',
