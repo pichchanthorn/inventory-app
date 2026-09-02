@@ -141,7 +141,7 @@ require_once __DIR__ . '/../includes/header.php';
   <div class="col-lg-8">
     <h5 class="mb-3"><?= __('customer_debts_title') ?></h5>
     <div class="card">
-      <table class="table mb-0 align-middle table-cards-mobile">
+      <table class="table mb-0 align-middle table-cards-mobile customer-debt-table">
         <thead class="table-light">
           <tr>
             <th>#</th><th><?= __('common_reference') ?></th><th><?= __('common_date') ?></th>
@@ -162,12 +162,12 @@ require_once __DIR__ . '/../includes/header.php';
               <?php if ($overdue): ?><span class="overdue-badge"><i class="bi bi-exclamation-triangle-fill"></i> <?= __('customer_overdue_badge') ?></span><?php endif; ?>
               <span class="slug-pill"><?= htmlspecialchars($debt['reference']) ?></span>
             </td>
-            <td data-label="<?= htmlspecialchars(__('common_date')) ?>"><?= htmlspecialchars(substr($debt['created_at'], 0, 10)) ?></td>
-            <td class="mono" data-label="<?= htmlspecialchars(__('customer_col_total')) ?>">$<?= number_format($debt['total_amount'], 2) ?></td>
-            <td class="mono" data-label="<?= htmlspecialchars(__('customer_col_paid')) ?>">$<?= number_format($debt['paid_amount'], 2) ?></td>
-            <td class="mono" data-label="<?= htmlspecialchars(__('customer_col_balance')) ?>">$<?= number_format($debt['balance'], 2) ?></td>
-            <td data-label="<?= htmlspecialchars(__('customer_col_due_date')) ?>"><?= $debt['due_date'] ? htmlspecialchars($debt['due_date']) : __('customer_due_date_none') ?></td>
-            <td data-label="<?= htmlspecialchars(__('customer_col_status')) ?>"><span class="badge-stock <?= $statusBadgeClass[$debt['status']] ?>"><?= $statusLabel[$debt['status']] ?></span></td>
+            <td class="row-date" data-label="<?= htmlspecialchars(__('common_date')) ?>"><?= htmlspecialchars(substr($debt['created_at'], 0, 10)) ?></td>
+            <td class="mono row-total" data-label="<?= htmlspecialchars(__('customer_col_total')) ?>">$<?= number_format($debt['total_amount'], 2) ?></td>
+            <td class="mono row-paid" data-label="<?= htmlspecialchars(__('customer_col_paid')) ?>">$<?= number_format($debt['paid_amount'], 2) ?></td>
+            <td class="mono row-balance" data-label="<?= htmlspecialchars(__('customer_col_balance')) ?>">$<?= number_format($debt['balance'], 2) ?></td>
+            <td class="row-due-date" data-label="<?= htmlspecialchars(__('customer_col_due_date')) ?>"><?= $debt['due_date'] ? htmlspecialchars($debt['due_date']) : __('customer_due_date_none') ?></td>
+            <td class="row-status" data-label="<?= htmlspecialchars(__('customer_col_status')) ?>"><span class="badge-stock <?= $statusBadgeClass[$debt['status']] ?>"><?= $statusLabel[$debt['status']] ?></span></td>
             <td class="text-end row-actions">
               <?php if ($debt['payments']): ?>
               <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#payHist<?= $debt['id'] ?>">

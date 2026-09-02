@@ -268,11 +268,11 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 <?php endif; ?>
 
-<form class="mb-3 d-flex gap-2 flex-wrap" method="get">
+<form class="mb-3 d-flex gap-2 flex-wrap list-toolbar" method="get">
   <?php if ($lowStockOnly): ?><input type="hidden" name="filter" value="low_stock"><?php endif; ?>
-  <input type="text" name="q" id="searchInput" class="form-control" style="max-width:300px"
+  <input type="text" name="q" id="searchInput" class="form-control search-input"
          placeholder="<?= __('product_search_placeholder') ?>" value="<?= htmlspecialchars($search) ?>">
-  <select class="form-select form-select-sm d-md-none" style="max-width:160px" onchange="if (this.value) location.href = this.value">
+  <select class="form-select form-select-sm d-md-none sort-select" onchange="if (this.value) location.href = this.value">
     <option value="" <?= empty($_GET['sort']) ? 'selected' : '' ?> disabled><?= __('common_sort_by') ?></option>
     <option value="<?= htmlspecialchars(mobileSortUrl('name')) ?>" <?= ($_GET['sort'] ?? '') === 'name' ? 'selected' : '' ?>><?= __('common_product') ?></option>
     <option value="<?= htmlspecialchars(mobileSortUrl('price')) ?>" <?= ($_GET['sort'] ?? '') === 'price' ? 'selected' : '' ?>><?= __('product_col_price') ?></option>
@@ -281,7 +281,7 @@ require_once __DIR__ . '/../includes/header.php';
 </form>
 
 <div class="card" id="resultsArea">
-  <table class="table mb-0 align-middle table-cards-mobile">
+  <table class="table mb-0 align-middle table-cards-mobile product-list-table">
     <thead class="table-light">
       <tr><th>#</th><th><?= sortHeader('name', __('common_product')) ?></th><th><?= __('common_category') ?></th><th><?= __('common_supplier') ?></th><th><?= __('product_col_cost') ?></th><th><?= sortHeader('price', __('product_col_price')) ?></th><th><?= __('product_col_margin') ?></th><th><?= sortHeader('stock', __('product_col_stock')) ?></th><th class="text-end"><?= __('common_actions') ?></th></tr>
     </thead>
@@ -303,10 +303,10 @@ require_once __DIR__ . '/../includes/header.php';
         </td>
         <td data-label="<?= htmlspecialchars(__('common_category')) ?>"><?= $p['category_name'] ? htmlspecialchars($p['category_name']) : '<span class="text-secondary">—</span>' ?></td>
         <td data-label="<?= htmlspecialchars(__('common_supplier')) ?>"><?= $p['supplier_name'] ? htmlspecialchars($p['supplier_name']) : '<span class="text-secondary">—</span>' ?></td>
-        <td class="mono" data-label="<?= htmlspecialchars(__('product_col_cost')) ?>">$<?= number_format($p['cost_price'], 2) ?></td>
-        <td class="mono" data-label="<?= htmlspecialchars(__('product_col_price')) ?>">$<?= number_format($p['sale_price'], 2) ?></td>
-        <td data-label="<?= htmlspecialchars(__('product_col_margin')) ?>" style="color:<?= $margin >= 30 ? 'var(--good)' : ($margin >= 15 ? 'var(--warn)' : 'var(--danger)') ?>;"><?= $margin ?>%</td>
-        <td data-label="<?= htmlspecialchars(__('product_col_stock')) ?>"><span class="badge-stock <?= $low ? 'badge-low' : 'badge-normal' ?>"><?= $p['current_stock'] ?> <?= __('common_pcs') ?></span></td>
+        <td class="mono row-cost" data-label="<?= htmlspecialchars(__('product_col_cost')) ?>">$<?= number_format($p['cost_price'], 2) ?></td>
+        <td class="mono row-price" data-label="<?= htmlspecialchars(__('product_col_price')) ?>">$<?= number_format($p['sale_price'], 2) ?></td>
+        <td class="row-margin" data-label="<?= htmlspecialchars(__('product_col_margin')) ?>" style="color:<?= $margin >= 30 ? 'var(--good)' : ($margin >= 15 ? 'var(--warn)' : 'var(--danger)') ?>;"><?= $margin ?>%</td>
+        <td class="row-stock" data-label="<?= htmlspecialchars(__('product_col_stock')) ?>"><span class="badge-stock <?= $low ? 'badge-low' : 'badge-normal' ?>"><?= $p['current_stock'] ?> <?= __('common_pcs') ?></span></td>
         <td class="text-end row-actions">
           <?php if (canWrite()): ?>
           <button class="btn btn-sm btn-outline-primary"

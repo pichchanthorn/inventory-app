@@ -150,6 +150,21 @@ body[lang="km"] .badge-stock { font-size: .84rem; font-weight: 600; }
    there - nothing to preserve, since nothing visibly changes. */
 .sidebar-nav-scroll{ flex:1 1 auto; overflow-y:auto; min-height:0; }
 
+/* UI-4 / A3-4: nav-link row height on mobile only. The base rule
+   (padding:.5rem 1rem, ~35px row height) lives in includes/header.php's
+   own inline <style> block and applies at every width; #appSidebar's id
+   gives this mobile-only override enough specificity to win over that
+   inline rule without needing !important or touching header.php. Only
+   the vertical padding grows (horizontal stays 1rem) to land at
+   roughly 40-44px in English without making the already-scrollable
+   .sidebar-nav-scroll region (see NEW-F1 above) any longer than it has
+   to be - Khmer rows run a little taller still, same as before this
+   change, since Khmer's own font-size bump (below) was never part of
+   this padding rule and still applies on top of it either way. */
+@media (max-width: 767.98px){
+  #appSidebar .nav-link{ padding:.7rem 1rem; }
+}
+
 /* mobile offcanvas sidebar (<768px) - Bootstrap's offcanvas defaults to a
    white background/border and a 400px width; override via its own CSS
    vars (same "Bootstrap defaults to light, force it to match the theme"
@@ -233,6 +248,30 @@ body[lang="km"] .form-select{ min-width: 110px; padding-right: 2.5rem; }
    a subtle dim on the results table while the debounced fetch is out,
    cleared as soon as it resolves (or immediately by the swap itself). */
 .live-search-loading{ opacity:.5; pointer-events:none; transition:opacity .15s ease; }
+
+/* UI-4 / A3-5: the search input + mobile-only sort <select> shared by
+   Products/Categories/Units/Suppliers/Customers (identical markup on
+   all five - .list-toolbar/.search-input/.sort-select replace what
+   used to be five copies of the same inline style="max-width:...").
+   These two base rules are exactly what the old inline styles set, so
+   desktop is unchanged. Below the breakpoint, flex-wrap:nowrap plus a
+   flexible search-input width (instead of the fixed 300px, which is
+   wider than the entire content area at 360-412px and was the actual
+   cause of the wrap) let both controls sit on one row; the select
+   keeps a modest fixed width since its content (a handful of short
+   sort labels) never needs the full 160px on a phone. */
+.search-input{ max-width:300px; }
+.sort-select{ max-width:160px; }
+@media (max-width: 767.98px){
+  .list-toolbar{ flex-wrap:nowrap; }
+  /* flex-basis:0 (not auto) is required here - Bootstrap's own
+     .form-control already sets width:100%, and an auto flex-basis
+     resolves through that width instead of the available flex space,
+     which silently defeated flex-grow and left this stacking exactly
+     like the un-fixed inline-style version. */
+  .list-toolbar .search-input{ flex:1 1 0%; min-width:0; max-width:none; }
+  .list-toolbar .sort-select{ flex:0 0 130px; max-width:130px; }
+}
 
 /* searchable product dropdown (Stock In / Stock Out line items) - a plain
    text input + absolutely-positioned filtered list standing in for the
@@ -361,6 +400,84 @@ table td, table th{ border-color:var(--line) !important; }
   .pos-line-table td.row-price input{
     min-height:44px; font-size:1rem; padding:.5rem .65rem;
   }
+
+  /* UI-4 / A3-3: same fix as F3 above, extended to Stock In/Out's own
+     Qty and Cost/Price inputs - identical .form-control-sm sizing
+     problem, same #lineTable id reused across POS/Stock In/Stock Out
+     (see the F3 comment above for why id-based scoping isn't safe
+     here), so each page gets its own scoping class the same way POS
+     did. Stock In's Cost field additionally sits inside a
+     .input-group-sm alongside a currency-toggle button and a hidden
+     currency input - the selector below still reaches the one real
+     amount <input> (input-group's own flex layout stretches the
+     sibling toggle button to match automatically, so it doesn't need
+     a rule of its own), and applying min-height to the hidden
+     currency input is a no-op since it's never rendered. */
+  .stockin-line-table td.row-qty input,
+  .stockin-line-table td.row-price input,
+  .stockout-line-table td.row-qty input,
+  .stockout-line-table td.row-price input{
+    min-height:44px; font-size:1rem;
+  }
+}
+
+/* UI-4 / A3-2: Products list cards on mobile - Cost/Price/Margin/Stock
+   are all short single-value fields, so pair them 2-per-row instead of
+   stacking all 4 full-width the way the generic .table-cards-mobile
+   rules above do by default. Name/Category/Supplier/Actions stay
+   full-width (Category/Supplier are foreign-key names and can run
+   long, especially in Khmer, so pairing them would risk squeezing
+   long text into a half column). Scoped to .product-list-table only -
+   every other table-cards-mobile page (Categories/Suppliers/Units/
+   Customers/Stock Reports/Users/Audit Log) is untouched. Default
+   flex-basis:100% covers row-title/row-category/row-supplier/
+   row-actions and any future field automatically; only the four
+   paired fields are overridden to ~50%. */
+@media (max-width: 767.98px){
+  .product-list-table.table-cards-mobile tbody tr{ display:flex; flex-wrap:wrap; gap:0 .75rem; }
+  .product-list-table.table-cards-mobile td{ flex:1 1 100%; }
+  .product-list-table.table-cards-mobile td.row-cost,
+  .product-list-table.table-cards-mobile td.row-price,
+  .product-list-table.table-cards-mobile td.row-margin,
+  .product-list-table.table-cards-mobile td.row-stock{
+    flex:1 1 calc(50% - .375rem); min-width:0;
+  }
+}
+
+/* UI-4 / A3-2 (follow-up): Customer Debt History cards on mobile - same
+   technique as the Products block above, applied to
+   customer/view.php's debt table. Total/Paid and Balance/Status pair
+   2-per-row; Total/Paid are short mono currency values, and Status is
+   a short badge (longest label in either language is "Partial"/
+   "បង់ខ្លះ") that stays comfortably readable at ~50% width, matching
+   how Products' Stock badge already pairs safely. Date and Due Date
+   stay full-width - a date string reads worse split awkwardly at a
+   half column, and this was an explicit requirement, not just a
+   judgment call.
+   Pairing Balance with Status requires them to be adjacent in the flex
+   row, but Due Date's <td> sits between them in the actual table
+   (matching the desktop <thead> column order, which must stay intact
+   so desktop's real <table> still lines up headers to cells
+   correctly). `order` reshuffles the visual position on mobile only,
+   inside this same media query - it never touches DOM order, so
+   nothing above 768px is affected by it.
+   Scoped to .customer-debt-table only, so Categories/Suppliers/Units/
+   Stock Reports/Users/Audit Log and the Customers list itself are
+   untouched; the payment-history disclosure row (a single colspan="9"
+   cell) is unaffected since a lone flex child still just fills the
+   row (and default order:0 keeps it exactly where source order
+   already puts it - not part of the reshuffled sequence below). */
+@media (max-width: 767.98px){
+  .customer-debt-table.table-cards-mobile tbody tr{ display:flex; flex-wrap:wrap; gap:0 .75rem; }
+  .customer-debt-table.table-cards-mobile td{ flex:1 1 100%; }
+  .customer-debt-table.table-cards-mobile td.row-title{ order:1; }
+  .customer-debt-table.table-cards-mobile td.row-date{ order:2; }
+  .customer-debt-table.table-cards-mobile td.row-total{ order:3; flex:1 1 calc(50% - .375rem); min-width:0; }
+  .customer-debt-table.table-cards-mobile td.row-paid{ order:4; flex:1 1 calc(50% - .375rem); min-width:0; }
+  .customer-debt-table.table-cards-mobile td.row-balance{ order:5; flex:1 1 calc(50% - .375rem); min-width:0; }
+  .customer-debt-table.table-cards-mobile td.row-status{ order:6; flex:1 1 calc(50% - .375rem); min-width:0; }
+  .customer-debt-table.table-cards-mobile td.row-due-date{ order:7; }
+  .customer-debt-table.table-cards-mobile td.row-actions{ order:8; }
 }
 
 /* dashboard.php stat cards at mobile widths - a separate block (rather than

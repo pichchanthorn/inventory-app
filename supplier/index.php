@@ -140,10 +140,10 @@ require_once __DIR__ . '/../includes/header.php';
   <?php endif; ?>
 </div>
 
-<form class="mb-3 d-flex gap-2 flex-wrap" method="get">
-  <input type="text" name="q" id="searchInput" class="form-control" style="max-width:300px"
+<form class="mb-3 d-flex gap-2 flex-wrap list-toolbar" method="get">
+  <input type="text" name="q" id="searchInput" class="form-control search-input"
          placeholder="<?= __('common_search_placeholder') ?>" value="<?= htmlspecialchars($search) ?>">
-  <select class="form-select form-select-sm d-md-none" style="max-width:160px" onchange="if (this.value) location.href = this.value">
+  <select class="form-select form-select-sm d-md-none sort-select" onchange="if (this.value) location.href = this.value">
     <option value="" <?= empty($_GET['sort']) ? 'selected' : '' ?> disabled><?= __('common_sort_by') ?></option>
     <option value="<?= htmlspecialchars(mobileSortUrl('name')) ?>" <?= ($_GET['sort'] ?? '') === 'name' ? 'selected' : '' ?>><?= __('common_name') ?></option>
   </select>
