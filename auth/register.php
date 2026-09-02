@@ -88,11 +88,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <div class="bracket-label mb-2"><?= __('auth_tagline') ?></div>
       <span class="barcode"><i style="width:2px;height:60%"></i><i style="height:100%"></i><i style="width:2px;height:40%"></i><i style="height:80%"></i><i style="width:4px;height:55%"></i><i style="height:100%"></i><i style="width:2px;height:70%"></i></span>
     </div>
-    <div>
+    <div class="auth-hero">
       <h1><?= __('auth_hero_title') ?></h1>
       <p class="mt-3"><?= __('auth_hero_subtitle') ?></p>
     </div>
-    <div class="mono" style="color:#5C6584; font-size:.78rem;">127.0.0.1:9000</div>
+    <div class="mono auth-footer-meta" style="color:#5C6584; font-size:.78rem;">127.0.0.1:9000</div>
   </div>
 
   <div class="auth-right">

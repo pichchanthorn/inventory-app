@@ -509,6 +509,33 @@ table tbody tr:hover .row-actions .btn,
   .auth-form .btn-primary:active{ transform:translateY(0); }
 }
 
+/* A3-1: login/register on mobile (<768px) - single column instead of
+   shrinking the two-pane split above. The desktop .auth-left/.auth-right
+   rules are untouched, so nothing here changes above the breakpoint.
+   .auth-hero (the long H1 + tagline copy) and .auth-footer-meta (the
+   decorative dev-mode IP line) are hidden rather than shrunk: at phone
+   widths the H1 in particular has nowhere left to wrap to but one word
+   per line, and the IP line/barcode graphic are purely ambient
+   flourishes with no functional purpose once the layout is this narrow.
+   The logo + tagline stay, so the page still reads as this app's login
+   screen and not a bare, unbranded form. top padding on .auth-left
+   clears the lang-toggle link (position:absolute; top:20px; right:20px;
+   in login.php/register.php's own markup), which now floats over this
+   shortened banner instead of over .auth-right as it does on desktop. */
+@media (max-width: 767.98px){
+  .auth-wrap{ flex-direction:column; }
+  .auth-left{
+    flex:none; padding:64px 24px 24px; border-right:none;
+    border-bottom:1px solid var(--line);
+  }
+  .auth-left::before{ display:none; }
+  .auth-left .barcode,
+  .auth-left .auth-hero,
+  .auth-left .auth-footer-meta{ display:none; }
+  .auth-right{ flex:none; padding:24px; }
+  .auth-form{ max-width:none; }
+}
+
 /* nav-pills (Stock Reports tabs) - Bootstrap defaults are unreadable on dark backgrounds */
 .nav-pills .nav-link{ color: var(--muted); }
 .nav-pills .nav-link.active{ background: var(--accent); color: #03181C; font-weight: 600; }
