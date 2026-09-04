@@ -510,11 +510,20 @@ table td, table th{ border-color:var(--line) !important; }
    the toast stack (1090, top-right, footer.php) so error/success
    feedback is never covered either. Only active <768px - at >=768px
    the button stays exactly where it always was, in normal flow at the
-   bottom of the payment card. */
+   bottom of the payment card.
+   UI-6.1: the Bottom Navigation (further below) is now always visible,
+   including on this page, so this button's own bottom offset is lifted
+   by --bottom-nav-h (defined in the Bottom Navigation's own block below -
+   custom properties resolve at compute time, not source order, so the
+   forward reference is fine) to float just above the nav bar instead of
+   underneath/overlapping it; #posForm's padding-bottom grows by the same
+   amount so the last field still clears both fixed elements. The .75rem
+   gutter and 4.5rem base reservation themselves are untouched - only what
+   they're measured from changed. */
 @media (max-width: 767.98px){
-  #posForm{ padding-bottom: 4.5rem; }
+  #posForm{ padding-bottom: calc(4.5rem + var(--bottom-nav-h)); }
   #posSubmitButton{
-    position:fixed; left:.75rem; right:.75rem; bottom:.75rem; width:auto !important;
+    position:fixed; left:.75rem; right:.75rem; bottom:calc(var(--bottom-nav-h) + .75rem); width:auto !important;
     z-index:1030; box-shadow:0 8px 24px rgba(0,0,0,.35);
   }
 }
@@ -529,46 +538,77 @@ table td, table th{ border-color:var(--line) !important; }
    button's own .w-100, now determine its width. Kept as two separate
    id-scoped rules (not a shared class) since #stockInSubmitButton and
    #stockOutSubmitButton are each already page-unique ids - no
-   #lineTable-style collision risk here to design around. */
+   #lineTable-style collision risk here to design around.
+   UI-6.1: same --bottom-nav-h lift as #posSubmitButton above, for the
+   same reason (Bottom Navigation is now always visible on these 2 pages
+   too) - see that block's comment for the full explanation. */
 @media (max-width: 767.98px){
-  #stockInForm{ padding-bottom: 4.5rem; }
+  #stockInForm{ padding-bottom: calc(4.5rem + var(--bottom-nav-h)); }
   #stockInSubmitButton{
-    position:fixed; left:.75rem; right:.75rem; bottom:.75rem; width:auto !important;
+    position:fixed; left:.75rem; right:.75rem; bottom:calc(var(--bottom-nav-h) + .75rem); width:auto !important;
     z-index:1030; box-shadow:0 8px 24px rgba(0,0,0,.35);
   }
-  #stockOutForm{ padding-bottom: 4.5rem; }
+  #stockOutForm{ padding-bottom: calc(4.5rem + var(--bottom-nav-h)); }
   #stockOutSubmitButton{
-    position:fixed; left:.75rem; right:.75rem; bottom:.75rem; width:auto !important;
+    position:fixed; left:.75rem; right:.75rem; bottom:calc(var(--bottom-nav-h) + .75rem); width:auto !important;
     z-index:1030; box-shadow:0 8px 24px rgba(0,0,0,.35);
   }
 }
 
-/* UI-6: mobile-only Bottom Navigation (markup + hide-on-transaction-pages
-   logic in includes/footer.php / header.php's $hasBottomNav). z-index:1020
-   sits just below the UI-5a sticky transaction buttons above (1030 -
-   reserved for the single most urgent action on the pages where one
-   exists; this bar and those buttons never actually appear on the same
-   page, but the ordering is kept intentional rather than incidental),
-   below the offcanvas backdrop/panel (1040/1045, so opening the sidebar
-   via "More" correctly layers above this bar), and below the toast stack
-   (1090). Colors reuse the same --panel/--line/--accent custom properties
-   as .sidebar and .mobile-topbar, so body.theme-light's existing variable
-   overrides handle both themes automatically - no separate light-mode
-   block needed here, same as those two. env(safe-area-inset-bottom)
-   defaults to 0px on browsers/pages without viewport-fit=cover (this app
-   doesn't set it), so this is a no-op today and only helps if that's ever
-   added later. main.has-bottom-nav (header.php) reserves just enough
-   space for this bar's own height so page content can't end up hidden
-   underneath it - only applied on pages where the bar actually renders,
-   so pos/stock-in/stock-out (no bottom nav) keep their existing
-   UI-5a-only bottom padding on #posForm/#stockInForm/#stockOutForm,
-   completely unchanged. */
+/* UI-6 / UI-6.1: mobile-only Bottom Navigation. Originally excluded from
+   pos/stock-in/stock-out entirely (a bottom-nav bar and UI-5a's sticky
+   transaction button both fixed to the viewport bottom would've
+   overlapped); real-device QA showed losing the nav on those 3 pages felt
+   broken, so UI-6.1 keeps it everywhere and instead coordinates the two
+   fixed layers via --bottom-nav-h: the sticky button's own bottom offset
+   and its form's padding-bottom (F2 / U5-4 / U5-5 blocks above) are both
+   lifted by this bar's height so the button floats just above the nav
+   instead of on top of it, matching the desired stack (content, then the
+   sticky primary action, then the Bottom Navigation). Declared as an
+   explicit height (not left to intrinsic content sizing) precisely so
+   those calc()s elsewhere in this file have a fixed, reliable number to
+   build on; 3.25rem comfortably fits this bar's tallest real case (Khmer
+   labels, which run slightly larger - see body[lang="km"] below - plus
+   the icon, gap, padding and border), confirmed with no clipping in QA.
+   z-index:1020 sits just below the UI-5a sticky transaction buttons
+   (1030 - reserved for the single most urgent action on the pages where
+   one exists, and now the layer immediately above this bar rather than a
+   mutually-exclusive alternative to it), below the offcanvas
+   backdrop/panel (1040/1045, so opening the sidebar via "More" correctly
+   layers above this bar), and below the toast stack (1090). Colors reuse
+   the same --panel/--line/--accent custom properties as .sidebar and
+   .mobile-topbar, so body.theme-light's existing variable overrides
+   handle both themes automatically - no separate light-mode block needed
+   here, same as those two. env(safe-area-inset-bottom) defaults to 0px on
+   browsers/pages without viewport-fit=cover (this app doesn't set it), so
+   this is a no-op today and only helps if that's ever added later.
+   main.has-bottom-nav (header.php, now unconditional - every page carries
+   it) reserves this bar's own height so ordinary trailing page content
+   can't end up hidden underneath it. main.has-sticky-action (only
+   pos/stock-in/stock-out) reserves the larger amount instead - the same
+   4.5rem UI-5a already used, now also lifted by --bottom-nav-h - because
+   on those 3 pages content *after* the form (e.g. a history table) can be
+   scrolled to while the sticky button is still floating fixed above it,
+   same as the form's own last field; same specificity as the base rule,
+   so source order (it comes second) is what makes it win on those pages. */
 @media (max-width: 767.98px){
-  main.has-bottom-nav{ padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px)); }
+  :root{ --bottom-nav-h: 3.25rem; }
+
+  /* !important is required here: Bootstrap's .p-4 utility (already on
+     <main>, see header.php) sets padding with !important itself, so a
+     plain declaration - regardless of selector specificity or source
+     order - is silently ignored and <main> keeps Bootstrap's flat 1.5rem
+     bottom padding instead. Confirmed via computed-style inspection
+     during UI-6.1 QA (a real, previously-unnoticed bug: trailing content
+     - e.g. the Recent Stock In list - was getting clipped by the fixed
+     button/nav despite this rule appearing to be in place). Same fix
+     already used for the same reason in the print rule below. */
+  main.has-bottom-nav{ padding-bottom: calc(var(--bottom-nav-h) + .25rem + env(safe-area-inset-bottom, 0px)) !important; }
+  main.has-sticky-action{ padding-bottom: calc(4.5rem + var(--bottom-nav-h) + env(safe-area-inset-bottom, 0px)) !important; }
 
   .bottom-nav{
     display:flex; position:fixed; left:0; right:0; bottom:0; z-index:1020;
-    background:var(--panel); border-top:1px solid var(--line);
+    height:var(--bottom-nav-h); background:var(--panel); border-top:1px solid var(--line);
     padding-bottom:env(safe-area-inset-bottom, 0px);
   }
   .bottom-nav-link, .bottom-nav-item-wrap{ flex:1 1 0%; min-width:0; }
