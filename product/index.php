@@ -68,15 +68,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'create') {
                     $packageSize = trim($_POST['package_size']);
                     $note = trim($_POST['note']);
                     $minStock = (int) $_POST['min_stock'];
+                    // Phase K2b-1A: standard unchecked-checkbox-omitted-from-POST
+                    // handling, same convention as must_change_password (user/index.php).
+                    $trackBatches = isset($_POST['track_batches']) ? 1 : 0;
 
                     $pdo->beginTransaction();
                     $stmt = $pdo->prepare('INSERT INTO products
-                        (name, sku, barcode, category_id, supplier_id, unit_id, package_size, note, cost_price, sale_price, min_stock, current_stock, created_by, updated_by)
-                        VALUES (?,?,?,?,?,?,?,?,?,?,?,0,?,?)');
+                        (name, sku, barcode, category_id, supplier_id, unit_id, package_size, note, cost_price, sale_price, min_stock, current_stock, track_batches, created_by, updated_by)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,0,?,?,?)');
                     $stmt->execute([
                         $name, $sku, $barcode, $categoryId, $supplierId, $unitId,
                         $packageSize, $note, $costPrice, $salePrice, $minStock,
-                        $actorId, $actorId,
+                        $trackBatches, $actorId, $actorId,
                     ]);
                     $newId = (int) $pdo->lastInsertId();
 
@@ -144,15 +147,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'update') {
                 $packageSize = trim($_POST['package_size']);
                 $note = trim($_POST['note']);
                 $minStock = (int) $_POST['min_stock'];
+                // Phase K2b-1A: same unchecked-checkbox-omitted-from-POST
+                // handling as the create form above - editing any other
+                // field on this form always re-submits the checkbox's
+                // current state too (it's a normal field in the same
+                // <form>), so this can never accidentally flip it.
+                $trackBatches = isset($_POST['track_batches']) ? 1 : 0;
 
                 $pdo->beginTransaction();
                 $stmt = $pdo->prepare('UPDATE products SET
-                    name=?, sku=?, barcode=?, category_id=?, supplier_id=?, unit_id=?, package_size=?, note=?, cost_price=?, sale_price=?, min_stock=?, updated_by=?
+                    name=?, sku=?, barcode=?, category_id=?, supplier_id=?, unit_id=?, package_size=?, note=?, cost_price=?, sale_price=?, min_stock=?, track_batches=?, updated_by=?
                     WHERE id=?');
                 $stmt->execute([
                     $name, $sku, $barcode, $categoryId, $supplierId, $unitId,
                     $packageSize, $note, $costPrice, $salePrice, $minStock,
-                    $actorId, $id,
+                    $trackBatches, $actorId, $id,
                 ]);
 
                 // Same read-back approach as create - see the comment there.
@@ -395,6 +404,10 @@ require_once __DIR__ . '/../includes/header.php';
           </div>
           <div class="mb-3"><label class="form-label"><?= __('common_note') ?></label>
             <textarea name="note" class="form-control"><?= htmlspecialchars($p['note']) ?></textarea></div>
+          <div class="form-check">
+            <input type="checkbox" class="form-check-input" name="track_batches" id="editTrackBatches<?= $p['id'] ?>" <?= $p['track_batches'] ? 'checked' : '' ?>>
+            <label class="form-check-label" for="editTrackBatches<?= $p['id'] ?>"><?= __('product_track_batches_label') ?></label>
+          </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><?= __('common_cancel') ?></button>
@@ -470,6 +483,10 @@ require_once __DIR__ . '/../includes/header.php';
           </div>
           <div class="mb-3"><label class="form-label"><?= __('common_note') ?></label>
             <textarea name="note" class="form-control"></textarea></div>
+          <div class="form-check mb-2">
+            <input type="checkbox" class="form-check-input" name="track_batches" id="createTrackBatches">
+            <label class="form-check-label" for="createTrackBatches"><?= __('product_track_batches_label') ?></label>
+          </div>
           <p class="text-secondary small mb-0"><?= __('product_stock_hint') ?></p>
         </div>
         <div class="modal-footer">

@@ -204,6 +204,7 @@ return [
     'product_filter_clear' => 'សម្អាតតម្រង',
     'product_package_size' => 'ទំហំវេចខ្ចប់',
     'product_package_size_placeholder' => 'ឧ. 50kg, 500ml',
+    'product_track_batches_label' => 'តាមដានលេខឡុត និងកាលបរិច្ឆេទផុតកំណត់សម្រាប់ផលិតផលនេះ',
 
     // Currency (KHR entry toggle - Product Cost/Sale Price, Stock In Unit Cost)
     'currency_err_no_rate_configured' => 'មិនទាន់មានអត្រាប្តូរប្រាក់កំណត់ទេ — សូមកំណត់នៅក្នុងការកំណត់ មុននឹងបញ្ចូលចំនួនជារៀល។',
@@ -224,6 +225,11 @@ return [
     'stockin_err_duplicate_submission' => 'ការកត់ត្រាស្តុកចូលនេះហាក់ដូចជាបានដាក់ស្នើម្តងទៀត (បានកត់ត្រារួចហើយ) — គ្មានអ្វីត្រូវបានកត់ត្រាម្តងទៀតទេ។',
     'stockin_recorded_prefix' => 'បានកត់ត្រា',
     'stockin_recorded_suffix' => 'ដោយជោគជ័យ។',
+    'stockin_batch_number_label' => 'លេខឡុត',
+    'stockin_batch_number_placeholder' => 'ស្រេចចិត្ត',
+    'stockin_expiry_date_label' => 'កាលបរិច្ឆេទផុតកំណត់',
+    'stockin_expiry_date_placeholder' => 'ស្រេចចិត្ត',
+    'stockin_err_batch_number_too_long' => 'លេខឡុតត្រូវតែមានតួអក្សរមិនលើសពី 60។',
 
     // Stock Out
     'stockout_note_label' => 'កំណត់ចំណាំ / លេខយោង',

@@ -386,6 +386,18 @@ table td, table th{ border-color:var(--line) !important; }
   #lineTable.table-cards-mobile td.row-total{ flex:1 1 0; min-width:0; padding-top:0; padding-bottom:0; }
   #lineTable.table-cards-mobile td.row-remove{ flex:0 0 auto; padding-top:0; padding-bottom:0; }
 
+  /* K2b: Stock In's per-line Batch Number/Expiry Date row (scoped to the
+     .batch-fields-row class, not #lineTable generally, which POS and
+     Stock Out also share and never render this row on). Overrides the
+     flex layout above (built for Qty/Cost's compact side-by-side fields)
+     back to a plain block, and visually merges it with its parent line
+     the same way .payment-history-row already merges with the debt row
+     above it elsewhere in the app (negative margin-top, no border of its
+     own) - same pattern, new place. */
+  #lineTable.table-cards-mobile tbody tr.batch-fields-row{
+    display:block; margin-top:-.75rem; padding:0 .75rem .75rem; border:none !important;
+  }
+
   /* UI-2 / F3: POS's Qty/Unit Price inputs specifically (the
      .pos-line-table class added to POS's own #lineTable, alongside the
      shared #lineTable id also reused as-is by Stock In/Out - scoping on
