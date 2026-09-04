@@ -5,11 +5,16 @@ $activePage = $activePage ?? '';
 function navClass($page, $active) {
     return $page === $active ? 'nav-link active fw-semibold' : 'nav-link text-secondary';
 }
-// UI-6: pages with their own UI-5a sticky transaction button don't get the
-// mobile Bottom Navigation (two fixed bottom bars would overlap) - computed
-// once here since both <main>'s padding (below) and the nav markup itself
-// (footer.php) need the same answer.
-$hasBottomNav = !in_array($activePage, ['pos', 'stock-in', 'stock-out'], true);
+// UI-6.1: real-device QA showed the mobile Bottom Navigation must stay
+// visible on every page, including the 3 pages with their own UI-5a sticky
+// transaction button - it no longer gets excluded there. This flag now
+// only controls how much extra bottom clearance <main> needs on those 3
+// pages (the sticky button floats fixed above the Bottom Navigation, so
+// trailing page content - e.g. a history table after the form - has to
+// clear both fixed elements, not just the nav). See assets/style.css's
+// main.has-sticky-action rule and $hasBottomNav's old note (removed) for
+// why pos/stock-in/stock-out used to be excluded entirely.
+$hasStickyAction = in_array($activePage, ['pos', 'stock-in', 'stock-out'], true);
 ?>
 <!DOCTYPE html>
 <html lang="<?= htmlspecialchars($_SESSION['lang']) ?>">
@@ -110,4 +115,4 @@ $hasBottomNav = !in_array($activePage, ['pos', 'stock-in', 'stock-out'], true);
     </div>
 
     <!-- MAIN CONTENT -->
-    <main class="flex-grow-1 p-4<?= $hasBottomNav ? ' has-bottom-nav' : '' ?>">
+    <main class="flex-grow-1 p-4 has-bottom-nav<?= $hasStickyAction ? ' has-sticky-action' : '' ?>">

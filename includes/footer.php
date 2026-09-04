@@ -2,20 +2,21 @@
   </div>
 </div>
 
-<?php if ($hasBottomNav): ?>
-<!-- UI-6: mobile-only Bottom Navigation. Home/POS are plain links reusing
-     the exact routes and $activePage check already used by the sidebar in
-     header.php. Stock deliberately doesn't guess between Stock In and
-     Stock Out - it's a Bootstrap dropdown (dropup, so the menu opens
-     upward from a bottom-anchored trigger) listing the three existing
-     stock routes verbatim; Bootstrap's own dropdown JS (already loaded
-     below) handles outside-tap/Esc/focus, no custom JS needed. More
-     reuses the identical data-bs-toggle="offcanvas" attributes as the
-     mobile-topbar hamburger above - same #appSidebar instance, not a
-     second nav system. Hidden entirely on pos/stock-in/stock-out (see
-     $hasBottomNav in header.php) so it never competes with UI-5a's own
-     sticky Save/Complete-Sale button for the same bottom-of-screen space
-     on those pages - the existing hamburger stays available there instead. -->
+<!-- UI-6 / UI-6.1: mobile-only Bottom Navigation, visible on every mobile
+     page (including pos/stock-in/stock-out - real-device QA found hiding
+     it there felt broken, since it's the app's primary way to move
+     between sections). Home/POS are plain links reusing the exact routes
+     and $activePage check already used by the sidebar in header.php.
+     Stock deliberately doesn't guess between Stock In and Stock Out -
+     it's a Bootstrap dropdown (dropup, so the menu opens upward from a
+     bottom-anchored trigger) listing the three existing stock routes
+     verbatim; Bootstrap's own dropdown JS (already loaded below) handles
+     outside-tap/Esc/focus, no custom JS needed. More reuses the identical
+     data-bs-toggle="offcanvas" attributes as the mobile-topbar hamburger
+     above - same #appSidebar instance, not a second nav system. On
+     pos/stock-in/stock-out, UI-5a's own sticky Save/Complete-Sale button
+     is repositioned (assets/style.css) to float fixed just above this bar
+     instead of overlapping it - see main.has-sticky-action there. -->
 <nav class="bottom-nav d-md-none" aria-label="<?= htmlspecialchars(__('common_menu')) ?>">
   <a class="bottom-nav-link<?= $activePage === 'dashboard' ? ' active' : '' ?>" href="<?= BASE_URL ?>/dashboard.php">
     <i class="bi bi-speedometer2"></i>
@@ -41,7 +42,6 @@
     <span><?= __('common_menu') ?></span>
   </button>
 </nav>
-<?php endif; ?>
 
 <div class="toast-container position-fixed top-0 end-0 p-3" id="toastStack" style="z-index:1090" aria-live="polite" aria-atomic="true"></div>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
