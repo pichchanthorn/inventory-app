@@ -108,6 +108,12 @@ CREATE TABLE products (
     -- of tracking it.
     active_ingredient VARCHAR(150) DEFAULT NULL,
     expiry_date DATE DEFAULT NULL,
+    -- Product Batch & Expiry Management (K1, Migration 014) opt-in switch.
+    -- Existing products - and every new product unless explicitly changed
+    -- - default to 0: current_stock/Stock In/Stock Out/POS/Adjustment
+    -- behavior is completely unaffected until a product is deliberately
+    -- switched on. See database/migrations/014_add_product_batches.sql.
+    track_batches TINYINT(1) NOT NULL DEFAULT 0,
     cost_price DECIMAL(10,2) DEFAULT 0,
     sale_price DECIMAL(10,2) DEFAULT 0,
     min_stock INT DEFAULT 0,
@@ -171,6 +177,98 @@ CREATE TABLE stock_transaction_items (
     subtotal DECIMAL(10,2) NOT NULL,
     FOREIGN KEY (transaction_id) REFERENCES stock_transactions(id) ON DELETE CASCADE,
     FOREIGN KEY (product_id) REFERENCES products(id)
+);
+
+-- Product Batch & Expiry Management (K1, Migration 014) - schema
+-- foundation only; no Stock In/Out/POS/reporting/UI code reads or writes
+-- these tables yet. See database/migrations/014_add_product_batches.sql
+-- for the full design reasoning (batch identity, NULL semantics,
+-- duplicate-receiving rules, cost representation, concurrency).
+--
+-- One row per physical lot. Identity is (product_id, batch_number,
+-- expiry_date) - deliberately NOT including cost, so receiving the same
+-- physical batch again at a different price never forks a second row
+-- for it. Cost is not a column here at all; it lives entirely in
+-- stock_transaction_item_batches below, one immutable row per receiving/
+-- consumption event, so a batch's own cost history is never overwritten
+-- or averaged away.
+--
+-- qty_received is a cumulative, increase-only ledger of everything ever
+-- formally received into this batch (touched only by Stock In); qty_on_
+-- hand is the maintained live balance (the batch-level analog of
+-- products.current_stock's own caching pattern), touched by Stock In,
+-- Stock Out/Sale, and Stock Adjustment alike - it is therefore not
+-- bounded above by qty_received (an upward Adjustment can raise it
+-- without qty_received changing), so no CHECK relates the two.
+--
+-- origin + source_transaction_id distinguish a batch created by a real
+-- Stock In event ('stock_in', source_transaction_id set) from the one
+-- create-once-per-product placeholder a future opt-in migration flow
+-- creates when track_batches is switched on for a product with existing,
+-- pre-batch-tracking stock ('opening_balance', source_transaction_id
+-- NULL - there is no real Stock In to point at). This is provenance
+-- metadata only, never a fabricated physical batch_number or expiry_date
+-- for stock this database has no real batch history for.
+CREATE TABLE product_batches (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    product_id INT NOT NULL,
+    batch_number VARCHAR(60) NULL,
+    expiry_date DATE NULL,
+    qty_received INT NOT NULL DEFAULT 0,
+    qty_on_hand INT NOT NULL DEFAULT 0,
+    origin ENUM('stock_in','opening_balance') NOT NULL DEFAULT 'stock_in',
+    source_transaction_id INT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    created_by INT NULL,
+    updated_by INT NULL,
+    FOREIGN KEY (product_id) REFERENCES products(id),
+    FOREIGN KEY (source_transaction_id) REFERENCES stock_transactions(id) ON DELETE SET NULL,
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL,
+    -- Defense-in-depth only, not the primary concurrency mechanism - MySQL/
+    -- MariaDB treats every NULL as distinct under a UNIQUE index, so this
+    -- provides no protection whenever batch_number or expiry_date is NULL
+    -- (the common case for an unlabeled delivery or an unknown expiry).
+    -- The actual merge-vs-create decision must be made application-side
+    -- via SELECT ... FOR UPDATE with NULL-safe (<=>) comparison inside the
+    -- caller's own transaction - the same "row lock carries the
+    -- concurrency guarantee" principle nextReferenceSequence() already
+    -- uses (includes/stock.php) - not implemented in K1.
+    UNIQUE KEY uq_product_batches_identity (product_id, batch_number, expiry_date),
+    -- Serves FEFO ordering and general per-product batch listing
+    -- (WHERE product_id = ? ORDER BY expiry_date IS NULL, expiry_date).
+    INDEX idx_product_expiry (product_id, expiry_date),
+    -- Same "application code is the primary guard, this is just a
+    -- backstop" spirit as chk_products_current_stock_nonneg.
+    CONSTRAINT chk_product_batches_qty_on_hand_nonneg CHECK (qty_on_hand >= 0),
+    CONSTRAINT chk_product_batches_qty_received_nonneg CHECK (qty_received >= 0)
+);
+
+-- Per-event batch allocation ledger (K1, Migration 014) - one row per
+-- receiving-into-a-batch or consumption-from-a-batch event, linked to the
+-- specific stock_transaction_items line that caused it. stock_transaction_
+-- items itself is intentionally unchanged (no batch_id column) so a
+-- 'sale'/'out' line can split across more than one batch without adding
+-- columns that would be meaningless for the common, non-batch-tracked
+-- case. Direction (received vs. consumed) is inferred from the parent
+-- stock_transactions.type, not stored here.
+--
+-- unit_cost exists as the historical-cost field this ledger is FOR, but
+-- K1 does not implement any application logic that populates it (no
+-- weighted-average consumption cost, no COGS) - that is deferred to a
+-- later phase. The column is part of the schema foundation only.
+CREATE TABLE stock_transaction_item_batches (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    transaction_item_id INT NOT NULL,
+    batch_id INT NOT NULL,
+    qty INT NOT NULL,
+    unit_cost DECIMAL(10,2) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (transaction_item_id) REFERENCES stock_transaction_items(id) ON DELETE CASCADE,
+    FOREIGN KEY (batch_id) REFERENCES product_batches(id),
+    CONSTRAINT chk_stock_transaction_item_batches_qty_positive CHECK (qty > 0),
+    CONSTRAINT chk_stock_transaction_item_batches_unit_cost_nonneg CHECK (unit_cost >= 0)
 );
 
 -- Customers (credit/debt-tracking counterparties - farmers who buy on
