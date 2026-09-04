@@ -282,6 +282,80 @@ final class StockTest extends TestCase
         $this->assertSame($countBefore, $this->countRows('stock_transactions'), 'the transaction header must also be rolled back');
     }
 
+    // ---- K2a: Batch Core + Stock In rollback ----
+
+    public function testStockInRollsBackBatchAndAllocationMutationsAndIdempotencyClaimOnLaterFailure(): void
+    {
+        $p1 = testSeedProduct($this->pdo, 10, ['track_batches' => 1]);
+        $userId = $this->admin();
+        $token = testRandomToken();
+        $countBefore = $this->countRows('stock_transactions');
+        $refCounterBefore = $this->referenceCounterValue();
+        $nonexistentProductId = 999999;
+
+        try {
+            recordStockIn(
+                $this->pdo,
+                [
+                    ['product_id' => $p1['id'], 'qty' => 5, 'cost' => 1, 'batch_number' => 'ROLLBACK-LOT', 'expiry_date' => null], // would succeed alone: item, stock, batch, allocation
+                    ['product_id' => $nonexistentProductId, 'qty' => 5, 'cost' => 1], // fails: product not found
+                ],
+                date('Y-m-d'),
+                null,
+                'second line references a nonexistent product',
+                $userId,
+                $token
+            );
+            $this->fail('Expected an exception from the invalid second line.');
+        } catch (\Throwable $e) {
+            // expected
+        }
+
+        $this->assertSame(10, $this->currentStock($p1['id']), 'the earlier, individually-valid line\'s stock increment must be rolled back');
+        $this->assertSame($countBefore, $this->countRows('stock_transactions'), 'the transaction header must also be rolled back');
+        $this->assertSame($refCounterBefore, $this->referenceCounterValue(), 'the reference counter must be rolled back too');
+
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM stock_transaction_items WHERE product_id = ?');
+        $stmt->execute([$p1['id']]);
+        $this->assertSame(0, (int) $stmt->fetchColumn(), 'no line-1 stock_transaction_items row must persist');
+
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM product_batches WHERE product_id = ?');
+        $stmt->execute([$p1['id']]);
+        $this->assertSame(0, (int) $stmt->fetchColumn(), 'no line-1 product_batches row must persist');
+
+        // No batch was ever committed for this product, so there is no
+        // batch_id to scope an allocation-ledger check to - the absence of
+        // any product_batches row above already proves no allocation could
+        // exist either (stock_transaction_item_batches.batch_id has a NOT
+        // NULL FK to product_batches).
+
+        // The idempotency claim must have rolled back with everything
+        // else - the same token must still be usable for a fresh, valid
+        // submission.
+        $reference = recordStockIn(
+            $this->pdo,
+            [['product_id' => $p1['id'], 'qty' => 5, 'cost' => 1, 'batch_number' => 'ROLLBACK-LOT', 'expiry_date' => null]],
+            date('Y-m-d'),
+            null,
+            'retry after rollback',
+            $userId,
+            $token
+        );
+        $this->assertStringStartsWith('STI-', $reference);
+        $this->assertSame(15, $this->currentStock($p1['id']));
+
+        $stmt = $this->pdo->prepare('SELECT qty_on_hand, qty_received FROM product_batches WHERE product_id = ?');
+        $stmt->execute([$p1['id']]);
+        $batch = $stmt->fetch();
+        $this->assertSame(5, (int) $batch['qty_on_hand'], 'the retried submission must create exactly one correctly-quantified batch');
+        $this->assertSame(5, (int) $batch['qty_received']);
+    }
+
+    private function referenceCounterValue(): int
+    {
+        return (int) $this->pdo->query("SELECT next_value FROM reference_counters WHERE counter_key = 'stock_transactions'")->fetchColumn();
+    }
+
     private function currentStock(int $productId): int
     {
         $stmt = $this->pdo->prepare('SELECT current_stock FROM products WHERE id = ?');
