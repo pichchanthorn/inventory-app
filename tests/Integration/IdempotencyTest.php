@@ -64,6 +64,60 @@ final class IdempotencyTest extends TestCase
         $this->assertSame(40, $this->currentStock($product['id']));
     }
 
+    // ---- K2a: batch bookkeeping must be idempotent too ----
+
+    public function testReplayingTheSameTokenOnStockInForATrackedProductDoesNotCreateASecondBatchOrAllocation(): void
+    {
+        $product = testSeedProduct($this->pdo, 0, ['track_batches' => 1]);
+        $userId = testSeedUserRole($this->pdo)['id'];
+        $token = testRandomToken();
+        $line = ['product_id' => $product['id'], 'qty' => 5, 'cost' => 2, 'batch_number' => 'IDEMP-LOT', 'expiry_date' => '2027-01-01'];
+
+        $reference = recordStockIn($this->pdo, [$line], date('Y-m-d'), null, '', $userId, $token);
+
+        $batches = $this->batchesForProduct($product['id']);
+        $this->assertCount(1, $batches, 'the first submission must create exactly one batch row');
+        $this->assertSame(5, (int) $batches[0]['qty_on_hand']);
+        $batchId = (int) $batches[0]['id'];
+
+        $allocationCountBefore = $this->countAllocationsForBatch($batchId);
+        $this->assertSame(1, $allocationCountBefore, 'the first submission must create exactly one allocation ledger row');
+
+        $this->expectException(IdempotencyConflictException::class);
+        try {
+            recordStockIn($this->pdo, [$line], date('Y-m-d'), null, '', $userId, $token);
+        } finally {
+            $count = (int) $this->pdo->query("SELECT COUNT(*) FROM stock_transactions WHERE reference = '$reference'")->fetchColumn();
+            $this->assertSame(1, $count, 'only the first submission may exist');
+
+            $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM stock_transaction_items WHERE product_id = ?');
+            $stmt->execute([$product['id']]);
+            $this->assertSame(1, (int) $stmt->fetchColumn(), 'no second stock_transaction_items row');
+
+            $batchesAfter = $this->batchesForProduct($product['id']);
+            $this->assertCount(1, $batchesAfter, 'no second product_batches row');
+            $this->assertSame(5, (int) $batchesAfter[0]['qty_on_hand'], 'batch qty must be unchanged by the rejected replay');
+            $this->assertSame(5, (int) $batchesAfter[0]['qty_received']);
+
+            $this->assertSame(1, $this->countAllocationsForBatch($batchId), 'no second allocation ledger row');
+            $this->assertSame(5, $this->currentStock($product['id']), 'stock must be incremented exactly once');
+        }
+    }
+
+    private function batchesForProduct(int $productId): array
+    {
+        $stmt = $this->pdo->prepare('SELECT * FROM product_batches WHERE product_id = ?');
+        $stmt->execute([$productId]);
+        return $stmt->fetchAll();
+    }
+
+    private function countAllocationsForBatch(int $batchId): int
+    {
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM stock_transaction_item_batches WHERE batch_id = ?');
+        $stmt->execute([$batchId]);
+        return (int) $stmt->fetchColumn();
+    }
+
     private function currentStock(int $productId): int
     {
         $stmt = $this->pdo->prepare('SELECT current_stock FROM products WHERE id = ?');

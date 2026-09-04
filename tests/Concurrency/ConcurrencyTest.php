@@ -48,7 +48,17 @@ final class ConcurrencyTest extends TestCase
             $this->pdo->exec("DELETE FROM customers WHERE id = $id");
         }
         foreach ($this->cleanupProductIds as $id) {
+            // Phase K2a: stock_transaction_item_batches references
+            // stock_transaction_items (ON DELETE CASCADE), so it would be
+            // cleaned up automatically - deleted explicitly here anyway for
+            // clarity/symmetry with the other explicit deletes in this
+            // method. product_batches has no ON DELETE behavior on its
+            // product_id FK, so it must be deleted before products.
+            $this->pdo->exec("DELETE sib FROM stock_transaction_item_batches sib
+                               JOIN stock_transaction_items sti ON sti.id = sib.transaction_item_id
+                               WHERE sti.product_id = $id");
             $this->pdo->exec("DELETE FROM stock_transaction_items WHERE product_id = $id");
+            $this->pdo->exec("DELETE FROM product_batches WHERE product_id = $id");
             $this->pdo->exec("DELETE FROM products WHERE id = $id");
         }
         foreach ($this->cleanupUserIds as $id) {
@@ -120,6 +130,126 @@ final class ConcurrencyTest extends TestCase
         $stmt = $this->pdo->prepare('SELECT paid_amount FROM customer_debts WHERE id = ?');
         $stmt->execute([$debtId]);
         $this->assertEqualsWithDelta(90.00, (float) $stmt->fetchColumn(), 0.001, 'exactly one of the two 30.00 payments may land');
+    }
+
+    // ---- K2a: Batch Core + Stock In concurrency ----
+    //
+    // All five tests below drive recordStockIn() through the exact same
+    // runParallel()/proc_open() harness as the P0 #8 Stock Out races above,
+    // via tests/Concurrency/stock_in_batch_race.php. Whatever safety they
+    // observe comes entirely from the product-row lock (SELECT ... FOR
+    // UPDATE) inside recordStockIn() - see that function's own comment in
+    // includes/stock.php for why the UNIQUE constraint on product_batches
+    // alone cannot be relied on whenever batch_number or expiry_date is
+    // NULL.
+
+    public function testConcurrentStockInsForTheSameNewNonNullBatchMergeIntoOneRow(): void
+    {
+        $productId = $this->seedTrackedProduct();
+        $userId = $this->seedUser();
+
+        $results = $this->runParallel([
+            ['stock_in_batch_race.php', (string) $productId, 'LOT-A', '2027-01-01', '5', (string) $userId],
+            ['stock_in_batch_race.php', (string) $productId, 'LOT-A', '2027-01-01', '7', (string) $userId],
+        ]);
+
+        foreach ($results as $r) {
+            $this->assertSame('ok', $r['status'], 'both concurrent Stock In requests must succeed: ' . json_encode($results));
+        }
+        $this->assertSame($results[0]['batchId'], $results[1]['batchId'], 'both must resolve to the same batch row');
+
+        $batches = $this->batchesForProduct($productId);
+        $this->assertCount(1, $batches, 'exactly one product_batches row must exist for this identity');
+        $this->assertSame(12, (int) $batches[0]['qty_received'], 'qty_received must be the sum of both lines');
+        $this->assertSame(12, (int) $batches[0]['qty_on_hand'], 'qty_on_hand must be the sum of both lines');
+    }
+
+    public function testConcurrentStockInsForTheSameBatchNumberWithNullExpiryMergeIntoOneRow(): void
+    {
+        $productId = $this->seedTrackedProduct();
+        $userId = $this->seedUser();
+
+        $results = $this->runParallel([
+            ['stock_in_batch_race.php', (string) $productId, 'LOT-B', '_NULL_', '4', (string) $userId],
+            ['stock_in_batch_race.php', (string) $productId, 'LOT-B', '_NULL_', '9', (string) $userId],
+        ]);
+
+        foreach ($results as $r) {
+            $this->assertSame('ok', $r['status'], 'both concurrent Stock In requests must succeed: ' . json_encode($results));
+        }
+        $this->assertSame($results[0]['batchId'], $results[1]['batchId']);
+
+        $batches = $this->batchesForProduct($productId);
+        $this->assertCount(1, $batches, 'the UNIQUE constraint alone cannot protect a NULL expiry_date - this must come from the product-row lock');
+        $this->assertSame(13, (int) $batches[0]['qty_on_hand'], 'both quantities must be preserved, not lost to a race');
+    }
+
+    public function testConcurrentStockInsForTheSameExpiryWithNullBatchNumberMergeIntoOneRow(): void
+    {
+        $productId = $this->seedTrackedProduct();
+        $userId = $this->seedUser();
+
+        $results = $this->runParallel([
+            ['stock_in_batch_race.php', (string) $productId, '_NULL_', '2027-03-01', '6', (string) $userId],
+            ['stock_in_batch_race.php', (string) $productId, '_NULL_', '2027-03-01', '3', (string) $userId],
+        ]);
+
+        foreach ($results as $r) {
+            $this->assertSame('ok', $r['status'], 'both concurrent Stock In requests must succeed: ' . json_encode($results));
+        }
+        $this->assertSame($results[0]['batchId'], $results[1]['batchId']);
+
+        $batches = $this->batchesForProduct($productId);
+        $this->assertCount(1, $batches, 'the UNIQUE constraint alone cannot protect a NULL batch_number - this must come from the product-row lock');
+        $this->assertSame(9, (int) $batches[0]['qty_on_hand'], 'both quantities must be preserved, not lost to a race');
+    }
+
+    public function testConcurrentAnonymousStockInsAlwaysCreateTwoSeparateBatchRows(): void
+    {
+        $productId = $this->seedTrackedProduct();
+        $userId = $this->seedUser();
+
+        $results = $this->runParallel([
+            ['stock_in_batch_race.php', (string) $productId, '_NULL_', '_NULL_', '4', (string) $userId],
+            ['stock_in_batch_race.php', (string) $productId, '_NULL_', '_NULL_', '10', (string) $userId],
+        ]);
+
+        foreach ($results as $r) {
+            $this->assertSame('ok', $r['status'], 'both concurrent Stock In requests must succeed: ' . json_encode($results));
+        }
+        $this->assertNotSame($results[0]['batchId'], $results[1]['batchId'], 'two anonymous receipts must NEVER merge into one batch');
+
+        $batches = $this->batchesForProduct($productId);
+        $this->assertCount(2, $batches, 'exactly two product_batches rows must exist - never one');
+
+        $stmt = $this->pdo->prepare('SELECT current_stock FROM products WHERE id = ?');
+        $stmt->execute([$productId]);
+        $this->assertSame(14, (int) $stmt->fetchColumn(), 'current_stock must still be the sum of both lines regardless of batch bookkeeping');
+    }
+
+    public function testConcurrentTopUpsOfAnExistingBatchPreserveBothIncrements(): void
+    {
+        $productId = $this->seedTrackedProduct();
+        $userId = $this->seedUser();
+
+        $stmt = $this->pdo->prepare('INSERT INTO product_batches (product_id, batch_number, expiry_date, qty_received, qty_on_hand, origin) VALUES (?,?,?,?,?,?)');
+        $stmt->execute([$productId, 'LOT-EXISTING', '2027-06-01', 20, 20, 'stock_in']);
+        $existingBatchId = (int) $this->pdo->lastInsertId();
+
+        $results = $this->runParallel([
+            ['stock_in_batch_race.php', (string) $productId, 'LOT-EXISTING', '2027-06-01', '5', (string) $userId],
+            ['stock_in_batch_race.php', (string) $productId, 'LOT-EXISTING', '2027-06-01', '8', (string) $userId],
+        ]);
+
+        foreach ($results as $r) {
+            $this->assertSame('ok', $r['status'], 'both concurrent Stock In requests must succeed: ' . json_encode($results));
+            $this->assertSame($existingBatchId, $r['batchId'], 'both must resolve to the pre-existing batch row, not create a new one');
+        }
+
+        $batches = $this->batchesForProduct($productId);
+        $this->assertCount(1, $batches, 'exactly one product_batches row must remain');
+        $this->assertSame(33, (int) $batches[0]['qty_on_hand'], 'no lost update: 20 + 5 + 8');
+        $this->assertSame(33, (int) $batches[0]['qty_received']);
     }
 
     // ---- P0 #17: Reference Numbers (concurrent generation) ----
@@ -194,6 +324,23 @@ final class ConcurrencyTest extends TestCase
         $id = (int) $this->pdo->lastInsertId();
         $this->cleanupProductIds[] = $id;
         return $id;
+    }
+
+    private function seedTrackedProduct(): int
+    {
+        $sku = 'CONC-BATCH-' . bin2hex(random_bytes(4));
+        $stmt = $this->pdo->prepare('INSERT INTO products (name, sku, cost_price, sale_price, current_stock, track_batches) VALUES (?,?,?,?,?,1)');
+        $stmt->execute(['Concurrency Batch Test Product', $sku, 1, 1, 0]);
+        $id = (int) $this->pdo->lastInsertId();
+        $this->cleanupProductIds[] = $id;
+        return $id;
+    }
+
+    private function batchesForProduct(int $productId): array
+    {
+        $stmt = $this->pdo->prepare('SELECT * FROM product_batches WHERE product_id = ?');
+        $stmt->execute([$productId]);
+        return $stmt->fetchAll();
     }
 
     private function seedUser(): int

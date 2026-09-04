@@ -113,14 +113,24 @@ function nextStockReference(PDO $pdo, string $prefix) {
 }
 
 // Stock In: increases current_stock for each line. No concurrency guard
-// needed — an increment can never drive stock negative no matter what
-// else happens concurrently.
+// needed for the increment itself — it can never drive stock negative no
+// matter what else happens concurrently. Phase K2a adds product_batches/
+// stock_transaction_item_batches bookkeeping for track_batches=1 products;
+// see findOrCreateBatch() below for the batch-identity/concurrency design.
 // $idempotencyToken (Phase I3-B): stock-in/index.php's per-form-render
 // token, claimed as the very first statement in this transaction - same
 // placement/reasoning as recordStockOut()'s own token above - so a
 // duplicate submission (double-click, browser retry, two tabs) can never
-// double-increment current_stock. Defaults to null so any future direct
-// caller that doesn't pass one behaves exactly as before this phase.
+// double-increment current_stock (or, as of K2a, double-create/double-
+// increment a batch). Defaults to null so any future direct caller that
+// doesn't pass one behaves exactly as before this phase.
+// $lines: each entry is ['product_id','qty','cost'] as before K2a, plus
+// optional 'batch_number'/'expiry_date' (only meaningful when the
+// product's own track_batches flag is on; absent/null otherwise) - K2b
+// wires these through from the Stock In form. Missing keys default to
+// null via the ?? operator below, so every existing caller (and every
+// existing test) that only ever passed the original three keys continues
+// to work unmodified.
 function recordStockIn(PDO $pdo, array $lines, string $date, ?int $supplierId, string $note, int $userId, ?string $idempotencyToken = null) {
     try {
         $pdo->beginTransaction();
@@ -131,15 +141,63 @@ function recordStockIn(PDO $pdo, array $lines, string $date, ?int $supplierId, s
 
         $stmt = $pdo->prepare('INSERT INTO stock_transactions (reference, type, transaction_date, note, supplier_id, user_id) VALUES (?,?,?,?,?,?)');
         $stmt->execute([$reference, 'in', $date, $note, $supplierId, $userId]);
-        $txId = $pdo->lastInsertId();
+        $txId = (int) $pdo->lastInsertId();
 
         foreach ($lines as $line) {
+            // Phase K2a: lock the product row before deciding anything
+            // about batches, and read track_batches from THIS locked row
+            // rather than trusting a value the caller might pass in - a
+            // future client-supplied track_batches field must never be
+            // able to turn batch bookkeeping on/off for a line. SELECT ...
+            // FOR UPDATE (not a plain SELECT) is what actually takes the
+            // lock here; the existing current_stock UPDATE just below
+            // would eventually take the same row lock anyway, but taking
+            // it here - before findOrCreateBatch() runs - is what
+            // serializes the batch lookup/create decision for this
+            // product_id against any other concurrent Stock In transaction
+            // touching the same product. See findOrCreateBatch()'s own
+            // comment for why this, not the UNIQUE constraint on
+            // product_batches, is the actual concurrency guarantee.
+            $stmt = $pdo->prepare('SELECT track_batches FROM products WHERE id = ? FOR UPDATE');
+            $stmt->execute([$line['product_id']]);
+            $product = $stmt->fetch();
+            if ($product === false) {
+                throw new RuntimeException('Stock In: product ' . $line['product_id'] . ' not found');
+            }
+
+            // Existing statement, unchanged - now runs while still holding
+            // the row lock the SELECT ... FOR UPDATE above just took
+            // (InnoDB holds a transaction's row locks until commit/
+            // rollback regardless of which statement first acquired them).
+            $stmt = $pdo->prepare('UPDATE products SET current_stock = current_stock + ? WHERE id = ?');
+            $stmt->execute([$line['qty'], $line['product_id']]);
+
             $subtotal = $line['qty'] * $line['cost'];
             $stmt = $pdo->prepare('INSERT INTO stock_transaction_items (transaction_id, product_id, qty, unit_price, subtotal) VALUES (?,?,?,?,?)');
             $stmt->execute([$txId, $line['product_id'], $line['qty'], $line['cost'], $subtotal]);
+            $itemId = (int) $pdo->lastInsertId();
 
-            $stmt = $pdo->prepare('UPDATE products SET current_stock = current_stock + ? WHERE id = ?');
-            $stmt->execute([$line['qty'], $line['product_id']]);
+            if ((int) $product['track_batches'] === 1) {
+                $batchId = findOrCreateBatch(
+                    $pdo,
+                    (int) $line['product_id'],
+                    $line['batch_number'] ?? null,
+                    $line['expiry_date'] ?? null,
+                    'stock_in',
+                    $txId,
+                    $userId
+                );
+
+                $stmt = $pdo->prepare('UPDATE product_batches SET qty_received = qty_received + ?, qty_on_hand = qty_on_hand + ?, updated_by = ? WHERE id = ?');
+                $stmt->execute([$line['qty'], $line['qty'], $userId, $batchId]);
+
+                // Receipt-level cost history (Phase K1's design): one
+                // immutable row per receiving event, never averaged or
+                // overwritten. No weighted-average/COGS logic here or
+                // anywhere else in this function - explicitly deferred.
+                $stmt = $pdo->prepare('INSERT INTO stock_transaction_item_batches (transaction_item_id, batch_id, qty, unit_cost) VALUES (?,?,?,?)');
+                $stmt->execute([$itemId, $batchId, $line['qty'], $line['cost']]);
+            }
         }
 
         $pdo->commit();
@@ -147,6 +205,72 @@ function recordStockIn(PDO $pdo, array $lines, string $date, ?int $supplierId, s
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) {
             $pdo->rollBack();
+        }
+        throw $e;
+    }
+}
+
+// Resolves the product_batches row for a given physical identity
+// (product_id, batch_number, expiry_date - cost is deliberately not part
+// of identity, see migration 014's header comment), creating one if none
+// exists yet. MUST be called only after the caller already holds the
+// product row lock (recordStockIn()'s SELECT ... FOR UPDATE above) - that
+// lock, not the SELECT below, is what prevents two concurrent Stock In
+// transactions for the same product from both deciding "no match exists"
+// and both inserting. MySQL/MariaDB's UNIQUE index on (product_id,
+// batch_number, expiry_date) cannot be relied on for that by itself: it
+// treats every NULL as distinct from every other NULL, so it rejects
+// nothing whenever batch_number or expiry_date is NULL - and a plain
+// SELECT (with or without FOR UPDATE) can never lock a row that doesn't
+// exist yet, so it can't close that race on its own either. With the
+// caller's product-row lock held for the duration, only one transaction
+// at a time can ever be inside this function for a given product_id, so
+// the SELECT here is always answered by either nothing (safe to insert)
+// or a row from a transaction that has already fully committed or rolled
+// back - never a concurrently in-flight decision.
+//
+// Anonymous receipts (batch_number AND expiry_date both NULL) never
+// perform the lookup at all and always insert a fresh row - two
+// anonymous deliveries of the same product are never treated as the same
+// physical batch, by design (an anonymous <=> anonymous comparison would
+// otherwise incorrectly match under MySQL's NULL-safe operator).
+function findOrCreateBatch(PDO $pdo, int $productId, ?string $batchNumber, ?string $expiryDate, string $origin, ?int $sourceTransactionId, int $userId): int {
+    if ($batchNumber === null && $expiryDate === null) {
+        return insertNewBatch($pdo, $productId, null, null, $origin, $sourceTransactionId, $userId);
+    }
+
+    $stmt = $pdo->prepare('SELECT id FROM product_batches WHERE product_id = ? AND batch_number <=> ? AND expiry_date <=> ?');
+    $stmt->execute([$productId, $batchNumber, $expiryDate]);
+    $id = $stmt->fetchColumn();
+    if ($id !== false) {
+        return (int) $id;
+    }
+
+    return insertNewBatch($pdo, $productId, $batchNumber, $expiryDate, $origin, $sourceTransactionId, $userId);
+}
+
+// Defense-in-depth only, not the primary concurrency guarantee (that's the
+// caller's product-row lock - see findOrCreateBatch() above). If some
+// future caller ever reaches this function for the same non-NULL identity
+// without holding that lock, uq_product_batches_identity would still
+// reject the second INSERT (MySQL/MariaDB error 1062); rather than
+// surfacing that as a raw duplicate-key failure, re-read the row the
+// other transaction just committed and use it. Never fires for the
+// anonymous (NULL/NULL) case, since the UNIQUE index never rejects two
+// distinct NULLs.
+function insertNewBatch(PDO $pdo, int $productId, ?string $batchNumber, ?string $expiryDate, string $origin, ?int $sourceTransactionId, int $userId): int {
+    try {
+        $stmt = $pdo->prepare('INSERT INTO product_batches (product_id, batch_number, expiry_date, origin, source_transaction_id, created_by, updated_by) VALUES (?,?,?,?,?,?,?)');
+        $stmt->execute([$productId, $batchNumber, $expiryDate, $origin, $sourceTransactionId, $userId, $userId]);
+        return (int) $pdo->lastInsertId();
+    } catch (PDOException $e) {
+        if (($e->errorInfo[1] ?? null) === 1062) {
+            $stmt = $pdo->prepare('SELECT id FROM product_batches WHERE product_id = ? AND batch_number <=> ? AND expiry_date <=> ?');
+            $stmt->execute([$productId, $batchNumber, $expiryDate]);
+            $id = $stmt->fetchColumn();
+            if ($id !== false) {
+                return (int) $id;
+            }
         }
         throw $e;
     }
