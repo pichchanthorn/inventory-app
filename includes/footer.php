@@ -23,7 +23,7 @@
     <span><?= __('nav_dashboard') ?></span>
   </a>
   <a class="bottom-nav-link<?= $activePage === 'pos' ? ' active' : '' ?>" href="<?= BASE_URL ?>/pos/index.php">
-    <i class="bi bi-cash-register"></i>
+    <i class="bi bi-cash-coin"></i>
     <span><?= __('nav_bottom_pos') ?></span>
   </a>
   <div class="dropup bottom-nav-item-wrap">

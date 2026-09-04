@@ -570,12 +570,28 @@ table td, table th{ border-color:var(--line) !important; }
    build on; 3.25rem comfortably fits this bar's tallest real case (Khmer
    labels, which run slightly larger - see body[lang="km"] below - plus
    the icon, gap, padding and border), confirmed with no clipping in QA.
-   z-index:1020 sits just below the UI-5a sticky transaction buttons
+   z-index:1035 sits just ABOVE the UI-5a sticky transaction buttons
    (1030 - reserved for the single most urgent action on the pages where
-   one exists, and now the layer immediately above this bar rather than a
-   mutually-exclusive alternative to it), below the offcanvas
-   backdrop/panel (1040/1045, so opening the sidebar via "More" correctly
-   layers above this bar), and below the toast stack (1090). Colors reuse
+   one exists, and normally the layer immediately above this bar, but
+   never actually overlapping it - see F2/U5-4/U5-5 above). UI-6.2 raised
+   this bar from 1020 to 1035 specifically so the Stock dropup menu below
+   (a real DOM descendant of .bottom-nav, confirmed via bn.contains(menu)
+   - Bootstrap doesn't portal dropdowns to <body> by default) isn't capped
+   below the sticky button's own separate stacking context when it opens
+   and extends down into that button's screen region: a descendant's own
+   z-index (the dropdown-menu's Bootstrap-default 1000) only ranks it
+   among siblings inside .bottom-nav's context, it can never let the menu
+   paint above a completely different stacking context ranked higher than
+   .bottom-nav itself - confirmed on a real device and via a real
+   Playwright click, which failed with "button ... intercepts pointer
+   events" on the covered submenu item before this fix. Still below the
+   offcanvas backdrop/panel (1040/1045, so opening the sidebar via "More"
+   correctly layers above this bar), and below the toast stack (1090).
+   Raising the container (not the dropdown's own z-index, and not
+   lowering the buttons') was the smallest fix: it has zero visible effect
+   in the normal, menu-closed state, since the bar and the sticky button
+   never geometrically overlap there regardless of which one "wins" the
+   z-order. Colors reuse
    the same --panel/--line/--accent custom properties as .sidebar and
    .mobile-topbar, so body.theme-light's existing variable overrides
    handle both themes automatically - no separate light-mode block needed
@@ -607,19 +623,29 @@ table td, table th{ border-color:var(--line) !important; }
   main.has-sticky-action{ padding-bottom: calc(4.5rem + var(--bottom-nav-h) + env(safe-area-inset-bottom, 0px)) !important; }
 
   .bottom-nav{
-    display:flex; position:fixed; left:0; right:0; bottom:0; z-index:1020;
+    display:flex; position:fixed; left:0; right:0; bottom:0; z-index:1035;
     height:var(--bottom-nav-h); background:var(--panel); border-top:1px solid var(--line);
     padding-bottom:env(safe-area-inset-bottom, 0px);
   }
   .bottom-nav-link, .bottom-nav-item-wrap{ flex:1 1 0%; min-width:0; }
   .bottom-nav-link{
     display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
-    width:100%; min-height:48px; padding:.4rem .2rem; border:none; background:transparent;
-    color:var(--muted); text-decoration:none; font-size:.62rem;
+    width:100%; min-height:48px; padding:.4rem .2rem; border:none; border-top:2px solid transparent;
+    background:transparent; color:var(--muted); text-decoration:none; font-size:.62rem;
     font-family:'JetBrains Mono','Kantumruy Pro',monospace; text-transform:uppercase; letter-spacing:.02em;
   }
   .bottom-nav-link i{ font-size:1.15rem; line-height:1; }
-  .bottom-nav-link.active{ color:var(--accent); }
+  /* UI-6.2: color alone was too weak a signal for the active tab at this
+     size (real-device QA). font-weight:600 matches the sidebar's own
+     .nav-link.active treatment exactly (assets/style.css, .sidebar
+     .nav-link.active above); the 2px top border is that same sidebar
+     pattern's left-border indicator, just rotated to fit a horizontal
+     bottom bar - the transparent border-top on the base .bottom-nav-link
+     (above) reserves the same 2px on every item whether or not it's
+     shown, so lighting one up on .active can't shift any layout.
+     Deliberately not a filled pill/background - stays a color + weight +
+     thin-line change, consistent with the existing restrained language. */
+  .bottom-nav-link.active{ color:var(--accent); font-weight:600; border-top-color:var(--accent); }
   .bottom-nav-link:hover, .bottom-nav-link:focus{ color:var(--accent); }
   .bottom-nav-item-wrap{ display:flex; }
 
