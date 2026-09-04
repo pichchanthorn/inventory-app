@@ -200,6 +200,92 @@ recorded," never as a false $0.00.
 
 ---
 
+## Phase I — Reference-Number Concurrency & Idempotency Hardening
+
+A follow-up hardening pass, prompted by real duplicate-submission and
+race-condition risk in the concurrency-sensitive write paths added since
+Phase 6: two users (or one user's double-click, browser retry, or two
+open tabs) hitting the same form at close to the same moment.
+
+**I2-B1 — POS idempotency.** Added `idempotency_keys` (`token UNIQUE`)
+and `claimIdempotencyToken()` in `includes/stock.php`: one `INSERT`
+against the unique constraint, claimed as the first statement inside the
+caller's own transaction, so a rolled-back attempt releases its claim
+automatically and only a committed sale permanently consumes its token.
+`recordStockOut()` and `recordCreditSale()` both gained an optional
+trailing `$idempotencyToken` parameter, and `pos/index.php` wires a
+fresh per-form-render hidden token through both its cash and credit
+paths.
+
+**I3-A — Reference-number generation race fixed.** `nextStockReference()`
+/`nextDebtReference()` previously computed the next "PREFIX-000123"
+number via a plain `SELECT COUNT(*) + 1`, with nothing holding a lock
+between that read and the later `INSERT` — two concurrent transactions
+could read the same count and race to insert the same reference, failing
+one caller's otherwise-legitimate operation with an uncaught duplicate-key
+error. Replaced with `database/migrations/012_add_reference_counters.sql`
+(one row per counter, seeded from existing row counts) and
+`nextReferenceSequence()` in `includes/stock.php`:
+`SELECT next_value FROM reference_counters WHERE counter_key = ? FOR UPDATE`
++ `UPDATE`, run inside the caller's own transaction — the row lock
+serializes concurrent callers instead of letting them race, the same
+principle already used by `idempotency_keys`. STI/STO/ADJ/SAL still share
+one counter (`stock_transactions`), DBT keeps its own
+(`customer_debts`), and the "PREFIX-000123" format is unchanged. A
+rolled-back transaction's counter increment rolls back with it, so a
+failed attempt never permanently consumes a number. Verified against
+real concurrent-process testing (10 independent OS processes racing for
+the same counter, plus a 9-process mixed Stock In/Out/Adjustment batch):
+fully unique, consecutive references with zero errors and zero
+duplicates.
+
+**I3-B — Idempotency extended to Stock In and Debt Payment.**
+`recordStockIn()` and `recordDebtPayment()` had no duplicate-submission
+protection of their own — the `stock_transactions.reference` UNIQUE
+constraint didn't catch a duplicate (each gets its own valid reference),
+and the debt overpayment guard only coincidentally blocked a duplicate
+when it would exceed `total_amount`. Reused the existing I2-B1
+`idempotency_keys`/`claimIdempotencyToken()` mechanism unchanged — no new
+table, no new migration — giving both functions the same optional
+trailing `$idempotencyToken` parameter `recordStockOut()`/
+`recordCreditSale()` already had. `stock-in/index.php` and
+`customer/view.php`'s payment modal each render a fresh per-form token
+and handle `IdempotencyConflictException` with a localized (English +
+Khmer) duplicate-submission message. Verified against true
+concurrent-process testing (8 independent OS processes racing for the
+same token, for both Stock In and Debt Payment): exactly one success and
+seven correctly-rejected duplicates each, with zero errors.
+
+**SIO-01 — Standalone Stock Out idempotency.** `recordStockOut()` had
+accepted an optional `$idempotencyToken` since I2-B1 (for POS's own use
+of it), but the standalone Stock Out page never passed one — a duplicate
+manual submission with enough stock to succeed twice could silently
+record two independent removals for one physical event. Closed the same
+way as I3-B: a fresh per-form token on `stock-out/index.php`, passed
+through to `recordStockOut()`, same duplicate-submission handling.
+Verified the same way (8 concurrent OS processes, one success and seven
+correctly-rejected duplicates, zero errors), plus a regression check
+confirming POS, Stock In, and Debt Payment were unaffected.
+
+All four are covered by dedicated automated tests
+(`tests/Integration/ReferenceTest.php`, `tests/Integration/IdempotencyTest.php`,
+`tests/Concurrency/ConcurrencyTest.php`), part of the PHPUnit suite Phase
+J1 (below) later formalized into the project's standing regression
+coverage.
+
+**Remaining / optional hardening:** Stock Adjustment (`adjustStock()`)
+has no explicit idempotency token, unlike the four paths above. This is
+not currently a demonstrated data-integrity defect — Adjustment already
+has its own optimistic-lock protection (`UPDATE ... WHERE current_stock
+= ?`, from Phase 6's concurrency-safety work), so a stale-page duplicate
+submission is independently rejected as a `StockConflictException`
+rather than silently double-applied. Treated as optional future
+hardening for consistency with the other four paths' UX (a specific
+"looks like a duplicate" message instead of a generic conflict error),
+not as an unfinished I3-A/I3-B requirement.
+
+---
+
 ## Business Invoice & Business Settings
 
 The shared receipt/invoice partial (`includes/receipt_view.php`) was
