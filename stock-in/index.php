@@ -46,20 +46,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $qtys = $_POST['qty'] ?? [];
         $costs = $_POST['unit_cost'] ?? [];
         $costCurrencies = $_POST['unit_cost_currency'] ?? [];
+        // Phase K2b: parallel to product_id[]/qty[]/unit_cost[] above - each
+        // line's <tr> is immediately followed by its own batch-fields <tr>
+        // (see the JS below), so these arrays stay positionally aligned
+        // with $productIds by the same $i index, whether or not the
+        // selected product is actually track_batches=1 (an untracked
+        // line's fields are simply always empty).
+        $batchNumbers = $_POST['batch_number'] ?? [];
+        $expiryDates = $_POST['expiry_date'] ?? [];
 
         try {
             $lines = [];
+            $batchNumberTooLong = false;
             foreach ($productIds as $i => $pid) {
                 if ($pid !== '' && (float) $qtys[$i] > 0) {
                     $cost = resolvePriceField(
                         ['unit_cost' => $costs[$i] ?? 0, 'unit_cost_currency' => $costCurrencies[$i] ?? 'USD'],
                         'unit_cost', $khrRate
                     );
-                    $lines[] = ['product_id' => (int) $pid, 'qty' => (float) $qtys[$i], 'cost' => $cost];
+                    // K2b: HTML form fields submit '' for an empty input,
+                    // never PHP null - but product_batches.batch_number/
+                    // expiry_date are NULL-able columns where '' and NULL
+                    // are different, distinct values under the NULL-safe
+                    // (<=>) matching findOrCreateBatch() uses (includes/
+                    // stock.php). '' must become null here, the same
+                    // pattern supplier_id already uses just above. This
+                    // also covers the untracked-product case: the batch
+                    // fields are blank strings either way, normalize to
+                    // null, and recordStockIn() ignores them entirely once
+                    // it re-derives track_batches=0 from the locked
+                    // product row - never trusting either the presence or
+                    // absence of these keys as an authorization signal.
+                    $batchNumber = trim($batchNumbers[$i] ?? '');
+                    $batchNumber = $batchNumber === '' ? null : $batchNumber;
+                    $expiryDate = trim($expiryDates[$i] ?? '');
+                    $expiryDate = $expiryDate === '' ? null : $expiryDate;
+
+                    if ($batchNumber !== null && strlen($batchNumber) > 60) {
+                        $batchNumberTooLong = true;
+                        break;
+                    }
+
+                    $lines[] = [
+                        'product_id' => (int) $pid, 'qty' => (float) $qtys[$i], 'cost' => $cost,
+                        'batch_number' => $batchNumber, 'expiry_date' => $expiryDate,
+                    ];
                 }
             }
 
-            if (!$lines) {
+            if ($batchNumberTooLong) {
+                $error = __('stockin_err_batch_number_too_long');
+            } elseif (!$lines) {
                 $error = __('stockin_err_add_product');
             } else {
                 $reference = recordStockIn($pdo, $lines, $date, $supplierId, $note, $_SESSION['user_id'], $idempotencyToken);
@@ -187,6 +224,9 @@ const T_SCAN_BARCODE = <?= json_encode(__('stockin_scan_barcode')) ?>;
 const T_SCAN_NO_MATCH = <?= json_encode(__('stockin_scan_no_match')) ?>;
 const T_SCAN_CAMERA_ERROR = <?= json_encode(__('stockin_scan_camera_error')) ?>;
 const T_SCAN_LIB_ERROR = <?= json_encode(__('stockin_scan_lib_error')) ?>;
+const T_BATCH_NUMBER_LABEL = <?= json_encode(__('stockin_batch_number_label')) ?>;
+const T_BATCH_NUMBER_PLACEHOLDER = <?= json_encode(__('stockin_batch_number_placeholder')) ?>;
+const T_EXPIRY_DATE_LABEL = <?= json_encode(__('stockin_expiry_date_label')) ?>;
 // Live-preview-only KHR<->USD conversion for the Unit Cost currency
 // toggle - the server always resolves the real submitted value via
 // resolvePriceField(), independently of this preview.
@@ -342,8 +382,39 @@ function addRow(productId = '', qty = 1, cost = '') {
       </div>
       <div class="text-secondary small price-preview"></div>
     </td>
-    <td class="row-remove"><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()">✕</button></td>`;
+    <td class="row-remove"><button type="button" class="btn btn-sm btn-outline-danger" onclick="removeLine(this)">✕</button></td>`;
   document.getElementById('lineBody').appendChild(tr);
+
+  // Phase K2b: a second <tr> per line, immediately following the one
+  // above, holding this line's optional Batch Number/Expiry Date - hidden
+  // by default, shown only once a track_batches=1 product is selected on
+  // THIS row (see updateBatchFieldsVisibility() below). Kept as a
+  // genuinely separate <tr> rather than extra <td>s on the row above so
+  // an untracked line (the common case) never grows the table by two
+  // columns - same "auxiliary row nested under its parent row" pattern
+  // .payment-history-row already uses elsewhere (customer/view.php).
+  // Always present and never `disabled` (only visually hidden) so
+  // batch_number[]/expiry_date[] stay positionally aligned with
+  // product_id[]/qty[]/unit_cost[] on submit - a disabled input is
+  // omitted from the POST body entirely, which would desync the arrays.
+  const batchRow = document.createElement('tr');
+  batchRow.className = 'batch-fields-row d-none';
+  batchRow.innerHTML = `
+    <td colspan="4" style="border-top:0;">
+      <div class="row g-2">
+        <div class="col-6">
+          <label class="form-label small mb-1">${T_BATCH_NUMBER_LABEL}</label>
+          <input type="text" name="batch_number[]" class="form-control form-control-sm" maxlength="60" placeholder="${T_BATCH_NUMBER_PLACEHOLDER}">
+        </div>
+        <div class="col-6">
+          <label class="form-label small mb-1">${T_EXPIRY_DATE_LABEL}</label>
+          <input type="date" name="expiry_date[]" class="form-control form-control-sm">
+        </div>
+      </div>
+    </td>`;
+  document.getElementById('lineBody').appendChild(batchRow);
+  tr._batchRow = batchRow;
+
   const controls = wireProductSelect(tr.querySelector('.product-select'), product => fillCost(tr, product));
   controls.setInitial(productId);
   tr._productSelectControls = controls;
@@ -360,6 +431,42 @@ function fillCost(row, product) {
   btn.textContent = '$';
   input.step = '0.01';
   updatePricePreview(input);
+  updateBatchFieldsVisibility(row, product);
+}
+
+// Phase K2b: purely a display convenience keyed off the same client-side
+// PRODUCTS array fillCost() already reads cost_price from - never the
+// authorization/data-integrity decision. recordStockIn() (includes/
+// stock.php) always re-derives track_batches from a fresh, locked read
+// of the products row itself and ignores batch_number/expiry_date
+// entirely for a product it finds to be untracked, regardless of what
+// this function shows, hides, or lets the user type.
+function updateBatchFieldsVisibility(row, product) {
+  const batchRow = row._batchRow;
+  if (!batchRow) return;
+  if (product && product.track_batches) {
+    batchRow.classList.remove('d-none');
+  } else {
+    batchRow.classList.add('d-none');
+    // Cleared, not just hidden - switching a line from a tracked product
+    // to a different (or untracked) product must never silently carry a
+    // stale batch number/expiry over to the newly-selected product.
+    batchRow.querySelector('[name="batch_number[]"]').value = '';
+    batchRow.querySelector('[name="expiry_date[]"]').value = '';
+  }
+}
+
+// Removes both this line's main <tr> and its paired batch-fields <tr> -
+// a plain this.closest('tr').remove() (the pre-K2b behavior) would leave
+// the second row orphaned in the DOM, still submitting its now-detached
+// batch_number[]/expiry_date[] values and desyncing every later line's
+// array index.
+function removeLine(btn) {
+  const tr = btn.closest('tr');
+  if (tr._batchRow) {
+    tr._batchRow.remove();
+  }
+  tr.remove();
 }
 
 function toggleCurrency(btn) {

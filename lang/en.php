@@ -204,6 +204,7 @@ return [
     'product_filter_clear' => 'Clear filter',
     'product_package_size' => 'Package Size',
     'product_package_size_placeholder' => 'e.g. 50kg, 500ml',
+    'product_track_batches_label' => 'Track batch number / expiry date for this product',
 
     // Currency (KHR entry toggle - Product Cost/Sale Price, Stock In Unit Cost)
     'currency_err_no_rate_configured' => 'No exchange rate is configured yet — set one in Settings before entering amounts in KHR.',
@@ -224,6 +225,11 @@ return [
     'stockin_err_duplicate_submission' => 'This stock in looks like a duplicate submission (already recorded once) — nothing was recorded again.',
     'stockin_recorded_prefix' => 'Recorded',
     'stockin_recorded_suffix' => 'successfully.',
+    'stockin_batch_number_label' => 'Batch Number',
+    'stockin_batch_number_placeholder' => 'Optional',
+    'stockin_expiry_date_label' => 'Expiry Date',
+    'stockin_expiry_date_placeholder' => 'Optional',
+    'stockin_err_batch_number_too_long' => 'Batch number must be 60 characters or fewer.',
 
     // Stock Out
     'stockout_note_label' => 'Note / Reference',
