@@ -53,7 +53,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = __('common_err_invalid_price');
         } else {
             try {
-                $reference = recordStockOut($pdo, $lines, $date, $note, $_SESSION['user_id'], 'out', null, $idempotencyToken);
+                // Phase K3-2: consumeBatches=true - Stock Out explicitly
+                // opts into FEFO batch consumption (includes/stock.php).
+                // For a track_batches=0 product this is inert (the
+                // per-line check reads track_batches=0 from the locked
+                // row and takes the existing, unchanged guarded-decrement
+                // path regardless of this flag); for a track_batches=1
+                // product it now consumes real batch quantities via FEFO
+                // instead of throwing BatchConsumptionRequiredException.
+                // That exception should therefore never surface from this
+                // call site under normal operation - if it somehow did
+                // (a future regression passing false again, for example),
+                // the generic catch (Throwable $e) below already fails
+                // safely: recordStockOut() has already rolled back
+                // everything before the exception propagates here, so
+                // there is nothing to partially save, and the existing
+                // common_err_transaction_failed message plus the
+                // error_log() call (which captures the specific exception
+                // message) are exactly this page's established pattern
+                // for an unexpected failure - no new, more specific catch
+                // is needed for a case that isn't expected to occur.
+                $reference = recordStockOut($pdo, $lines, $date, $note, $_SESSION['user_id'], 'out', null, $idempotencyToken, true);
                 $_SESSION['stockout_flash'] = __('stockout_recorded_prefix') . " $reference " . __('stockout_recorded_suffix');
                 header('Location: ' . BASE_URL . '/stock-out/index.php');
                 exit;
