@@ -351,6 +351,276 @@ final class StockTest extends TestCase
         $this->assertSame(5, (int) $batch['qty_received']);
     }
 
+    // ---- K3-1: Stock Out + FEFO batch consumption ----
+    //
+    // All tests below call recordStockOut(..., consumeBatches: true) -
+    // Stock Out's own call site (stock-out/index.php) is NOT wired up to
+    // pass this yet (that's a later phase); these tests exercise the
+    // backend contract directly, exactly as stock-out/index.php will
+    // once it does.
+
+    public function testStockOutConsumesFromASingleBatchWhenOneSuffices(): void
+    {
+        $product = $this->seedTrackedProduct(20);
+        $batchId = $this->seedBatch($product['id'], 'LOT-A', '2027-01-01', 20);
+        $userId = $this->admin();
+
+        recordStockOut($this->pdo, [['product_id' => $product['id'], 'qty' => 8, 'price' => 1]], date('Y-m-d'), '', $userId, 'out', null, null, true);
+
+        $this->assertSame(12, $this->currentStock($product['id']));
+        $this->assertSame(12, $this->batchQtyOnHand($batchId));
+        $this->assertInvariantHolds($product['id']);
+    }
+
+    public function testStockOutPartiallyDepletesABatchWhenNotAllIsNeeded(): void
+    {
+        $product = $this->seedTrackedProduct(10);
+        $batchId = $this->seedBatch($product['id'], 'LOT-A', '2027-01-01', 10);
+        $userId = $this->admin();
+
+        recordStockOut($this->pdo, [['product_id' => $product['id'], 'qty' => 3, 'price' => 1]], date('Y-m-d'), '', $userId, 'out', null, null, true);
+
+        $this->assertSame(7, $this->batchQtyOnHand($batchId));
+        $this->assertInvariantHolds($product['id']);
+    }
+
+    public function testStockOutExactlyDepletesABatchToZero(): void
+    {
+        $product = $this->seedTrackedProduct(5);
+        $batchId = $this->seedBatch($product['id'], 'LOT-A', '2027-01-01', 5);
+        $userId = $this->admin();
+
+        recordStockOut($this->pdo, [['product_id' => $product['id'], 'qty' => 5, 'price' => 1]], date('Y-m-d'), '', $userId, 'out', null, null, true);
+
+        $this->assertSame(0, $this->batchQtyOnHand($batchId));
+        $this->assertSame(0, $this->currentStock($product['id']));
+        $this->assertInvariantHolds($product['id']);
+    }
+
+    public function testStockOutConsumesFromEarliestExpiryFirstAcrossMultipleBatches(): void
+    {
+        // The task's own worked example: LOT-A (5, expiring sooner) must
+        // be fully consumed before LOT-B (10, expiring later) is touched
+        // at all, for a request that spans both.
+        $product = $this->seedTrackedProduct(15);
+        $lotA = $this->seedBatch($product['id'], 'LOT-A', '2027-01-01', 5);
+        $lotB = $this->seedBatch($product['id'], 'LOT-B', '2027-06-01', 10);
+        $userId = $this->admin();
+
+        recordStockOut($this->pdo, [['product_id' => $product['id'], 'qty' => 8, 'price' => 1]], date('Y-m-d'), '', $userId, 'out', null, null, true);
+
+        $this->assertSame(0, $this->batchQtyOnHand($lotA), 'the earlier-expiring batch must be fully consumed first');
+        $this->assertSame(7, $this->batchQtyOnHand($lotB), 'only the remainder should be drawn from the later batch');
+        $this->assertSame(7, $this->currentStock($product['id']));
+        $this->assertInvariantHolds($product['id']);
+
+        $stmt = $this->pdo->prepare('SELECT sib.batch_id, sib.qty FROM stock_transaction_item_batches sib
+                                       JOIN stock_transaction_items sti ON sti.id = sib.transaction_item_id
+                                       WHERE sti.product_id = ? ORDER BY sib.batch_id');
+        $stmt->execute([$product['id']]);
+        $allocations = $stmt->fetchAll();
+        $this->assertCount(2, $allocations, 'one allocation ledger row per batch drawn from, not per line');
+        $this->assertSame(['batch_id' => $lotA, 'qty' => 5], ['batch_id' => (int) $allocations[0]['batch_id'], 'qty' => (int) $allocations[0]['qty']]);
+        $this->assertSame(['batch_id' => $lotB, 'qty' => 3], ['batch_id' => (int) $allocations[1]['batch_id'], 'qty' => (int) $allocations[1]['qty']]);
+    }
+
+    public function testStockOutConsumesAllAvailableStockAcrossAllBatches(): void
+    {
+        $product = $this->seedTrackedProduct(15);
+        $lotA = $this->seedBatch($product['id'], 'LOT-A', '2027-01-01', 5);
+        $lotB = $this->seedBatch($product['id'], 'LOT-B', '2027-06-01', 10);
+        $userId = $this->admin();
+
+        recordStockOut($this->pdo, [['product_id' => $product['id'], 'qty' => 15, 'price' => 1]], date('Y-m-d'), '', $userId, 'out', null, null, true);
+
+        $this->assertSame(0, $this->batchQtyOnHand($lotA));
+        $this->assertSame(0, $this->batchQtyOnHand($lotB));
+        $this->assertSame(0, $this->currentStock($product['id']));
+        $this->assertInvariantHolds($product['id']);
+    }
+
+    public function testStockOutWithInsufficientTotalBatchStockIsRejectedWithNoPartialMutation(): void
+    {
+        $product = $this->seedTrackedProduct(8);
+        $lotA = $this->seedBatch($product['id'], 'LOT-A', '2027-01-01', 5);
+        $lotB = $this->seedBatch($product['id'], 'LOT-B', '2027-06-01', 3);
+        $userId = $this->admin();
+
+        try {
+            recordStockOut($this->pdo, [['product_id' => $product['id'], 'qty' => 20, 'price' => 1]], date('Y-m-d'), '', $userId, 'out', null, null, true);
+            $this->fail('Expected StockConflictException was not thrown.');
+        } catch (StockConflictException $e) {
+            $this->assertSame($product['id'], $e->productId);
+        }
+
+        $this->assertSame(5, $this->batchQtyOnHand($lotA), 'no partial allocation from batch A');
+        $this->assertSame(3, $this->batchQtyOnHand($lotB), 'no partial allocation from batch B');
+        $this->assertSame(8, $this->currentStock($product['id']), 'current_stock must be unchanged');
+        $this->assertInvariantHolds($product['id']);
+    }
+
+    public function testStockOutTreatsNullExpiryBatchesAsLastInFefoOrder(): void
+    {
+        $product = $this->seedTrackedProduct(10);
+        $dated = $this->seedBatch($product['id'], 'LOT-DATED', '2027-01-01', 4);
+        $undated = $this->seedBatch($product['id'], 'LOT-UNDATED', null, 6);
+        $userId = $this->admin();
+
+        // Requesting more than the dated batch alone can cover forces
+        // FEFO to spill into the undated batch - proving undated is
+        // ordered AFTER dated, not before (the naive ORDER BY expiry_date
+        // ASC pitfall this design explicitly avoids).
+        recordStockOut($this->pdo, [['product_id' => $product['id'], 'qty' => 6, 'price' => 1]], date('Y-m-d'), '', $userId, 'out', null, null, true);
+
+        $this->assertSame(0, $this->batchQtyOnHand($dated), 'the dated batch must be fully consumed before the undated one is touched');
+        $this->assertSame(4, $this->batchQtyOnHand($undated));
+        $this->assertInvariantHolds($product['id']);
+    }
+
+    public function testStockOutTiesBySameExpiryConsumeLowerBatchIdFirst(): void
+    {
+        $product = $this->seedTrackedProduct(10);
+        $first = $this->seedBatch($product['id'], 'LOT-FIRST', '2027-01-01', 5);
+        $second = $this->seedBatch($product['id'], 'LOT-SECOND', '2027-01-01', 5);
+        $userId = $this->admin();
+
+        recordStockOut($this->pdo, [['product_id' => $product['id'], 'qty' => 5, 'price' => 1]], date('Y-m-d'), '', $userId, 'out', null, null, true);
+
+        $this->assertSame(0, $this->batchQtyOnHand($first), 'the lower-id batch (received first) must be consumed first on a tie');
+        $this->assertSame(5, $this->batchQtyOnHand($second));
+        $this->assertInvariantHolds($product['id']);
+    }
+
+    public function testStockOutConsumingAnAnonymousBatchOnlyAfterDatedBatchesAreExhausted(): void
+    {
+        $product = $this->seedTrackedProduct(10);
+        $dated = $this->seedBatch($product['id'], 'LOT-DATED', '2027-01-01', 3);
+        $anonymous = $this->seedBatch($product['id'], null, null, 7);
+        $userId = $this->admin();
+
+        recordStockOut($this->pdo, [['product_id' => $product['id'], 'qty' => 5, 'price' => 1]], date('Y-m-d'), '', $userId, 'out', null, null, true);
+
+        $this->assertSame(0, $this->batchQtyOnHand($dated));
+        $this->assertSame(5, $this->batchQtyOnHand($anonymous), 'the anonymous NULL/NULL batch is consumed only after the dated batch is exhausted');
+        $this->assertInvariantHolds($product['id']);
+    }
+
+    public function testStockOutHandlesBatchOnlyAndExpiryOnlyIdentitiesPurelyByExpiry(): void
+    {
+        // batch_number never affects ordering - only expiry_date does.
+        // batchOnly (expiry NULL) must be ordered AFTER expiryOnly (a
+        // real expiry date), regardless of having a "real" batch number.
+        $product = $this->seedTrackedProduct(10);
+        $expiryOnly = $this->seedBatch($product['id'], null, '2027-01-01', 4);
+        $batchOnly = $this->seedBatch($product['id'], 'LOT-NOEXP', null, 6);
+        $userId = $this->admin();
+
+        recordStockOut($this->pdo, [['product_id' => $product['id'], 'qty' => 6, 'price' => 1]], date('Y-m-d'), '', $userId, 'out', null, null, true);
+
+        $this->assertSame(0, $this->batchQtyOnHand($expiryOnly), 'the dated (expiry-only) batch must be consumed first');
+        $this->assertSame(4, $this->batchQtyOnHand($batchOnly));
+        $this->assertInvariantHolds($product['id']);
+    }
+
+    public function testStockOutWithExplicitConsumeBatchesOnAnUntrackedProductIsANoOp(): void
+    {
+        // consumeBatches=true is inert when track_batches=0 - the new
+        // per-line check reads track_batches from the DB and takes the
+        // existing, unchanged guarded-decrement path regardless of the
+        // flag's value.
+        $product = testSeedProduct($this->pdo, 10);
+        $userId = $this->admin();
+
+        recordStockOut($this->pdo, [['product_id' => $product['id'], 'qty' => 4, 'price' => 1]], date('Y-m-d'), '', $userId, 'out', null, null, true);
+
+        $this->assertSame(6, $this->currentStock($product['id']));
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM product_batches WHERE product_id = ?');
+        $stmt->execute([$product['id']]);
+        $this->assertSame(0, (int) $stmt->fetchColumn(), 'no product_batches row must ever be created for an untracked product');
+    }
+
+    public function testStockOutRollsBackMultiBatchAllocationOnALaterLineFailure(): void
+    {
+        $product = $this->seedTrackedProduct(15);
+        $lotA = $this->seedBatch($product['id'], 'LOT-A', '2027-01-01', 5);
+        $lotB = $this->seedBatch($product['id'], 'LOT-B', '2027-06-01', 10);
+        $userId = $this->admin();
+        $token = testRandomToken();
+        $countBefore = $this->countRows('stock_transactions');
+        $refCounterBefore = $this->referenceCounterValue();
+        $nonexistentProductId = 999999;
+
+        try {
+            recordStockOut(
+                $this->pdo,
+                [
+                    // Would succeed alone: spans both batches (5 + 3),
+                    // exercising rollback of a MULTI-batch allocation,
+                    // not just a single one.
+                    ['product_id' => $product['id'], 'qty' => 8, 'price' => 1],
+                    ['product_id' => $nonexistentProductId, 'qty' => 1, 'price' => 1],
+                ],
+                date('Y-m-d'), 'second line references a nonexistent product', $userId, 'out', null, $token, true
+            );
+            $this->fail('Expected an exception from the invalid second line.');
+        } catch (\Throwable $e) {
+            // expected
+        }
+
+        $this->assertSame(5, $this->batchQtyOnHand($lotA), 'batch A must be restored to its pre-transaction quantity');
+        $this->assertSame(10, $this->batchQtyOnHand($lotB), 'batch B must be restored to its pre-transaction quantity');
+        $this->assertSame(15, $this->currentStock($product['id']), 'current_stock must be restored');
+        $this->assertInvariantHolds($product['id']);
+
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM stock_transaction_item_batches sib
+                                       JOIN stock_transaction_items sti ON sti.id = sib.transaction_item_id
+                                       WHERE sti.product_id = ?');
+        $stmt->execute([$product['id']]);
+        $this->assertSame(0, (int) $stmt->fetchColumn(), 'no allocation ledger row must survive');
+
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM stock_transaction_items WHERE product_id = ?');
+        $stmt->execute([$product['id']]);
+        $this->assertSame(0, (int) $stmt->fetchColumn(), 'no stock_transaction_items row must survive');
+
+        $this->assertSame($countBefore, $this->countRows('stock_transactions'), 'no stock_transactions header must survive');
+        $this->assertSame($refCounterBefore, $this->referenceCounterValue(), 'the reference counter must be rolled back');
+
+        // The idempotency claim must have rolled back too.
+        $reference = recordStockOut($this->pdo, [['product_id' => $product['id'], 'qty' => 5, 'price' => 1]], date('Y-m-d'), 'retry', $userId, 'out', null, $token, true);
+        $this->assertStringStartsWith('STO-', $reference);
+        $this->assertSame(10, $this->currentStock($product['id']));
+        $this->assertInvariantHolds($product['id']);
+    }
+
+    private function seedTrackedProduct(int $stock): array
+    {
+        return testSeedProduct($this->pdo, $stock, ['track_batches' => 1]);
+    }
+
+    private function seedBatch(int $productId, ?string $batchNumber, ?string $expiryDate, int $qty): int
+    {
+        $stmt = $this->pdo->prepare('INSERT INTO product_batches (product_id, batch_number, expiry_date, qty_received, qty_on_hand) VALUES (?,?,?,?,?)');
+        $stmt->execute([$productId, $batchNumber, $expiryDate, $qty, $qty]);
+        return (int) $this->pdo->lastInsertId();
+    }
+
+    private function batchQtyOnHand(int $batchId): int
+    {
+        $stmt = $this->pdo->prepare('SELECT qty_on_hand FROM product_batches WHERE id = ?');
+        $stmt->execute([$batchId]);
+        return (int) $stmt->fetchColumn();
+    }
+
+    // The required K3 invariant: for a tracked product, current_stock
+    // must always equal the sum of its own batches' qty_on_hand.
+    private function assertInvariantHolds(int $productId): void
+    {
+        $stmt = $this->pdo->prepare('SELECT COALESCE(SUM(qty_on_hand), 0) FROM product_batches WHERE product_id = ?');
+        $stmt->execute([$productId]);
+        $batchSum = (int) $stmt->fetchColumn();
+        $this->assertSame($this->currentStock($productId), $batchSum, 'products.current_stock must equal SUM(product_batches.qty_on_hand)');
+    }
+
     private function referenceCounterValue(): int
     {
         return (int) $this->pdo->query("SELECT next_value FROM reference_counters WHERE counter_key = 'stock_transactions'")->fetchColumn();

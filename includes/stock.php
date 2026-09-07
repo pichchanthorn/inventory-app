@@ -28,6 +28,28 @@ class StockConflictException extends RuntimeException {
     }
 }
 
+// Thrown when a Stock Out line targets a track_batches=1 product but the
+// caller did not opt into batch consumption (Phase K3-1, $consumeBatches
+// on insertStockOutLines()/recordStockOut() below) - e.g. POS, before its
+// own FEFO integration (a later phase) ships. Deliberately distinct from
+// StockConflictException: that exception means "not enough stock exists"
+// (an availability problem), whereas this means "this caller doesn't yet
+// know how to allocate against specific batches" (a capability problem)
+// - the product may have plenty of stock. Silently falling through to a
+// plain current_stock decrement here would decrement it with no
+// corresponding batch decrement, breaking the products.current_stock =
+// SUM(product_batches.qty_on_hand) invariant this schema requires.
+// Callers catch this specifically to show a distinct, actionable message
+// rather than either the insufficient-stock message or the generic
+// transaction-failed fallback.
+class BatchConsumptionRequiredException extends RuntimeException {
+    public $productId;
+    public function __construct(int $productId) {
+        parent::__construct('Batch consumption required for product ' . $productId . ' but not enabled by this caller');
+        $this->productId = $productId;
+    }
+}
+
 // Thrown when claimIdempotencyToken() finds its token already claimed -
 // i.e. this exact submission (a double-click, a browser retry, two
 // tabs, a network timeout followed by a resubmit) was already recorded.
@@ -276,16 +298,69 @@ function insertNewBatch(PDO $pdo, int $productId, ?string $batchNumber, ?string 
     }
 }
 
-// Shared inner loop for a stock-decreasing transaction: insert each
-// line item, then guard-decrement current_stock the same
+// Shared inner loop for a stock-decreasing transaction: insert each line
+// item, then guard-decrement current_stock the same
 // UPDATE ... WHERE current_stock >= ? way described above. Does NOT
 // manage its own transaction - must be called from within the caller's
-// own beginTransaction()/commit(). Used by recordStockOut() below and
-// by recordCreditSale() (includes/debt.php), so a credit sale's stock
+// own beginTransaction()/commit(). Used by recordStockOut() below and by
+// recordCreditSale() (includes/debt.php), so a credit sale's stock
 // decrement gets the exact same concurrency guarantee as a cash sale or
 // a manual Stock Out, with no duplicated logic to drift out of sync.
-function insertStockOutLines(PDO $pdo, int $txId, array $lines): void {
+//
+// $consumeBatches (Phase K3-1): defaults to false, so recordCreditSale()'s
+// own direct call (includes/debt.php) and every other existing caller
+// keep working completely unmodified - POS is NOT touched by this phase,
+// on purpose. A caller gets FEFO batch consumption only by explicitly
+// passing true at its own call site (Stock Out's own call site is wired
+// up in a later phase, not this one); nothing here infers it from
+// track_batches alone. See BatchConsumptionRequiredException above for
+// what happens to a tracked product when this stays false.
+function insertStockOutLines(PDO $pdo, int $txId, array $lines, bool $consumeBatches = false): void {
+    // Phase K3-1: deterministic lock acquisition order for any multi-
+    // product transaction. A tracked line now holds its product-row lock
+    // for longer than before (a FEFO read plus N batch updates and N
+    // ledger inserts, not just one UPDATE), which raises the odds of the
+    // same opposite-order deadlock shape InnoDB already has to detect-
+    // and-abort for any multi-product Stock Out today. Sorting once,
+    // here, for every caller (tracked or not - harmless either way)
+    // removes that specific shape entirely for any transaction built by
+    // this codebase's own UI. usort() only reorders the array; it never
+    // touches a line's own product_id/qty/price values.
+    usort($lines, fn($a, $b) => $a['product_id'] <=> $b['product_id']);
+
     foreach ($lines as $line) {
+        // Phase K3-1: lock the product row and read track_batches from
+        // THIS locked row - the sole authoritative source, never a
+        // caller-supplied or client-side value - before deciding
+        // anything. Same SELECT ... FOR UPDATE pattern recordStockIn()
+        // already uses (Phase K2a), for the identical reason: it
+        // serializes any decision about this product's batches against
+        // every other concurrent transaction (Stock In OR Stock Out)
+        // touching the same product_id. Unconditional - runs for every
+        // line regardless of $consumeBatches, so a tracked product can
+        // never silently fall through to the plain guarded decrement
+        // below, no matter which caller reaches this function.
+        $stmt = $pdo->prepare('SELECT track_batches FROM products WHERE id = ? FOR UPDATE');
+        $stmt->execute([$line['product_id']]);
+        $product = $stmt->fetch();
+        if ($product === false) {
+            throw new RuntimeException('Stock Out: product ' . $line['product_id'] . ' not found');
+        }
+
+        if ((int) $product['track_batches'] === 1) {
+            if (!$consumeBatches) {
+                // Safety gate: this caller (POS, before its own FEFO
+                // integration ships) does not know how to allocate
+                // against specific batches. Reject the entire line - and
+                // therefore the whole transaction, via the caller's own
+                // catch-all - before any mutation happens for it.
+                throw new BatchConsumptionRequiredException($line['product_id']);
+            }
+            insertStockOutLineWithBatchConsumption($pdo, $txId, $line);
+            continue;
+        }
+
+        // Untracked product: existing behavior, byte-unchanged.
         $subtotal = $line['qty'] * $line['price'];
         $stmt = $pdo->prepare('INSERT INTO stock_transaction_items (transaction_id, product_id, qty, unit_price, subtotal) VALUES (?,?,?,?,?)');
         $stmt->execute([$txId, $line['product_id'], $line['qty'], $line['price'], $subtotal]);
@@ -295,6 +370,102 @@ function insertStockOutLines(PDO $pdo, int $txId, array $lines): void {
         if ($stmt->rowCount() === 0) {
             throw new StockConflictException($line['product_id']);
         }
+    }
+}
+
+// Phase K3-1: FEFO (First-Expired, First-Out) consumption for one Stock
+// Out line against a track_batches=1 product. MUST be called only after
+// the caller already holds the product-row lock (the SELECT ... FOR
+// UPDATE in insertStockOutLines() above) - the same "one lock serializes
+// every batch decision for this product_id" guarantee K2a's
+// findOrCreateBatch() already relies on for Stock In, extended here to
+// consumption: two concurrent lines for the same product can never both
+// read the same candidate quantities and both allocate against them,
+// because only one transaction at a time can ever be inside this
+// function for a given product_id.
+//
+// Ordering: (expiry_date IS NULL) ASC first - MySQL/MariaDB's default
+// ASC ordering puts NULL first, which is backwards for FEFO (it would
+// consume unknown-expiry stock before stock known to be expiring soon),
+// so this boolean-expression idiom forces every dated batch ahead of
+// every undated one. Within that: expiry_date ASC (earliest first), then
+// id ASC as a deterministic tie-break (a lower id was received earlier -
+// effectively FIFO within a tie, including among several anonymous
+// NULL/NULL batches). batch_number never participates in the ordering.
+// Zero-quantity batches are excluded entirely by qty_on_hand > 0 - never
+// locked, never a candidate.
+function insertStockOutLineWithBatchConsumption(PDO $pdo, int $txId, array $line): void {
+    $stmt = $pdo->prepare(
+        'SELECT id, qty_on_hand FROM product_batches
+         WHERE product_id = ? AND qty_on_hand > 0
+         ORDER BY (expiry_date IS NULL) ASC, expiry_date ASC, id ASC
+         FOR UPDATE'
+    );
+    $stmt->execute([$line['product_id']]);
+    $candidates = $stmt->fetchAll();
+
+    $totalAvailable = 0;
+    foreach ($candidates as $c) {
+        $totalAvailable += (int) $c['qty_on_hand'];
+    }
+    if ($totalAvailable < $line['qty']) {
+        // Rejected before any batch or product mutation - no partial
+        // allocation, no partial decrement.
+        throw new StockConflictException($line['product_id']);
+    }
+
+    // Build the full allocation plan in memory first - no DB row is
+    // touched until the plan is known to sum exactly to the requested
+    // quantity (guaranteed by the check above).
+    $remaining = $line['qty'];
+    $allocations = [];
+    foreach ($candidates as $c) {
+        if ($remaining <= 0) {
+            break;
+        }
+        $take = min((int) $c['qty_on_hand'], $remaining);
+        $allocations[] = ['batch_id' => (int) $c['id'], 'qty' => $take];
+        $remaining -= $take;
+    }
+
+    foreach ($allocations as $allocation) {
+        $stmt = $pdo->prepare('UPDATE product_batches SET qty_on_hand = qty_on_hand - ? WHERE id = ? AND qty_on_hand >= ?');
+        $stmt->execute([$allocation['qty'], $allocation['batch_id'], $allocation['qty']]);
+        if ($stmt->rowCount() === 0) {
+            // Structurally unreachable given the row lock above already
+            // guarantees this exact quantity was available a moment ago
+            // in this same transaction - defense-in-depth only, matching
+            // the guarded-UPDATE convention used everywhere else in this
+            // file. Never allows qty_on_hand to go negative.
+            throw new StockConflictException($line['product_id']);
+        }
+    }
+
+    $subtotal = $line['qty'] * $line['price'];
+    $stmt = $pdo->prepare('INSERT INTO stock_transaction_items (transaction_id, product_id, qty, unit_price, subtotal) VALUES (?,?,?,?,?)');
+    $stmt->execute([$txId, $line['product_id'], $line['qty'], $line['price'], $subtotal]);
+    $itemId = (int) $pdo->lastInsertId();
+
+    // Receipt-level cost history, mirroring K2a's Stock In design: the
+    // line's own entered price/cost is stored as-is for every batch this
+    // line drew from - no historical batch-cost lookup, no weighted-
+    // average, no FIFO/COGS accounting. Explicitly deferred to a future
+    // accounting phase.
+    foreach ($allocations as $allocation) {
+        $stmt = $pdo->prepare('INSERT INTO stock_transaction_item_batches (transaction_item_id, batch_id, qty, unit_cost) VALUES (?,?,?,?)');
+        $stmt->execute([$itemId, $allocation['batch_id'], $allocation['qty'], $line['price']]);
+    }
+
+    // The decrement quantity equals the sum of the allocation plan,
+    // which equals $line['qty'] by construction (the insufficiency check
+    // above already guarantees the plan fully covers it) - current_stock
+    // and SUM(qty_on_hand) can therefore never diverge by commit time.
+    // Guard kept as defense-in-depth, same convention as every other
+    // stock-decrementing UPDATE in this file.
+    $stmt = $pdo->prepare('UPDATE products SET current_stock = current_stock - ? WHERE id = ? AND current_stock >= ?');
+    $stmt->execute([$line['qty'], $line['product_id'], $line['qty']]);
+    if ($stmt->rowCount() === 0) {
+        throw new StockConflictException($line['product_id']);
     }
 }
 
@@ -320,7 +491,13 @@ function insertStockOutLines(PDO $pdo, int $txId, array $lines): void {
 // one, so it defaults to null and claimIdempotencyToken() is skipped
 // entirely for that caller - Stock Out's behavior is completely
 // unchanged.
-function recordStockOut(PDO $pdo, array $lines, string $date, string $note, int $userId, string $type = 'out', ?float $cashReceived = null, ?string $idempotencyToken = null) {
+// $consumeBatches (Phase K3-1): appended last, defaulting false, so this
+// existing signature stays positionally compatible for every current
+// caller - POS's own call to this function needs zero code changes to
+// keep its exact current behavior (which now also means: rejected, not
+// silently corrupted, for a track_batches=1 product - see
+// insertStockOutLines() above). Passed straight through unchanged.
+function recordStockOut(PDO $pdo, array $lines, string $date, string $note, int $userId, string $type = 'out', ?float $cashReceived = null, ?string $idempotencyToken = null, bool $consumeBatches = false) {
     if (!in_array($type, ['out', 'sale'], true)) {
         throw new InvalidArgumentException("Invalid stock-out type '$type' - must be 'out' or 'sale'.");
     }
@@ -343,7 +520,7 @@ function recordStockOut(PDO $pdo, array $lines, string $date, string $note, int 
         $stmt->execute([$reference, $type, $date, $note, $userId, $type === 'sale' ? $cashReceived : null]);
         $txId = $pdo->lastInsertId();
 
-        insertStockOutLines($pdo, $txId, $lines);
+        insertStockOutLines($pdo, $txId, $lines, $consumeBatches);
 
         $pdo->commit();
         return $reference;

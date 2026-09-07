@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Tests\Integration;
 
+use BatchConsumptionRequiredException;
 use DebtOverpaymentException;
 use Tests\TestCase;
 
@@ -10,6 +11,65 @@ use Tests\TestCase;
 // Exercises includes/debt.php's real functions.
 final class DebtTest extends TestCase
 {
+    // ---- K3-1: POS safety gate for track_batches=1 products ----
+    //
+    // recordCreditSale() itself is NOT modified by K3-1 - it still calls
+    // insertStockOutLines($pdo, $txId, $lines) with no $consumeBatches
+    // argument, which defaults to false. This exercises that exact,
+    // unmodified call shape directly.
+
+    public function testCreditSaleOfATrackedProductIsRejectedWithoutMutatingAnything(): void
+    {
+        $product = testSeedProduct($this->pdo, 20, ['track_batches' => 1]);
+        $userId = testSeedUserRole($this->pdo)['id'];
+        $stmt = $this->pdo->prepare('INSERT INTO product_batches (product_id, batch_number, expiry_date, qty_received, qty_on_hand) VALUES (?,?,?,?,?)');
+        $stmt->execute([$product['id'], 'LOT-CREDIT', '2027-01-01', 20, 20]);
+        $batchId = (int) $this->pdo->lastInsertId();
+        $customerCountBefore = (int) $this->pdo->query('SELECT COUNT(*) FROM customers')->fetchColumn();
+        $debtCountBefore = (int) $this->pdo->query('SELECT COUNT(*) FROM customer_debts')->fetchColumn();
+        $txCountBefore = (int) $this->pdo->query('SELECT COUNT(*) FROM stock_transactions')->fetchColumn();
+        $token = testRandomToken();
+
+        try {
+            // A brand-new customer, created inline in the SAME
+            // transaction - this must roll back too, not just the sale.
+            recordCreditSale($this->pdo, [['product_id' => $product['id'], 'qty' => 4, 'price' => 3.00]], date('Y-m-d'), $userId, null, 'Rejected Sale Farmer', '099999999', '', $token);
+            $this->fail('Expected BatchConsumptionRequiredException was not thrown.');
+        } catch (BatchConsumptionRequiredException $e) {
+            $this->assertSame($product['id'], $e->productId);
+        }
+
+        $stmt = $this->pdo->prepare('SELECT current_stock FROM products WHERE id = ?');
+        $stmt->execute([$product['id']]);
+        $this->assertSame(20, (int) $stmt->fetchColumn(), 'current_stock must be unchanged after a rejected sale');
+
+        $stmt = $this->pdo->prepare('SELECT qty_on_hand FROM product_batches WHERE id = ?');
+        $stmt->execute([$batchId]);
+        $this->assertSame(20, (int) $stmt->fetchColumn(), 'batch qty_on_hand must be unchanged after a rejected sale');
+
+        $this->assertSame($customerCountBefore, (int) $this->pdo->query('SELECT COUNT(*) FROM customers')->fetchColumn(), 'the inline new-customer insert must not survive');
+        $this->assertSame($debtCountBefore, (int) $this->pdo->query('SELECT COUNT(*) FROM customer_debts')->fetchColumn(), 'no debt row must survive');
+        $this->assertSame($txCountBefore, (int) $this->pdo->query('SELECT COUNT(*) FROM stock_transactions')->fetchColumn(), 'no stock_transactions row must survive');
+
+        // The idempotency claim must have rolled back too.
+        $untracked = testSeedProduct($this->pdo, 10);
+        $result = recordCreditSale($this->pdo, [['product_id' => $untracked['id'], 'qty' => 2, 'price' => 1.00]], date('Y-m-d'), $userId, null, 'Retry Farmer', '011111111', '', $token);
+        $this->assertStringStartsWith('SAL-', $result['reference']);
+    }
+
+    public function testCreditSaleOfAnUntrackedProductRemainsUnaffectedByTheSafetyGate(): void
+    {
+        $product = testSeedProduct($this->pdo, 20);
+        $userId = testSeedUserRole($this->pdo)['id'];
+
+        $result = recordCreditSale($this->pdo, [['product_id' => $product['id'], 'qty' => 4, 'price' => 3.00]], date('Y-m-d'), $userId, null, 'Farmer Sok', '012345678', '');
+
+        $this->assertStringStartsWith('SAL-', $result['reference']);
+        $stmt = $this->pdo->prepare('SELECT current_stock FROM products WHERE id = ?');
+        $stmt->execute([$product['id']]);
+        $this->assertSame(16, (int) $stmt->fetchColumn());
+    }
+
     // ---- 11. Credit Sale ----
 
     public function testCreditSaleCreatesExpectedSaleAndDebt(): void

@@ -252,6 +252,159 @@ final class ConcurrencyTest extends TestCase
         $this->assertSame(33, (int) $batches[0]['qty_received']);
     }
 
+    // ---- K3-1: Stock Out + FEFO batch consumption concurrency ----
+    //
+    // All five tests below drive recordStockOut(..., consumeBatches: true)
+    // through the exact same runParallel()/proc_open() harness as the P0
+    // #8 races above, via new worker scripts stock_out_batch_race.php/
+    // stock_out_multiproduct_race.php (and, for Test 4, the existing
+    // stock_in_batch_race.php). Whatever safety they observe comes
+    // entirely from the product-row lock inside insertStockOutLines()
+    // (includes/stock.php) - the same lock K2a's Stock In already uses,
+    // now also serializing consumption against consumption, and
+    // consumption against receiving, for the same product_id.
+
+    public function testConcurrentStockOutsAgainstTheSameTrackedProductNeverOversellOrLoseAnUpdate(): void
+    {
+        $productId = $this->seedTrackedProductWithStock(20);
+        $this->seedBatchDirect($productId, 'LOT-A', '2027-01-01', 20);
+        $userId = $this->seedUser();
+
+        $results = $this->runParallel([
+            ['stock_out_batch_race.php', (string) $productId, '8', (string) $userId],
+            ['stock_out_batch_race.php', (string) $productId, '5', (string) $userId],
+        ]);
+
+        foreach ($results as $r) {
+            $this->assertSame('ok', $r['status'], 'both concurrent requests must succeed - combined demand fits supply: ' . json_encode($results));
+        }
+
+        $stmt = $this->pdo->prepare('SELECT current_stock FROM products WHERE id = ?');
+        $stmt->execute([$productId]);
+        $this->assertSame(7, (int) $stmt->fetchColumn(), '20 - 8 - 5, no lost update');
+        $this->assertBatchInvariantHolds($productId);
+    }
+
+    public function testConcurrentStockOutsBothTargetingTheSameEarliestBatchSerializeCorrectly(): void
+    {
+        $productId = $this->seedTrackedProductWithStock(15);
+        $earliest = $this->seedBatchDirect($productId, 'LOT-EARLY', '2027-01-01', 5);
+        $later = $this->seedBatchDirect($productId, 'LOT-LATE', '2027-06-01', 10);
+        $userId = $this->seedUser();
+
+        // Combined demand (3+2=5) exactly depletes the earliest batch -
+        // the later batch must remain completely untouched regardless of
+        // which request's product-row lock wins the race first.
+        $results = $this->runParallel([
+            ['stock_out_batch_race.php', (string) $productId, '3', (string) $userId],
+            ['stock_out_batch_race.php', (string) $productId, '2', (string) $userId],
+        ]);
+
+        foreach ($results as $r) {
+            $this->assertSame('ok', $r['status'], json_encode($results));
+        }
+
+        $this->assertSame(0, $this->batchQtyOnHand($earliest), 'the earliest batch must be fully and exactly depleted, never negative');
+        $this->assertSame(10, $this->batchQtyOnHand($later), 'the later batch must be completely untouched');
+        $this->assertBatchInvariantHolds($productId);
+    }
+
+    public function testConcurrentMultiBatchStockOutsProduceTheCorrectFinalAllocationRegardlessOfWinOrder(): void
+    {
+        // The task's own worked example, run concurrently: Batch A=5,
+        // Batch B=10, Request 1=8, Request 2=4. Combined demand (12) fits
+        // combined supply (15) - the exact intra-line split of request 1
+        // can differ depending on which request's lock wins first, but
+        // the resulting TOTALS are pure arithmetic and must be identical
+        // either way: this test asserts the final state, not a winner.
+        $productId = $this->seedTrackedProductWithStock(15);
+        $lotA = $this->seedBatchDirect($productId, 'LOT-A', '2027-01-01', 5);
+        $lotB = $this->seedBatchDirect($productId, 'LOT-B', '2027-06-01', 10);
+        $userId = $this->seedUser();
+
+        $results = $this->runParallel([
+            ['stock_out_batch_race.php', (string) $productId, '8', (string) $userId],
+            ['stock_out_batch_race.php', (string) $productId, '4', (string) $userId],
+        ]);
+
+        foreach ($results as $r) {
+            $this->assertSame('ok', $r['status'], json_encode($results));
+        }
+
+        $this->assertSame(0, $this->batchQtyOnHand($lotA), 'the earlier-expiring batch must be fully consumed by the combined demand');
+        $this->assertSame(3, $this->batchQtyOnHand($lotB), '15 total - 12 combined demand = 3 remaining');
+        $stmt = $this->pdo->prepare('SELECT current_stock FROM products WHERE id = ?');
+        $stmt->execute([$productId]);
+        $this->assertSame(3, (int) $stmt->fetchColumn());
+        $this->assertBatchInvariantHolds($productId);
+    }
+
+    public function testConcurrentStockOutAndStockInOnTheSameTrackedProductPreserveTheInvariant(): void
+    {
+        // Both operations lock the product row first (K2a's Stock In,
+        // K3-1's Stock Out) - this proves that shared lock also
+        // correctly serializes a receiving event against a consuming one
+        // for the same product_id, not just consumption against
+        // consumption. The new batch created by Stock In carries a LATER
+        // expiry than the existing one, so FEFO always prefers the
+        // existing batch for the Stock Out side regardless of which
+        // operation's lock wins first - making the final state
+        // deterministic without needing to know the winner.
+        $productId = $this->seedTrackedProductWithStock(10);
+        $existing = $this->seedBatchDirect($productId, 'LOT-EXISTING', '2027-01-01', 10);
+        $userId = $this->seedUser();
+
+        $results = $this->runParallel([
+            ['stock_out_batch_race.php', (string) $productId, '4', (string) $userId],
+            ['stock_in_batch_race.php', (string) $productId, 'LOT-NEW', '2027-12-31', '6', (string) $userId],
+        ]);
+
+        foreach ($results as $r) {
+            $this->assertSame('ok', $r['status'], json_encode($results));
+        }
+
+        $this->assertSame(6, $this->batchQtyOnHand($existing), '10 - 4, the Stock Out side always prefers the earlier-expiring existing batch');
+        $stmt = $this->pdo->prepare('SELECT current_stock FROM products WHERE id = ?');
+        $stmt->execute([$productId]);
+        $this->assertSame(12, (int) $stmt->fetchColumn(), '10 - 4 + 6, no lost update between the two operation types');
+        $this->assertBatchInvariantHolds($productId);
+    }
+
+    public function testConcurrentMultiProductStockOutsInOppositeOrderDoNotDeadlockAndAllocateCorrectly(): void
+    {
+        // insertStockOutLines() sorts its lines by product_id ASC before
+        // locking anything - this test submits the SAME two products in
+        // OPPOSITE order from each concurrent process (the exact shape
+        // that would otherwise risk an opposite-order lock deadlock) and
+        // confirms both still succeed with correct final quantities, with
+        // no application-level coordination of any kind in the worker.
+        $productA = $this->seedTrackedProductWithStock(10);
+        $this->seedBatchDirect($productA, 'LOT-A', '2027-01-01', 10);
+        $productB = $this->seedTrackedProductWithStock(10);
+        $this->seedBatchDirect($productB, 'LOT-B', '2027-01-01', 10);
+        $userId = $this->seedUser();
+        // Ensure a deterministic "opposite order" regardless of how the
+        // two seeded product ids happen to compare.
+        [$lo, $hi] = $productA < $productB ? [$productA, $productB] : [$productB, $productA];
+
+        $results = $this->runParallel([
+            ['stock_out_multiproduct_race.php', (string) $lo, '3', (string) $hi, '2', (string) $userId],
+            ['stock_out_multiproduct_race.php', (string) $hi, '4', (string) $lo, '5', (string) $userId],
+        ]);
+
+        foreach ($results as $r) {
+            $this->assertSame('ok', $r['status'], 'neither submission order should deadlock or fail: ' . json_encode($results));
+        }
+
+        $stmt = $this->pdo->prepare('SELECT current_stock FROM products WHERE id = ?');
+        $stmt->execute([$lo]);
+        $this->assertSame(2, (int) $stmt->fetchColumn(), '10 - 3 - 5');
+        $stmt->execute([$hi]);
+        $this->assertSame(4, (int) $stmt->fetchColumn(), '10 - 2 - 4');
+        $this->assertBatchInvariantHolds($lo);
+        $this->assertBatchInvariantHolds($hi);
+    }
+
     // ---- P0 #17: Reference Numbers (concurrent generation) ----
 
     public function testConcurrentReferenceGenerationNeverProducesDuplicates(): void
@@ -341,6 +494,48 @@ final class ConcurrencyTest extends TestCase
         $stmt = $this->pdo->prepare('SELECT * FROM product_batches WHERE product_id = ?');
         $stmt->execute([$productId]);
         return $stmt->fetchAll();
+    }
+
+    // K3-1: same shape as seedTrackedProduct() above, but with a real
+    // starting current_stock - Stock Out concurrency tests need actual
+    // stock to consume, unlike Stock In's tests which always start from 0.
+    private function seedTrackedProductWithStock(int $stock): int
+    {
+        $sku = 'CONC-STOCKOUT-' . bin2hex(random_bytes(4));
+        $stmt = $this->pdo->prepare('INSERT INTO products (name, sku, cost_price, sale_price, current_stock, track_batches) VALUES (?,?,?,?,?,1)');
+        $stmt->execute(['Concurrency Stock Out Test Product', $sku, 1, 1, $stock]);
+        $id = (int) $this->pdo->lastInsertId();
+        $this->cleanupProductIds[] = $id;
+        return $id;
+    }
+
+    private function seedBatchDirect(int $productId, ?string $batchNumber, ?string $expiryDate, int $qty): int
+    {
+        $stmt = $this->pdo->prepare('INSERT INTO product_batches (product_id, batch_number, expiry_date, qty_received, qty_on_hand, origin) VALUES (?,?,?,?,?,?)');
+        $stmt->execute([$productId, $batchNumber, $expiryDate, $qty, $qty, 'stock_in']);
+        return (int) $this->pdo->lastInsertId();
+    }
+
+    private function batchQtyOnHand(int $batchId): int
+    {
+        $stmt = $this->pdo->prepare('SELECT qty_on_hand FROM product_batches WHERE id = ?');
+        $stmt->execute([$batchId]);
+        return (int) $stmt->fetchColumn();
+    }
+
+    // The required K3 invariant: for a tracked product, current_stock
+    // must always equal the sum of its own batches' qty_on_hand.
+    private function assertBatchInvariantHolds(int $productId): void
+    {
+        $stmt = $this->pdo->prepare('SELECT current_stock FROM products WHERE id = ?');
+        $stmt->execute([$productId]);
+        $currentStock = (int) $stmt->fetchColumn();
+
+        $stmt = $this->pdo->prepare('SELECT COALESCE(SUM(qty_on_hand), 0) FROM product_batches WHERE product_id = ?');
+        $stmt->execute([$productId]);
+        $batchSum = (int) $stmt->fetchColumn();
+
+        $this->assertSame($currentStock, $batchSum, 'products.current_stock must equal SUM(product_batches.qty_on_hand)');
     }
 
     private function seedUser(): int

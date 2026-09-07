@@ -104,6 +104,43 @@ final class IdempotencyTest extends TestCase
         }
     }
 
+    // ---- K3-1: Stock Out batch consumption must be idempotent too ----
+
+    public function testReplayingTheSameTokenOnStockOutForATrackedProductDoesNotCreateASecondAllocation(): void
+    {
+        $product = testSeedProduct($this->pdo, 10, ['track_batches' => 1]);
+        $userId = testSeedUserRole($this->pdo)['id'];
+        $stmt = $this->pdo->prepare('INSERT INTO product_batches (product_id, batch_number, expiry_date, qty_received, qty_on_hand) VALUES (?,?,?,?,?)');
+        $stmt->execute([$product['id'], 'IDEMP-OUT-LOT', '2027-01-01', 10, 10]);
+        $batchId = (int) $this->pdo->lastInsertId();
+        $token = testRandomToken();
+        $line = ['product_id' => $product['id'], 'qty' => 4, 'price' => 1];
+
+        $reference = recordStockOut($this->pdo, [$line], date('Y-m-d'), '', $userId, 'out', null, $token, true);
+
+        $this->assertSame(1, $this->countAllocationsForBatch($batchId), 'the first submission must create exactly one allocation ledger row');
+        $this->assertSame(6, $this->batchQtyOnHand($batchId));
+
+        $this->expectException(IdempotencyConflictException::class);
+        try {
+            recordStockOut($this->pdo, [$line], date('Y-m-d'), '', $userId, 'out', null, $token, true);
+        } finally {
+            $count = (int) $this->pdo->query("SELECT COUNT(*) FROM stock_transactions WHERE reference = '$reference'")->fetchColumn();
+            $this->assertSame(1, $count, 'only the first submission may exist');
+
+            $this->assertSame(1, $this->countAllocationsForBatch($batchId), 'no second allocation ledger row');
+            $this->assertSame(6, $this->batchQtyOnHand($batchId), 'batch qty must be unchanged by the rejected replay');
+            $this->assertSame(6, $this->currentStock($product['id']), 'stock must be decremented exactly once');
+        }
+    }
+
+    private function batchQtyOnHand(int $batchId): int
+    {
+        $stmt = $this->pdo->prepare('SELECT qty_on_hand FROM product_batches WHERE id = ?');
+        $stmt->execute([$batchId]);
+        return (int) $stmt->fetchColumn();
+    }
+
     private function batchesForProduct(int $productId): array
     {
         $stmt = $this->pdo->prepare('SELECT * FROM product_batches WHERE product_id = ?');
