@@ -29,6 +29,11 @@ final class ConcurrencyTest extends TestCase
     private array $cleanupProductIds = [];
     private array $cleanupUserIds = [];
     private array $cleanupCustomerIds = [];
+    // K4-3: idempotency tokens explicitly passed to pos_sale_race.php
+    // workers - unlike every earlier worker in this file (which always
+    // passed null), K4-3's tests deliberately pass real tokens, so their
+    // idempotency_keys rows need explicit cleanup here too.
+    private array $cleanupIdempotencyTokens = [];
 
     protected function setUp(): void
     {
@@ -63,6 +68,10 @@ final class ConcurrencyTest extends TestCase
         }
         foreach ($this->cleanupUserIds as $id) {
             $this->pdo->exec("DELETE FROM users WHERE id = $id");
+        }
+        foreach ($this->cleanupIdempotencyTokens as $token) {
+            $stmt = $this->pdo->prepare('DELETE FROM idempotency_keys WHERE token = ?');
+            $stmt->execute([$token]);
         }
         parent::tearDown();
     }
@@ -405,6 +414,272 @@ final class ConcurrencyTest extends TestCase
         $this->assertBatchInvariantHolds($hi);
     }
 
+    // ---- K4-3: POS concurrency (cash + credit, shared kernel + idempotency races) ----
+    //
+    // All seven tests below drive tests/Concurrency/pos_sale_race.php,
+    // which calls the real, unmodified recordStockOut(..., consumeBatches:
+    // true) (cash) / recordCreditSale(..., consumeBatches: true) (credit)
+    // from includes/stock.php / includes/debt.php - no new locking logic
+    // exists anywhere in this codebase for these tests to exercise; they
+    // exist to prove that POS's own two entry points inherit the same
+    // safety the K3-1 tests above already proved for the shared
+    // insertStockOutLines() kernel, PLUS one genuinely new mechanism no
+    // earlier test (K3-1 or K4-2) ever exercised under real OS-process
+    // concurrency: the idempotency_keys UNIQUE(token) claim race (Tests 5
+    // and 6 below) - see includes/stock.php's claimIdempotencyToken() for
+    // why this is a real lock-wait, not merely a duplicate-key error, when
+    // two transactions race the same token.
+    //
+    // POS vs Stock Out, POS vs Stock In, and the multi-product opposite-
+    // order deadlock scenario are deliberately NOT duplicated here - see
+    // this phase's audit report, section 6-9: POS cash calls the exact
+    // same recordStockOut()/insertStockOutLines() functions already raced
+    // above (testConcurrentStockOutAndStockInOnTheSameTrackedProductPreserve
+    // TheInvariant, testConcurrentMultiProductStockOutsInOppositeOrderDoNot
+    // DeadlockAndAllocateCorrectly), and POS credit reaches the identical
+    // insertStockOutLines() call with no new lock surface before it (its
+    // extra customer/debt steps touch only rows - customers,
+    // customer_debts, and the separate 'customer_debts' reference-counter
+    // row - that no Stock In/Stock Out/Adjustment transaction ever
+    // touches). Generic reference-counter concurrency (the mechanism
+    // itself, not POS's own use of it) is likewise already proven by
+    // testConcurrentReferenceGenerationNeverProducesDuplicates() below.
+
+    public function testConcurrentPosCashSalesAgainstTheSameBatchNeverOversellOrLoseAnUpdate(): void
+    {
+        $productId = $this->seedTrackedProductWithStock(10);
+        $batchId = $this->seedBatchDirect($productId, 'LOT-A', '2027-01-01', 10);
+        $userId = $this->seedUser();
+        $token1 = testRandomToken();
+        $token2 = testRandomToken();
+        $this->cleanupIdempotencyTokens = array_merge($this->cleanupIdempotencyTokens, [$token1, $token2]);
+
+        $results = $this->runParallel([
+            ['pos_sale_race.php', 'cash', "$productId:7", $token1, (string) $userId, '_NA_'],
+            ['pos_sale_race.php', 'cash', "$productId:7", $token2, (string) $userId, '_NA_'],
+        ]);
+
+        $statuses = array_column($results, 'status');
+        sort($statuses);
+        $this->assertSame(['ok', 'stock_conflict'], $statuses, 'exactly one of the two 7-unit requests may win against 10 units of stock: ' . json_encode($results));
+
+        $this->assertSame(3, $this->batchQtyOnHand($batchId), '10 - 7, no lost update, no negative quantity');
+        $this->assertGreaterThanOrEqual(0, $this->batchQtyOnHand($batchId));
+        $this->assertSame(3, $this->currentStock($productId));
+        $this->assertGreaterThanOrEqual(0, $this->currentStock($productId));
+        $this->assertSame(1, $this->saleTransactionCountForProduct($productId), 'exactly one sale transaction may exist for this product');
+        $this->assertCount(1, $this->allocationsForProduct($productId), 'exactly one allocation ledger row may exist');
+        $this->assertBatchInvariantHolds($productId);
+    }
+
+    public function testConcurrentPosCashSalesConsumeMultipleBatchesInFefoOrderWithNoLostUpdate(): void
+    {
+        $productId = $this->seedTrackedProductWithStock(15);
+        $lotA = $this->seedBatchDirect($productId, 'LOT-A', '2027-01-01', 5);
+        $lotB = $this->seedBatchDirect($productId, 'LOT-B', '2027-06-01', 10);
+        $userId = $this->seedUser();
+        $token1 = testRandomToken();
+        $token2 = testRandomToken();
+        $this->cleanupIdempotencyTokens = array_merge($this->cleanupIdempotencyTokens, [$token1, $token2]);
+
+        $results = $this->runParallel([
+            ['pos_sale_race.php', 'cash', "$productId:8", $token1, (string) $userId, '_NA_'],
+            ['pos_sale_race.php', 'cash', "$productId:4", $token2, (string) $userId, '_NA_'],
+        ]);
+
+        foreach ($results as $r) {
+            $this->assertSame('ok', $r['status'], 'combined demand (8+4=12) fits combined supply (5+10=15): ' . json_encode($results));
+        }
+
+        // The exact intra-line split can differ depending on which
+        // process's product-row lock wins first (see the two possible
+        // orderings worked out in this phase's audit report, section 3) -
+        // but the resulting per-batch TOTALS are pure arithmetic and must
+        // be identical either way: batch A (earlier expiry) is always
+        // fully depleted first, and only the remainder ever touches B.
+        $this->assertSame(0, $this->batchQtyOnHand($lotA), 'the earlier-expiring batch must be fully consumed regardless of win order');
+        $this->assertSame(3, $this->batchQtyOnHand($lotB), '15 - 12 = 3 remaining, no lost update');
+        $this->assertSame(3, $this->currentStock($productId));
+        $this->assertSame(5, $this->allocationSumForBatch($lotA), 'all 5 units of the earlier batch must have been allocated across the two real transactions');
+        $this->assertSame(7, $this->allocationSumForBatch($lotB), '12 total demand - 5 from batch A = 7 from batch B');
+        $this->assertBatchInvariantHolds($productId);
+    }
+
+    public function testConcurrentPosCreditSalesAgainstTheSameBatchNeverOversellAndTheDebtBelongsToTheWinner(): void
+    {
+        $productId = $this->seedTrackedProductWithStock(10);
+        $batchId = $this->seedBatchDirect($productId, 'LOT-A', '2027-01-01', 10);
+        $userId = $this->seedUser();
+        $customer = testSeedCustomer($this->pdo, 'K4-3 Credit Race Customer');
+        $this->cleanupCustomerIds[] = $customer['id'];
+        $token1 = testRandomToken();
+        $token2 = testRandomToken();
+        $this->cleanupIdempotencyTokens = array_merge($this->cleanupIdempotencyTokens, [$token1, $token2]);
+
+        $results = $this->runParallel([
+            ['pos_sale_race.php', 'credit', "$productId:7", $token1, (string) $userId, 'existing:' . $customer['id']],
+            ['pos_sale_race.php', 'credit', "$productId:7", $token2, (string) $userId, 'existing:' . $customer['id']],
+        ]);
+
+        $statuses = array_column($results, 'status');
+        sort($statuses);
+        $this->assertSame(['ok', 'stock_conflict'], $statuses, 'exactly one of the two 7-unit credit requests may win against 10 units of stock: ' . json_encode($results));
+
+        $this->assertSame(3, $this->batchQtyOnHand($batchId));
+        $this->assertSame(3, $this->currentStock($productId));
+        $this->assertSame(1, $this->saleTransactionCountForProduct($productId), 'exactly one sale transaction may exist for this product');
+        $this->assertSame(1, $this->debtCountForCustomer($customer['id']), 'exactly one debt may exist - no orphan debt from the loser');
+        $this->assertCount(1, $this->allocationsForProduct($productId));
+        $this->assertBatchInvariantHolds($productId);
+
+        // The single debt must belong to the single winning sale, not to
+        // some other transaction - the losing process's own transaction
+        // (idempotency claim aside) never reached the debt-insert step at
+        // all, since insertStockOutLines() throws before it.
+        $winner = $results[array_search('ok', array_column($results, 'status'), true)];
+        $stmt = $this->pdo->prepare('SELECT cd.stock_transaction_id, st.reference FROM customer_debts cd
+                                      JOIN stock_transactions st ON st.id = cd.stock_transaction_id
+                                      WHERE cd.customer_id = ?');
+        $stmt->execute([$customer['id']]);
+        $debt = $stmt->fetch();
+        $this->assertSame($winner['reference'], $debt['reference'], 'the one debt must reference the one winning sale');
+    }
+
+    public function testConcurrentPosCreditSalesConsumeMultipleBatchesInFefoOrderAndEachCreatesItsOwnDebt(): void
+    {
+        $productId = $this->seedTrackedProductWithStock(15);
+        $lotA = $this->seedBatchDirect($productId, 'LOT-A', '2027-01-01', 5);
+        $lotB = $this->seedBatchDirect($productId, 'LOT-B', '2027-06-01', 10);
+        $userId = $this->seedUser();
+        $customer = testSeedCustomer($this->pdo, 'K4-3 Multi-Batch Credit Customer');
+        $this->cleanupCustomerIds[] = $customer['id'];
+        $token1 = testRandomToken();
+        $token2 = testRandomToken();
+        $this->cleanupIdempotencyTokens = array_merge($this->cleanupIdempotencyTokens, [$token1, $token2]);
+
+        $results = $this->runParallel([
+            ['pos_sale_race.php', 'credit', "$productId:8", $token1, (string) $userId, 'existing:' . $customer['id']],
+            ['pos_sale_race.php', 'credit', "$productId:4", $token2, (string) $userId, 'existing:' . $customer['id']],
+        ]);
+
+        foreach ($results as $r) {
+            $this->assertSame('ok', $r['status'], json_encode($results));
+        }
+
+        $this->assertSame(0, $this->batchQtyOnHand($lotA));
+        $this->assertSame(3, $this->batchQtyOnHand($lotB));
+        $this->assertSame(3, $this->currentStock($productId));
+        $this->assertSame(2, $this->saleTransactionCountForProduct($productId), 'each successful credit sale is its own sale transaction');
+        $this->assertSame(2, $this->debtCountForCustomer($customer['id']), 'each successful credit sale creates its own debt');
+        $this->assertSame(5, $this->allocationSumForBatch($lotA), 'FEFO: the earlier batch is fully consumed first, regardless of win order');
+        $this->assertSame(7, $this->allocationSumForBatch($lotB));
+        $this->assertBatchInvariantHolds($productId);
+    }
+
+    // Primary K4-3 requirement: proves the idempotency_keys UNIQUE(token)
+    // claim itself is race-safe under genuine OS-process concurrency - the
+    // one mechanism no earlier test (K3-1's workers all pass null; K4-2's
+    // HTTP harness is single-threaded and can only replay sequentially)
+    // ever exercised. See includes/stock.php's claimIdempotencyToken() and
+    // this phase's audit report section 5 for the exact lock-wait
+    // mechanics this proves: the loser's INSERT blocks on the winner's
+    // uncommitted row, then fails with a duplicate-key error the instant
+    // the winner commits - never reaching nextReferenceSequence() or any
+    // product/batch lock at all.
+    public function testConcurrentCashSubmissionsWithTheSameIdempotencyTokenApplyExactlyOnce(): void
+    {
+        $productId = $this->seedTrackedProductWithStock(20);
+        $batchId = $this->seedBatchDirect($productId, 'LOT-A', '2027-01-01', 20);
+        $userId = $this->seedUser();
+        $token = testRandomToken();
+        $this->cleanupIdempotencyTokens[] = $token;
+        $refCounterBefore = $this->referenceCounterValue('stock_transactions');
+
+        $results = $this->runParallel([
+            ['pos_sale_race.php', 'cash', "$productId:5", $token, (string) $userId, '_NA_'],
+            ['pos_sale_race.php', 'cash', "$productId:5", $token, (string) $userId, '_NA_'],
+        ]);
+
+        $statuses = array_column($results, 'status');
+        sort($statuses);
+        $this->assertSame(['idempotency_conflict', 'ok'], $statuses, 'exactly one of the two identical-token submissions may succeed, the other must be rejected as a duplicate: ' . json_encode($results));
+
+        $this->assertSame(1, $this->saleTransactionCountForProduct($productId), 'exactly one stock transaction may exist');
+        $this->assertCount(1, $this->allocationsForProduct($productId), 'exactly one allocation set may exist');
+        $this->assertSame(1, $this->idempotencyKeyCount($token), 'exactly one idempotency_keys row may exist for this token - the loser\'s claim rolled back with the rest of its transaction');
+        $this->assertSame(15, $this->batchQtyOnHand($batchId), '20 - 5, stock decremented exactly once despite two identical submissions');
+        $this->assertSame(15, $this->currentStock($productId));
+        $this->assertSame($refCounterBefore + 1, $this->referenceCounterValue('stock_transactions'), 'the reference counter must advance exactly once - the loser never reached it');
+        $this->assertBatchInvariantHolds($productId);
+    }
+
+    // Same primary requirement as above, for the credit path - additionally
+    // proves the loser's new-customer INSERT cannot survive: it rolls back
+    // as part of the same aborted transaction as its idempotency claim,
+    // before ever reaching insertStockOutLines() or the debt insert.
+    public function testConcurrentCreditSubmissionsWithTheSameIdempotencyTokenAndSameNewCustomerApplyExactlyOnce(): void
+    {
+        $productId = $this->seedTrackedProductWithStock(20);
+        $batchId = $this->seedBatchDirect($productId, 'LOT-A', '2027-01-01', 20);
+        $userId = $this->seedUser();
+        $token = testRandomToken();
+        $this->cleanupIdempotencyTokens[] = $token;
+        $customerName = 'K4-3 Dup Token Credit Customer ' . bin2hex(random_bytes(4));
+        $customerPhone = '099000111';
+        $refCounterBefore = $this->referenceCounterValue('stock_transactions');
+        $debtCounterBefore = $this->referenceCounterValue('customer_debts');
+
+        $results = $this->runParallel([
+            ['pos_sale_race.php', 'credit', "$productId:5", $token, (string) $userId, "new:$customerName:$customerPhone"],
+            ['pos_sale_race.php', 'credit', "$productId:5", $token, (string) $userId, "new:$customerName:$customerPhone"],
+        ]);
+
+        $statuses = array_column($results, 'status');
+        sort($statuses);
+        $this->assertSame(['idempotency_conflict', 'ok'], $statuses, 'exactly one of the two identical-token credit submissions may succeed: ' . json_encode($results));
+
+        $this->assertSame(1, $this->customerCountByName($customerName), 'exactly one customer row may exist - the loser\'s INSERT rolled back with the rest of its transaction');
+        $customerId = $this->customerIdByName($customerName);
+        $this->cleanupCustomerIds[] = $customerId;
+
+        $this->assertSame(1, $this->saleTransactionCountForProduct($productId), 'exactly one sale transaction may exist');
+        $this->assertSame(1, $this->debtCountForCustomer($customerId), 'exactly one debt may exist - no orphan debt');
+        $this->assertSame(1, $this->idempotencyKeyCount($token), 'exactly one idempotency_keys row may exist for this token');
+        $this->assertCount(1, $this->allocationsForProduct($productId));
+        $this->assertSame(15, $this->batchQtyOnHand($batchId), '20 - 5, stock decremented exactly once');
+        $this->assertSame(15, $this->currentStock($productId));
+        $this->assertSame($refCounterBefore + 1, $this->referenceCounterValue('stock_transactions'), 'only the winner ever reaches the sale reference counter');
+        $this->assertSame($debtCounterBefore + 1, $this->referenceCounterValue('customer_debts'), 'only the winner ever reaches the debt reference counter');
+        $this->assertBatchInvariantHolds($productId);
+    }
+
+    public function testConcurrentPosCashAndPosCreditSalesAgainstTheSameProductBothSucceedWhenSupplyAllows(): void
+    {
+        $productId = $this->seedTrackedProductWithStock(15);
+        $this->seedBatchDirect($productId, 'LOT-A', '2027-01-01', 15);
+        $userId = $this->seedUser();
+        $customer = testSeedCustomer($this->pdo, 'K4-3 Cash Vs Credit Customer');
+        $this->cleanupCustomerIds[] = $customer['id'];
+        $cashToken = testRandomToken();
+        $creditToken = testRandomToken();
+        $this->cleanupIdempotencyTokens = array_merge($this->cleanupIdempotencyTokens, [$cashToken, $creditToken]);
+
+        $results = $this->runParallel([
+            ['pos_sale_race.php', 'cash', "$productId:8", $cashToken, (string) $userId, '_NA_'],
+            ['pos_sale_race.php', 'credit', "$productId:4", $creditToken, (string) $userId, 'existing:' . $customer['id']],
+        ]);
+
+        foreach ($results as $r) {
+            $this->assertSame('ok', $r['status'], 'combined demand (8+4=12) fits supply (15): ' . json_encode($results));
+        }
+
+        $this->assertSame(3, $this->currentStock($productId), '15 - 8 - 4');
+        $this->assertSame(2, $this->saleTransactionCountForProduct($productId), 'one sale transaction per payment method');
+        $this->assertSame(1, $this->debtCountForCustomer($customer['id']), 'only the credit sale creates a debt');
+        $this->assertSame(12, $this->allocationSumForProduct($productId), 'combined allocation across both payment methods must equal combined demand');
+        $this->assertBatchInvariantHolds($productId);
+    }
+
     // ---- P0 #17: Reference Numbers (concurrent generation) ----
 
     public function testConcurrentReferenceGenerationNeverProducesDuplicates(): void
@@ -520,6 +795,88 @@ final class ConcurrencyTest extends TestCase
     {
         $stmt = $this->pdo->prepare('SELECT qty_on_hand FROM product_batches WHERE id = ?');
         $stmt->execute([$batchId]);
+        return (int) $stmt->fetchColumn();
+    }
+
+    // ---- K4-3 helpers ----
+
+    private function currentStock(int $productId): int
+    {
+        $stmt = $this->pdo->prepare('SELECT current_stock FROM products WHERE id = ?');
+        $stmt->execute([$productId]);
+        return (int) $stmt->fetchColumn();
+    }
+
+    // Every K4-3 worker records its sale as type='sale' (both
+    // recordStockOut()'s cash path and recordCreditSale()'s internal
+    // insert use 'sale'), same as the real POS page - so this is scoped
+    // to that type, not stock_transactions in general.
+    private function saleTransactionCountForProduct(int $productId): int
+    {
+        $stmt = $this->pdo->prepare("SELECT COUNT(DISTINCT sti.transaction_id) FROM stock_transaction_items sti
+                                      JOIN stock_transactions st ON st.id = sti.transaction_id
+                                      WHERE sti.product_id = ? AND st.type = 'sale'");
+        $stmt->execute([$productId]);
+        return (int) $stmt->fetchColumn();
+    }
+
+    private function allocationsForProduct(int $productId): array
+    {
+        $stmt = $this->pdo->prepare('SELECT sib.batch_id, sib.qty FROM stock_transaction_item_batches sib
+                                       JOIN stock_transaction_items sti ON sti.id = sib.transaction_item_id
+                                       WHERE sti.product_id = ? ORDER BY sib.batch_id');
+        $stmt->execute([$productId]);
+        return $stmt->fetchAll();
+    }
+
+    private function allocationSumForBatch(int $batchId): int
+    {
+        $stmt = $this->pdo->prepare('SELECT COALESCE(SUM(qty), 0) FROM stock_transaction_item_batches WHERE batch_id = ?');
+        $stmt->execute([$batchId]);
+        return (int) $stmt->fetchColumn();
+    }
+
+    private function allocationSumForProduct(int $productId): int
+    {
+        $stmt = $this->pdo->prepare('SELECT COALESCE(SUM(sib.qty), 0) FROM stock_transaction_item_batches sib
+                                       JOIN stock_transaction_items sti ON sti.id = sib.transaction_item_id
+                                       WHERE sti.product_id = ?');
+        $stmt->execute([$productId]);
+        return (int) $stmt->fetchColumn();
+    }
+
+    private function idempotencyKeyCount(string $token): int
+    {
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM idempotency_keys WHERE token = ?');
+        $stmt->execute([$token]);
+        return (int) $stmt->fetchColumn();
+    }
+
+    private function referenceCounterValue(string $counterKey): int
+    {
+        $stmt = $this->pdo->prepare('SELECT next_value FROM reference_counters WHERE counter_key = ?');
+        $stmt->execute([$counterKey]);
+        return (int) $stmt->fetchColumn();
+    }
+
+    private function debtCountForCustomer(int $customerId): int
+    {
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM customer_debts WHERE customer_id = ?');
+        $stmt->execute([$customerId]);
+        return (int) $stmt->fetchColumn();
+    }
+
+    private function customerCountByName(string $name): int
+    {
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM customers WHERE name = ?');
+        $stmt->execute([$name]);
+        return (int) $stmt->fetchColumn();
+    }
+
+    private function customerIdByName(string $name): int
+    {
+        $stmt = $this->pdo->prepare('SELECT id FROM customers WHERE name = ?');
+        $stmt->execute([$name]);
         return (int) $stmt->fetchColumn();
     }
 
