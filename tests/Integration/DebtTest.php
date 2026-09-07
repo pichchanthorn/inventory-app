@@ -11,12 +11,16 @@ use Tests\TestCase;
 // Exercises includes/debt.php's real functions.
 final class DebtTest extends TestCase
 {
-    // ---- K3-1: POS safety gate for track_batches=1 products ----
+    // ---- K3-1/K4-1: POS safety gate for track_batches=1 products ----
     //
-    // recordCreditSale() itself is NOT modified by K3-1 - it still calls
-    // insertStockOutLines($pdo, $txId, $lines) with no $consumeBatches
-    // argument, which defaults to false. This exercises that exact,
-    // unmodified call shape directly.
+    // recordCreditSale() has carried a $consumeBatches parameter since
+    // Phase K4-1 (defaulting false, appended last - same compatibility
+    // pattern recordStockOut() already established in K3-1). These two
+    // tests deliberately omit it, exercising the DEFAULT - the same
+    // safety-fence behavior that existed before K4-1 and that any future
+    // direct caller not passing true still gets. See "K4-1: POS credit
+    // sale FEFO integration" below for the consumeBatches=true path POS
+    // itself now uses.
 
     public function testCreditSaleOfATrackedProductIsRejectedWithoutMutatingAnything(): void
     {
@@ -68,6 +72,158 @@ final class DebtTest extends TestCase
         $stmt = $this->pdo->prepare('SELECT current_stock FROM products WHERE id = ?');
         $stmt->execute([$product['id']]);
         $this->assertSame(16, (int) $stmt->fetchColumn());
+    }
+
+    // ---- K4-1: POS credit sale FEFO integration ----
+    //
+    // Exercises recordCreditSale(..., consumeBatches: true) directly -
+    // the exact call shape pos/index.php's credit-sale path now uses
+    // (Phase K4-1). FEFO/allocation correctness itself is already fully
+    // proven by K3-1's own test suite (tests/Integration/StockTest.php,
+    // tests/Concurrency/ConcurrencyTest.php) against recordStockOut(); no
+    // logic is duplicated here, only the pass-through contract - so these
+    // tests are deliberately about credit-sale-specific concerns (the
+    // debt row, the inline new-customer insert, the shared transaction)
+    // layered on top of an allocation engine already proven elsewhere.
+
+    public function testCreditSaleWithConsumeBatchesTrueConsumesASingleBatchAndCreatesACorrectDebt(): void
+    {
+        $product = $this->seedTrackedProduct(20);
+        $batchId = $this->seedBatch($product['id'], 'LOT-A', '2027-01-01', 20);
+        $userId = testSeedUserRole($this->pdo)['id'];
+
+        $result = recordCreditSale($this->pdo, [['product_id' => $product['id'], 'qty' => 8, 'price' => 3.00]], date('Y-m-d'), $userId, null, 'Credit FEFO Farmer', '012000000', '', null, true);
+
+        $this->assertStringStartsWith('SAL-', $result['reference']);
+        $this->assertStringStartsWith('DBT-', $result['debt_reference']);
+        $this->assertSame(12, $this->currentStock($product['id']));
+        $this->assertSame(12, $this->batchQtyOnHand($batchId));
+        $this->assertInvariantHolds($product['id']);
+
+        $stmt = $this->pdo->prepare('SELECT total_amount FROM customer_debts WHERE reference = ?');
+        $stmt->execute([$result['debt_reference']]);
+        $this->assertEqualsWithDelta(24.00, (float) $stmt->fetchColumn(), 0.001, '8 * 3.00');
+    }
+
+    public function testCreditSaleWithConsumeBatchesTrueConsumesMultipleBatchesInFefoOrder(): void
+    {
+        // The approved worked example: Batch A=5, Batch B=10, request=8.
+        $product = $this->seedTrackedProduct(15);
+        $lotA = $this->seedBatch($product['id'], 'LOT-A', '2027-01-01', 5);
+        $lotB = $this->seedBatch($product['id'], 'LOT-B', '2027-06-01', 10);
+        $userId = testSeedUserRole($this->pdo)['id'];
+
+        $result = recordCreditSale($this->pdo, [['product_id' => $product['id'], 'qty' => 8, 'price' => 2.50]], date('Y-m-d'), $userId, null, 'Credit FEFO Multi Farmer', '012000001', '', null, true);
+
+        $this->assertSame(0, $this->batchQtyOnHand($lotA), 'batch A must be fully consumed first');
+        $this->assertSame(7, $this->batchQtyOnHand($lotB), '10 - 3, only the remainder drawn from batch B');
+        $this->assertSame(7, $this->currentStock($product['id']), '15 - 8');
+        $this->assertInvariantHolds($product['id']);
+
+        $stmt = $this->pdo->prepare('SELECT sib.batch_id, sib.qty FROM stock_transaction_item_batches sib
+                                       JOIN stock_transaction_items sti ON sti.id = sib.transaction_item_id
+                                       WHERE sti.product_id = ? ORDER BY sib.batch_id');
+        $stmt->execute([$product['id']]);
+        $allocations = $stmt->fetchAll();
+        $this->assertCount(2, $allocations, 'one allocation ledger row per batch drawn from');
+        $this->assertSame(5, (int) $allocations[0]['qty']);
+        $this->assertSame(3, (int) $allocations[1]['qty']);
+
+        $stmt = $this->pdo->prepare('SELECT total_amount FROM customer_debts WHERE reference = ?');
+        $stmt->execute([$result['debt_reference']]);
+        $this->assertEqualsWithDelta(20.00, (float) $stmt->fetchColumn(), 0.001, '8 * 2.50');
+    }
+
+    public function testCreditSaleWithConsumeBatchesTrueRollsBackBatchAllocationAndDebtOnALaterLineFailure(): void
+    {
+        $product = $this->seedTrackedProduct(15);
+        $lotA = $this->seedBatch($product['id'], 'LOT-A', '2027-01-01', 5);
+        $lotB = $this->seedBatch($product['id'], 'LOT-B', '2027-06-01', 10);
+        $userId = testSeedUserRole($this->pdo)['id'];
+        $token = testRandomToken();
+        $customerCountBefore = (int) $this->pdo->query('SELECT COUNT(*) FROM customers')->fetchColumn();
+        $debtCountBefore = (int) $this->pdo->query('SELECT COUNT(*) FROM customer_debts')->fetchColumn();
+        $txCountBefore = (int) $this->pdo->query('SELECT COUNT(*) FROM stock_transactions')->fetchColumn();
+        $refCounterBefore = $this->referenceCounterValue();
+        $nonexistentProductId = 999999;
+
+        try {
+            recordCreditSale(
+                $this->pdo,
+                [
+                    // Would succeed alone: spans both batches (5 + 3).
+                    ['product_id' => $product['id'], 'qty' => 8, 'price' => 2.50],
+                    ['product_id' => $nonexistentProductId, 'qty' => 1, 'price' => 1],
+                ],
+                date('Y-m-d'), $userId, null, 'Rollback Farmer', '012000002', '', $token, true
+            );
+            $this->fail('Expected an exception from the invalid second line.');
+        } catch (\Throwable $e) {
+            // expected
+        }
+
+        $this->assertSame(5, $this->batchQtyOnHand($lotA), 'batch A must be restored');
+        $this->assertSame(10, $this->batchQtyOnHand($lotB), 'batch B must be restored');
+        $this->assertSame(15, $this->currentStock($product['id']), 'current_stock must be restored');
+        $this->assertInvariantHolds($product['id']);
+
+        $this->assertSame($customerCountBefore, (int) $this->pdo->query('SELECT COUNT(*) FROM customers')->fetchColumn(), 'the inline new-customer insert must not survive');
+        $this->assertSame($debtCountBefore, (int) $this->pdo->query('SELECT COUNT(*) FROM customer_debts')->fetchColumn(), 'no debt row must survive');
+        $this->assertSame($txCountBefore, (int) $this->pdo->query('SELECT COUNT(*) FROM stock_transactions')->fetchColumn(), 'no stock_transactions row must survive');
+        $this->assertSame($refCounterBefore, $this->referenceCounterValue(), 'the reference counter must be rolled back');
+
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM stock_transaction_item_batches sib
+                                       JOIN stock_transaction_items sti ON sti.id = sib.transaction_item_id
+                                       WHERE sti.product_id = ?');
+        $stmt->execute([$product['id']]);
+        $this->assertSame(0, (int) $stmt->fetchColumn(), 'no allocation ledger row must survive');
+
+        // The idempotency claim must have rolled back too.
+        $result = recordCreditSale($this->pdo, [['product_id' => $product['id'], 'qty' => 5, 'price' => 2.50]], date('Y-m-d'), $userId, null, 'Retry Farmer', '012000003', '', $token, true);
+        $this->assertStringStartsWith('SAL-', $result['reference']);
+        $this->assertSame(10, $this->currentStock($product['id']));
+        $this->assertInvariantHolds($product['id']);
+    }
+
+    private function seedTrackedProduct(int $stock): array
+    {
+        return testSeedProduct($this->pdo, $stock, ['track_batches' => 1]);
+    }
+
+    private function seedBatch(int $productId, ?string $batchNumber, ?string $expiryDate, int $qty): int
+    {
+        $stmt = $this->pdo->prepare('INSERT INTO product_batches (product_id, batch_number, expiry_date, qty_received, qty_on_hand) VALUES (?,?,?,?,?)');
+        $stmt->execute([$productId, $batchNumber, $expiryDate, $qty, $qty]);
+        return (int) $this->pdo->lastInsertId();
+    }
+
+    private function batchQtyOnHand(int $batchId): int
+    {
+        $stmt = $this->pdo->prepare('SELECT qty_on_hand FROM product_batches WHERE id = ?');
+        $stmt->execute([$batchId]);
+        return (int) $stmt->fetchColumn();
+    }
+
+    private function currentStock(int $productId): int
+    {
+        $stmt = $this->pdo->prepare('SELECT current_stock FROM products WHERE id = ?');
+        $stmt->execute([$productId]);
+        return (int) $stmt->fetchColumn();
+    }
+
+    private function referenceCounterValue(): int
+    {
+        return (int) $this->pdo->query("SELECT next_value FROM reference_counters WHERE counter_key = 'stock_transactions'")->fetchColumn();
+    }
+
+    // The required K3/K4 invariant: for a tracked product, current_stock
+    // must always equal the sum of its own batches' qty_on_hand.
+    private function assertInvariantHolds(int $productId): void
+    {
+        $stmt = $this->pdo->prepare('SELECT COALESCE(SUM(qty_on_hand), 0) FROM product_batches WHERE product_id = ?');
+        $stmt->execute([$productId]);
+        $batchSum = (int) $stmt->fetchColumn();
+        $this->assertSame($this->currentStock($productId), $batchSum, 'products.current_stock must equal SUM(product_batches.qty_on_hand)');
     }
 
     // ---- 11. Credit Sale ----

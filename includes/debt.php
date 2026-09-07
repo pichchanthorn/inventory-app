@@ -51,7 +51,16 @@ function nextDebtReference(PDO $pdo): string {
 // a duplicate submission can never create a second customer row, a
 // second sale, or a second debt. See includes/stock.php's
 // claimIdempotencyToken() for how the claim itself works.
-function recordCreditSale(PDO $pdo, array $lines, string $date, int $userId, ?int $customerId, ?string $newCustomerName, ?string $newCustomerPhone, ?string $dueDate, ?string $idempotencyToken = null): array {
+// $consumeBatches (Phase K4-1): appended last, defaulting false - same
+// compatibility pattern recordStockOut() already established (Phase
+// K3-1). Every existing caller that doesn't pass it (every test call
+// site as of this phase) keeps the exact current behavior: a
+// track_batches=1 product still rejects with BatchConsumptionRequired
+// Exception unless the caller explicitly opts in. POS's own call site
+// (pos/index.php) is the one caller that now passes true. Passed
+// straight through to insertStockOutLines() below - no FEFO logic lives
+// in this file, only the pass-through.
+function recordCreditSale(PDO $pdo, array $lines, string $date, int $userId, ?int $customerId, ?string $newCustomerName, ?string $newCustomerPhone, ?string $dueDate, ?string $idempotencyToken = null, bool $consumeBatches = false): array {
     try {
         $pdo->beginTransaction();
 
@@ -76,7 +85,7 @@ function recordCreditSale(PDO $pdo, array $lines, string $date, int $userId, ?in
         $stmt->execute([$reference, 'sale', $date, '', $userId]);
         $txId = $pdo->lastInsertId();
 
-        insertStockOutLines($pdo, $txId, $lines);
+        insertStockOutLines($pdo, $txId, $lines, $consumeBatches);
 
         $total = 0.0;
         foreach ($lines as $line) {

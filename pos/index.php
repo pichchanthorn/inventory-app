@@ -103,11 +103,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // A sale is always "now" - never a client-supplied, backdatable value.
                 $today = date('Y-m-d');
                 try {
+                    // Phase K4-1: consumeBatches=true on both paths - POS
+                    // explicitly opts into FEFO batch consumption
+                    // (includes/stock.php), same as Stock Out's own call
+                    // site (Phase K3-2). For a track_batches=0 product
+                    // this is inert either way (the per-line check reads
+                    // track_batches=0 from the locked row and takes the
+                    // existing, unchanged guarded-decrement path
+                    // regardless of this flag); for a track_batches=1
+                    // product it now consumes real batch quantities via
+                    // FEFO instead of throwing
+                    // BatchConsumptionRequiredException.
                     if ($paymentMethod === 'credit') {
-                        $result = recordCreditSale($pdo, $lines, $today, $_SESSION['user_id'], $customerId, $newCustomerName, $newCustomerPhone, $dueDate, $idempotencyToken);
+                        $result = recordCreditSale($pdo, $lines, $today, $_SESSION['user_id'], $customerId, $newCustomerName, $newCustomerPhone, $dueDate, $idempotencyToken, true);
                         $reference = $result['reference'];
                     } else {
-                        $reference = recordStockOut($pdo, $lines, $today, '', $_SESSION['user_id'], 'sale', $cashReceived, $idempotencyToken);
+                        $reference = recordStockOut($pdo, $lines, $today, '', $_SESSION['user_id'], 'sale', $cashReceived, $idempotencyToken, true);
                     }
 
                     $receiptLines = [];
