@@ -15,6 +15,15 @@
 // UPDATE already takes.
 // ================================================
 
+// Phase K4-6-1: batchAdjustStock() (below) writes a batch-level audit
+// snapshot via the existing, generic logAudit() rather than inventing a
+// new audit mechanism - see that function's own comment. audit.php is
+// self-contained (no further requires of its own), so this is safe to
+// pull in unconditionally for every caller of this file, the same way
+// every caller of this file already separately requires audit.php
+// themselves for their own product/category/etc audit writes.
+require_once __DIR__ . '/audit.php';
+
 // Thrown when a guarded UPDATE affects 0 rows: either Stock Out couldn't
 // find enough stock at the moment of the write, or Stock Adjustment's
 // optimistic-lock check found the product had already changed since it
@@ -71,6 +80,71 @@ class TrackedStockAdjustmentNotSupportedException extends RuntimeException {
     public function __construct(int $productId) {
         parent::__construct('Stock Adjustment is not supported for track_batches=1 product ' . $productId);
         $this->productId = $productId;
+    }
+}
+
+// Phase K4-6-1: the inverse of TrackedStockAdjustmentNotSupportedException
+// above. batchAdjustStock() (below) targets one specific product_batches
+// row, which is only meaningful for a track_batches=1 product - calling it
+// against an untracked product is a caller error (the untracked path
+// remains adjustStock() above), rejected before any mutation.
+class UntrackedProductBatchAdjustmentNotSupportedException extends RuntimeException {
+    public $productId;
+    public function __construct(int $productId) {
+        parent::__construct('Batch-specific Stock Adjustment is not supported for track_batches=0 product ' . $productId);
+        $this->productId = $productId;
+    }
+}
+
+// Phase K4-6-1: thrown when the requested batch id does not resolve to a
+// product_batches row belonging to the given product - either it does not
+// exist at all, or it exists but for a different product. Selection is
+// always by product_batches.id (see batchAdjustStock()'s own comment for
+// why), and this is the server-side ownership check the K4-6-A design
+// requires: a client-supplied batchId must never be trusted to already
+// belong to the submitted product without this being re-verified here,
+// under the lock, regardless of what any UI dropdown showed.
+class ProductBatchNotFoundException extends RuntimeException {
+    public $productId;
+    public $batchId;
+    public function __construct(int $productId, int $batchId) {
+        parent::__construct('Batch ' . $batchId . ' not found for product ' . $productId);
+        $this->productId = $productId;
+        $this->batchId = $batchId;
+    }
+}
+
+// Phase K4-6-1: thrown when batchAdjustStock()'s expectedQty parameter (the
+// batch's qty_on_hand as the caller last displayed it, e.g. at page-load
+// time) no longer matches the batch's actual qty_on_hand once it is locked
+// and re-read inside the transaction - the batch changed from another
+// transaction (another adjustment, a Stock In, a Stock Out/POS FEFO
+// consumption) since the caller last read it. This is the primary stale-
+// form/CAS guard the K4-6-A design requires, checked as a direct PHP
+// comparison against the FOR-UPDATE-locked read - not inferred from an
+// UPDATE's rowCount(), which cannot reliably distinguish "conflict" from
+// "matched but value unchanged" for a same-value write (see the no-op
+// handling below). Deliberately distinct from StockConflictException
+// (that one is about the product-level current_stock guard) so a caller
+// can show a batch-specific conflict message.
+class BatchAdjustmentConflictException extends RuntimeException {
+    public $productId;
+    public $batchId;
+    public function __construct(int $productId, int $batchId) {
+        parent::__construct('Batch ' . $batchId . ' quantity changed since it was last read for product ' . $productId);
+        $this->productId = $productId;
+        $this->batchId = $batchId;
+    }
+}
+
+// Phase K4-6-1: thrown for a syntactically invalid target quantity (< 0),
+// before any transaction is opened - no reference number is ever claimed
+// for a request that fails this check.
+class InvalidBatchAdjustmentQuantityException extends InvalidArgumentException {
+    public $newQty;
+    public function __construct(int $newQty) {
+        parent::__construct('Batch adjustment target quantity cannot be negative: ' . $newQty);
+        $this->newQty = $newQty;
     }
 }
 
@@ -701,6 +775,167 @@ function enableTrackBatches(PDO $pdo, int $productId, int $userId): void {
         }
 
         $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
+    }
+}
+
+// Phase K4-6-1: batch-specific Stock Adjustment for a track_batches=1
+// product - the K4-6 feature this phase implements the backend half of
+// (K4-6-2 will add the UI). Unlike adjustStock() above (which states one
+// absolute total for the whole product and is rejected outright for a
+// tracked product - see TrackedStockAdjustmentNotSupportedException),
+// this targets exactly one product_batches row: the caller supplies
+// which batch (by id, never by batch_number/expiry_date - see
+// ProductBatchNotFoundException's own comment for why), a new absolute
+// target quantity for that batch (Target semantics, matching
+// adjustStock()'s own convention), and the batch's quantity as the
+// caller last knew it (expectedQty - a stale-form/CAS guard, see
+// BatchAdjustmentConflictException's own comment).
+//
+// Lock order mirrors every other batch-touching function in this file:
+// the shared reference_counters row first (nextStockReference(), same as
+// adjustStock()/recordStockIn()/recordStockOut()), then the product row
+// (SELECT ... FOR UPDATE), then the target batch row (SELECT ... FOR
+// UPDATE) - product before batch, exactly like recordStockIn()'s
+// findOrCreateBatch() and insertStockOutLineWithBatchConsumption() above.
+// Because every batch-touching function in this file already takes the
+// product-row lock before touching any product_batches row, holding that
+// same lock here serializes this function against Stock In, Stock Out/
+// POS FEFO consumption, and any other concurrent batch adjustment for
+// this exact product_id - no new lock-order inversion is introduced.
+//
+// No stock_transaction_item_batches row is ever written here (increase
+// or decrease) - that table's CHECK (qty > 0) can only represent a
+// receiving/consumption event, never a bidirectional adjustment (see the
+// K4-6-A design audit's Stock Transaction Representation analysis).
+// Instead: one stock_transaction_items row carries qty = abs(delta)
+// (magnitude only, same convention as adjustStock() above), the batch
+// identity + old->new quantity is appended to the transaction's own
+// note text, and a queryable, machine-reconstructable record of exactly
+// which batch changed lives in audit_log (entity_type='product_batch',
+// written via the same generic logAudit() every other entity in this
+// app already uses) - reusing existing infrastructure rather than adding
+// a new ledger row shape or a new audit mechanism.
+//
+// Does not use idempotency_keys at all (see BatchAdjustmentConflictException's
+// comment) - the expectedQty CAS guard already makes a duplicate/
+// resubmitted POST fail safely: a resubmit's expectedQty reflects the
+// pre-first-submission value, which no longer matches qty_on_hand once
+// the first submission has already committed.
+function batchAdjustStock(PDO $pdo, int $productId, int $batchId, int $newQty, int $expectedQty, string $reason, string $date, int $userId): string {
+    if ($newQty < 0) {
+        throw new InvalidBatchAdjustmentQuantityException($newQty);
+    }
+
+    try {
+        $pdo->beginTransaction();
+        $reference = nextStockReference($pdo, 'ADJ');
+
+        $stmt = $pdo->prepare('SELECT id, track_batches, current_stock FROM products WHERE id = ? FOR UPDATE');
+        $stmt->execute([$productId]);
+        $product = $stmt->fetch();
+        if ($product === false) {
+            throw new RuntimeException('Batch Stock Adjustment: product ' . $productId . ' not found');
+        }
+        if ((int) $product['track_batches'] !== 1) {
+            throw new UntrackedProductBatchAdjustmentNotSupportedException($productId);
+        }
+        $currentStockBefore = (int) $product['current_stock'];
+
+        $stmt = $pdo->prepare('SELECT * FROM product_batches WHERE id = ? AND product_id = ? FOR UPDATE');
+        $stmt->execute([$batchId, $productId]);
+        $batchBefore = $stmt->fetch();
+        if ($batchBefore === false) {
+            throw new ProductBatchNotFoundException($productId, $batchId);
+        }
+
+        $actualQty = (int) $batchBefore['qty_on_hand'];
+        if ($actualQty !== $expectedQty) {
+            throw new BatchAdjustmentConflictException($productId, $batchId);
+        }
+
+        $delta = $newQty - $actualQty;
+
+        // Human-readable batch identity, appended to the caller's own
+        // reason text - see this function's header comment for why no
+        // stock_transaction_item_batches row is written instead.
+        $batchLabel = 'Batch: ' . ($batchBefore['batch_number'] !== null ? $batchBefore['batch_number'] : '(no batch #)')
+            . ', Exp: ' . ($batchBefore['expiry_date'] !== null ? $batchBefore['expiry_date'] : '(no expiry)');
+        if ($batchBefore['origin'] === 'opening_balance') {
+            $batchLabel .= ' (Opening Balance)';
+        }
+        $note = trim($reason) . ' — ' . $batchLabel . ': ' . $actualQty . ' → ' . $newQty;
+        // stock_transactions.note is VARCHAR(255) - truncate defensively
+        // rather than let a long user-entered reason push the appended
+        // batch-identity suffix past the column limit and fail the write.
+        // mb_substr (not substr) since note may contain Khmer text.
+        $note = mb_substr($note, 0, 255);
+
+        $stmt = $pdo->prepare('INSERT INTO stock_transactions (reference, type, transaction_date, note, supplier_id, user_id) VALUES (?,?,?,?,NULL,?)');
+        $stmt->execute([$reference, 'adjustment', $date, $note, $userId]);
+        $txId = (int) $pdo->lastInsertId();
+
+        // A real mutation (delta != 0) gets a guarded UPDATE, with its
+        // rowCount() checked as defense-in-depth (mirrors the same
+        // convention used throughout this file, e.g.
+        // insertStockOutLineWithBatchConsumption()'s guarded decrement) -
+        // structurally unreachable given the FOR UPDATE locks already
+        // held above, since nothing else can have changed either row
+        // since they were read a moment ago in this same transaction.
+        //
+        // A no-op (delta == 0, i.e. newQty == expectedQty == actualQty)
+        // deliberately skips these UPDATEs entirely rather than writing
+        // the same value back: MySQL/MariaDB's default PDO affected-rows
+        // semantics (no PDO::MYSQL_ATTR_FOUND_ROWS set in config/db.php)
+        // report 0 affected rows for an UPDATE that matches a row but
+        // does not change its value, which would otherwise make a
+        // legitimate no-op adjustment indistinguishable from a genuine
+        // conflict here. The staleness check above (actualQty !==
+        // expectedQty) is already the authoritative guard regardless -
+        // this rowCount() check is additional defense-in-depth only for
+        // the case where a real value change is actually expected.
+        if ($delta !== 0) {
+            $stmt = $pdo->prepare('UPDATE product_batches SET qty_on_hand = ?, updated_by = ? WHERE id = ? AND qty_on_hand = ?');
+            $stmt->execute([$newQty, $userId, $batchId, $actualQty]);
+            if ($stmt->rowCount() === 0) {
+                throw new BatchAdjustmentConflictException($productId, $batchId);
+            }
+
+            // Safe by construction: current_stock_after = current_stock_before
+            // - actualQty + newQty = (sum of every OTHER batch's qty_on_hand,
+            // each already >= 0) + newQty (>= 0, validated above) - it can
+            // never go negative, so no separate negative-stock rejection is
+            // needed beyond the CAS guard and the schema's own CHECK
+            // constraints (chk_products_current_stock_nonneg,
+            // chk_product_batches_qty_on_hand_nonneg) as a final backstop.
+            $stmt = $pdo->prepare('UPDATE products SET current_stock = current_stock + ? WHERE id = ? AND current_stock = ?');
+            $stmt->execute([$delta, $productId, $currentStockBefore]);
+            if ($stmt->rowCount() === 0) {
+                throw new StockConflictException($productId);
+            }
+        }
+
+        $diff = abs($delta);
+        $stmt = $pdo->prepare('INSERT INTO stock_transaction_items (transaction_id, product_id, qty, unit_price, subtotal) VALUES (?,?,?,0,0)');
+        $stmt->execute([$txId, $productId, $diff]);
+
+        // Read the batch row back for the audit "after" snapshot, same
+        // "read the row back rather than hand-build it" approach
+        // product/index.php's own audit writes use - guarantees every
+        // actual column (updated_at/updated_by included) reflects what
+        // was really written, not just the fields this function touched.
+        $stmt = $pdo->prepare('SELECT * FROM product_batches WHERE id = ?');
+        $stmt->execute([$batchId]);
+        $batchAfter = $stmt->fetch();
+
+        logAudit($pdo, $userId, 'update', 'product_batch', $batchId, $batchBefore, $batchAfter);
+
+        $pdo->commit();
+        return $reference;
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) {
             $pdo->rollBack();

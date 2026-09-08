@@ -63,6 +63,17 @@ final class ConcurrencyTest extends TestCase
                                JOIN stock_transaction_items sti ON sti.id = sib.transaction_item_id
                                WHERE sti.product_id = $id");
             $this->pdo->exec("DELETE FROM stock_transaction_items WHERE product_id = $id");
+            // Phase K4-6-1: batchAdjustStock() writes one audit_log row per
+            // successful adjustment (entity_type='product_batch'). audit_log
+            // has no FK to product_batches (see database/schema.sql's own
+            // comment on why entity_id is deliberately unconstrained), so
+            // leaving these behind would not block any of the deletes below -
+            // removed anyway for the same "leave no committed state behind"
+            // hygiene as every other explicit delete in this method. Must run
+            // before product_batches is deleted, since it joins against it.
+            $this->pdo->exec("DELETE al FROM audit_log al
+                               JOIN product_batches pb ON pb.id = al.entity_id AND al.entity_type = 'product_batch'
+                               WHERE pb.product_id = $id");
             $this->pdo->exec("DELETE FROM product_batches WHERE product_id = $id");
             $this->pdo->exec("DELETE FROM products WHERE id = $id");
         }
@@ -757,6 +768,201 @@ final class ConcurrencyTest extends TestCase
         $this->assertSame(1, (int) $product['track_batches']);
         $this->assertSame(25, (int) $product['current_stock'], '20 + 5, no lost update regardless of which side won the race');
         $this->assertBatchInvariantHolds($productId);
+    }
+
+    // ---- K4-6-1: Batch-Specific Stock Adjustment concurrency ----
+    //
+    // batchAdjustStock() (includes/stock.php) takes the same product-row
+    // lock (SELECT ... FOR UPDATE) every other batch-touching function in
+    // this file already takes before touching any product_batches row -
+    // see that function's own header comment. Because of that, it cannot
+    // introduce a new lock-order inversion with Stock In, Stock Out/POS
+    // FEFO consumption, or enableTrackBatches(): all of them serialize on
+    // that same lock for a given product_id. No new PHP-level lock or
+    // mutex is introduced anywhere in this file or in
+    // batch_adjust_race.php - only that existing row lock is under test,
+    // same philosophy as every other test in this class. Each scenario
+    // runs 3 times (fresh seeded data per repetition) per the K4-6-1
+    // task's explicit repetition requirement.
+
+    // Scenario A: two concurrent adjustments on the SAME batch, both
+    // submitted with the SAME expectedQty (both believe the batch is
+    // still at its original value). The product-row lock serializes
+    // entry; whichever wins commits its own target, and the loser's
+    // expectedQty no longer matches the now-changed actual value, so it
+    // is deterministically rejected as a conflict - never a lost update,
+    // never both silently applied.
+    public function testConcurrentAdjustmentsOnTheSameBatchWithTheSameExpectedQtyNeverLoseAnUpdate(): void
+    {
+        for ($rep = 0; $rep < 3; $rep++) {
+            $productId = $this->seedTrackedProductWithStock(10);
+            $batchId = $this->seedBatchDirect($productId, 'LOT-A', null, 10);
+            $userId = $this->seedUser();
+
+            $results = $this->runParallel([
+                ['batch_adjust_race.php', (string) $productId, (string) $batchId, '6', '10', (string) $userId],
+                ['batch_adjust_race.php', (string) $productId, (string) $batchId, '15', '10', (string) $userId],
+            ]);
+
+            $statuses = array_map(fn($r) => $r['status'], $results);
+            sort($statuses);
+            $this->assertSame(['conflict', 'ok'], $statuses, "rep $rep: exactly one must succeed and one must be rejected as stale: " . json_encode($results));
+
+            $finalQty = $this->batchQtyOnHand($batchId);
+            $this->assertContains($finalQty, [6, 15], "rep $rep: final batch quantity must match whichever adjustment actually won");
+            $this->assertSame($finalQty, $this->currentStock($productId), "rep $rep");
+            $this->assertBatchInvariantHolds($productId);
+        }
+    }
+
+    // Scenario B: two concurrent adjustments against two DIFFERENT
+    // batches of the SAME product. Fully serialized by the product-row
+    // lock (not just per-batch - see this function's own comment), but
+    // since neither's expectedQty is invalidated by the other (they touch
+    // disjoint batch rows), both must succeed regardless of which wins
+    // the lock first, with no lost update and no deadlock.
+    public function testConcurrentAdjustmentsOnDifferentBatchesOfTheSameProductBothSucceed(): void
+    {
+        for ($rep = 0; $rep < 3; $rep++) {
+            $productId = $this->seedTrackedProductWithStock(18);
+            $batchOne = $this->seedBatchDirect($productId, 'LOT-A', null, 10);
+            $batchTwo = $this->seedBatchDirect($productId, 'LOT-B', null, 8);
+            $userId = $this->seedUser();
+
+            $results = $this->runParallel([
+                ['batch_adjust_race.php', (string) $productId, (string) $batchOne, '15', '10', (string) $userId],
+                ['batch_adjust_race.php', (string) $productId, (string) $batchTwo, '3', '8', (string) $userId],
+            ]);
+
+            foreach ($results as $r) {
+                $this->assertSame('ok', $r['status'], "rep $rep: both must succeed - disjoint batches, no reason for either to conflict: " . json_encode($results));
+            }
+
+            $this->assertSame(15, $this->batchQtyOnHand($batchOne), "rep $rep");
+            $this->assertSame(3, $this->batchQtyOnHand($batchTwo), "rep $rep");
+            $this->assertSame(18, $this->currentStock($productId), "rep $rep: 18 + (15-10) + (3-8) = 18, no lost update regardless of win order");
+            $this->assertBatchInvariantHolds($productId);
+        }
+    }
+
+    // Scenario C: adjustment vs Stock In, same product, different
+    // batches (Stock In always creates/targets its own batch identity,
+    // never the one being adjusted here). Order-independent: whichever
+    // side wins the product lock first, the other proceeds against
+    // already-committed state and both succeed - same "assert only the
+    // order-independent final total, not a specific ordering" philosophy
+    // as testConcurrentEnableTrackBatchesAndStockInOnTheSameProductPreserveTheInvariant()
+    // above.
+    public function testConcurrentAdjustmentAndStockInOnTheSameProductPreserveTheInvariant(): void
+    {
+        for ($rep = 0; $rep < 3; $rep++) {
+            $productId = $this->seedTrackedProductWithStock(10);
+            $batchId = $this->seedBatchDirect($productId, 'LOT-A', null, 10);
+            $userId = $this->seedUser();
+
+            $results = $this->runParallel([
+                ['batch_adjust_race.php', (string) $productId, (string) $batchId, '15', '10', (string) $userId],
+                ['stock_in_batch_race.php', (string) $productId, 'LOT-NEW', '_NULL_', '5', (string) $userId],
+            ]);
+
+            foreach ($results as $r) {
+                $this->assertSame('ok', $r['status'], "rep $rep: " . json_encode($results));
+            }
+
+            $this->assertSame(15, $this->batchQtyOnHand($batchId), "rep $rep: the adjusted batch must reflect its own target regardless of race order");
+            $this->assertSame(20, $this->currentStock($productId), "rep $rep: 10 + (15-10) + 5 = 20, no lost update regardless of which side won");
+            $this->assertBatchInvariantHolds($productId);
+        }
+    }
+
+    // Scenario D: adjustment vs Stock Out, same product, SAME batch -
+    // genuinely order-dependent (unlike C/F, which use disjoint batches).
+    // Whichever transaction reaches the product-row lock first proceeds;
+    // the other observes its committed result. If Stock Out wins first,
+    // the adjustment's expectedQty no longer matches and it is safely
+    // rejected as a conflict (not a lost update). If the adjustment wins
+    // first, Stock Out's own FEFO read simply sees the already-adjusted
+    // quantity and allocates against that. Either ordering is correct -
+    // what must hold regardless of winner is the invariant and no
+    // negative quantity anywhere, exactly what this test asserts.
+    public function testConcurrentAdjustmentAndStockOutOnTheSameBatchNeverViolateTheInvariant(): void
+    {
+        for ($rep = 0; $rep < 3; $rep++) {
+            $productId = $this->seedTrackedProductWithStock(10);
+            $batchId = $this->seedBatchDirect($productId, 'LOT-A', null, 10);
+            $userId = $this->seedUser();
+
+            $results = $this->runParallel([
+                ['batch_adjust_race.php', (string) $productId, (string) $batchId, '6', '10', (string) $userId],
+                ['stock_out_batch_race.php', (string) $productId, '4', (string) $userId],
+            ]);
+
+            foreach ($results as $r) {
+                $this->assertContains($r['status'], ['ok', 'conflict'], "rep $rep: no unexpected error - only a clean success or a clean, safe rejection: " . json_encode($results));
+            }
+
+            $this->assertGreaterThanOrEqual(0, $this->batchQtyOnHand($batchId), "rep $rep: batch quantity must never go negative");
+            $this->assertGreaterThanOrEqual(0, $this->currentStock($productId), "rep $rep: current_stock must never go negative");
+            $this->assertBatchInvariantHolds($productId);
+        }
+    }
+
+    // Scenario E: adjustment vs POS (cash sale), same product, SAME
+    // batch. Same order-dependent-but-safe analysis as D - POS's cash
+    // path shares the identical FEFO consumption function
+    // (insertStockOutLineWithBatchConsumption()) Stock Out uses.
+    public function testConcurrentAdjustmentAndPosSaleOnTheSameBatchNeverViolateTheInvariant(): void
+    {
+        for ($rep = 0; $rep < 3; $rep++) {
+            $productId = $this->seedTrackedProductWithStock(10);
+            $batchId = $this->seedBatchDirect($productId, 'LOT-A', null, 10);
+            $userId = $this->seedUser();
+
+            $results = $this->runParallel([
+                ['batch_adjust_race.php', (string) $productId, (string) $batchId, '6', '10', (string) $userId],
+                ['pos_sale_race.php', 'cash', "$productId:4", '_NONE_', (string) $userId, '_NA_'],
+            ]);
+
+            foreach ($results as $r) {
+                $this->assertContains($r['status'], ['ok', 'conflict', 'stock_conflict'], "rep $rep: no unexpected error: " . json_encode($results));
+            }
+
+            $this->assertGreaterThanOrEqual(0, $this->batchQtyOnHand($batchId), "rep $rep");
+            $this->assertGreaterThanOrEqual(0, $this->currentStock($productId), "rep $rep");
+            $this->assertBatchInvariantHolds($productId);
+        }
+    }
+
+    // Scenario F: adjustment on batch A vs Stock Out consuming batch B -
+    // same product, disjoint batches, deterministic (both succeed,
+    // mirroring scenario B's/C's reasoning), proving the product-row lock
+    // safely serializes even when Stock Out's own FEFO SELECT ... FOR
+    // UPDATE locks EVERY qty_on_hand > 0 batch row for the product (see
+    // insertStockOutLineWithBatchConsumption()'s own comment) - not just
+    // the one it ultimately draws from. Batch A is given a later expiry
+    // than batch B so FEFO deterministically draws only from batch B.
+    public function testConcurrentAdjustmentOnBatchAAndStockOutOnBatchBNeverDeadlockAndPreserveTheInvariant(): void
+    {
+        for ($rep = 0; $rep < 3; $rep++) {
+            $productId = $this->seedTrackedProductWithStock(25);
+            $batchA = $this->seedBatchDirect($productId, 'LOT-A', '2030-01-01', 10);
+            $batchB = $this->seedBatchDirect($productId, 'LOT-B', '2026-01-01', 15);
+            $userId = $this->seedUser();
+
+            $results = $this->runParallel([
+                ['batch_adjust_race.php', (string) $productId, (string) $batchA, '20', '10', (string) $userId],
+                ['stock_out_batch_race.php', (string) $productId, '5', (string) $userId],
+            ]);
+
+            foreach ($results as $r) {
+                $this->assertSame('ok', $r['status'], "rep $rep: disjoint batches, no deadlock, no reason for either to conflict: " . json_encode($results));
+            }
+
+            $this->assertSame(20, $this->batchQtyOnHand($batchA), "rep $rep: adjustment target on batch A, untouched by Stock Out's FEFO consumption of batch B");
+            $this->assertSame(10, $this->batchQtyOnHand($batchB), "rep $rep: 15 - 5 (Stock Out drew only from the earlier-expiry batch B)");
+            $this->assertSame(30, $this->currentStock($productId), "rep $rep: 25 + (20-10) - 5 = 30");
+            $this->assertBatchInvariantHolds($productId);
+        }
     }
 
     // ---- P0 #17: Reference Numbers (concurrent generation) ----
