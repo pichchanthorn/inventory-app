@@ -6,6 +6,7 @@ namespace Tests\Integration;
 use PDOException;
 use StockConflictException;
 use Tests\TestCase;
+use TrackedStockAdjustmentNotSupportedException;
 
 // P0 items #1-#7 (Stock Integrity): Stock In, Stock Out, Insufficient
 // Stock, Stock Adjustment, Stale Stock Adjustment, Negative Stock,
@@ -147,6 +148,75 @@ final class StockTest extends TestCase
 
     public function testStockAdjustmentSetsExactExpectedQuantity(): void
     {
+        $product = testSeedProduct($this->pdo, 40);
+        $userId = $this->admin();
+
+        $reference = adjustStock($this->pdo, $product['id'], 33, 40, 'physical count', date('Y-m-d'), $userId);
+
+        $this->assertStringStartsWith('ADJ-', $reference);
+        $this->assertSame(33, $this->currentStock($product['id']));
+    }
+
+    // ---- 4b. K4-5: Stock Adjustment is rejected for track_batches=1 ----
+    //
+    // adjustStock() has no concept of batches - see includes/stock.php's
+    // TrackedStockAdjustmentNotSupportedException for the full reasoning
+    // (an absolute product-level target is inherently ambiguous about
+    // which specific batch/lot the difference belongs to). These tests
+    // prove the rejection happens before ANY mutation of any kind, on a
+    // real transaction the catch-all above (the untracked-happy-path
+    // test) proves still works completely unmodified.
+
+    public function testTrackedProductAdjustmentIsRejectedWithoutMutatingAnything(): void
+    {
+        $product = $this->seedTrackedProduct(15);
+        $lot = $this->seedBatch($product['id'], 'LOT-A', '2027-01-01', 15);
+        $userId = $this->admin();
+        $countBefore = $this->countRows('stock_transactions');
+        $refCounterBefore = $this->referenceCounterValue();
+
+        $this->expectException(TrackedStockAdjustmentNotSupportedException::class);
+        try {
+            adjustStock($this->pdo, $product['id'], 20, 15, 'physical count', date('Y-m-d'), $userId);
+        } finally {
+            $this->assertSame(15, $this->currentStock($product['id']), 'current_stock must not move');
+            $this->assertSame(15, $this->batchQtyOnHand($lot), 'the batch must not move');
+            $this->assertInvariantHolds($product['id']);
+            $this->assertSame($countBefore, $this->countRows('stock_transactions'), 'no stock_transactions header may survive');
+            $this->assertSame($refCounterBefore, $this->referenceCounterValue(), 'the reference counter must be rolled back - no reference burned');
+
+            $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM stock_transaction_items WHERE product_id = ?');
+            $stmt->execute([$product['id']]);
+            $this->assertSame(0, (int) $stmt->fetchColumn(), 'no stock_transaction_items row may survive');
+        }
+    }
+
+    public function testTrackedProductAdjustmentWithMultipleBatchesIsRejectedAndEveryBatchIsUntouched(): void
+    {
+        $product = $this->seedTrackedProduct(15);
+        $lotA = $this->seedBatch($product['id'], 'LOT-A', '2027-01-01', 5);
+        $lotB = $this->seedBatch($product['id'], 'LOT-B', '2027-06-01', 10);
+        $userId = $this->admin();
+
+        try {
+            adjustStock($this->pdo, $product['id'], 8, 15, 'physical count', date('Y-m-d'), $userId);
+            $this->fail('Expected TrackedStockAdjustmentNotSupportedException.');
+        } catch (TrackedStockAdjustmentNotSupportedException $e) {
+            // expected
+        }
+
+        $this->assertSame(5, $this->batchQtyOnHand($lotA));
+        $this->assertSame(10, $this->batchQtyOnHand($lotB));
+        $this->assertSame(15, $this->currentStock($product['id']));
+        $this->assertInvariantHolds($product['id']);
+    }
+
+    public function testUntrackedProductAdjustmentRemainsUnaffectedByTheTrackedGate(): void
+    {
+        // Same shape as testStockAdjustmentSetsExactExpectedQuantity()
+        // above - restated here explicitly as a K4-5 regression check
+        // that the new track_batches lookup does not disturb the
+        // untracked path at all.
         $product = testSeedProduct($this->pdo, 40);
         $userId = $this->admin();
 

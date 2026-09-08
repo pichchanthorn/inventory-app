@@ -3,6 +3,7 @@ require_once __DIR__ . '/../includes/auth_check.php';
 require_once __DIR__ . '/../includes/sortable.php';
 require_once __DIR__ . '/../includes/currency.php';
 require_once __DIR__ . '/../includes/audit.php';
+require_once __DIR__ . '/../includes/stock.php';
 require_once __DIR__ . '/../config/db.php';
 
 $activePage = 'product';
@@ -153,6 +154,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'update') {
                 // current state too (it's a normal field in the same
                 // <form>), so this can never accidentally flip it.
                 $trackBatches = isset($_POST['track_batches']) ? 1 : 0;
+
+                // Phase K4-5: closes a second invariant hole found in K4-4's
+                // browser QA, separate from Stock Adjustment's own gate -
+                // enabling Track Batches here on a product that already has
+                // stock must never leave current_stock without a matching
+                // product_batches row. Runs as its own self-contained
+                // transaction (see includes/stock.php's enableTrackBatches())
+                // BEFORE the field-update transaction below, specifically so
+                // a later failure in that unrelated transaction (name/SKU/
+                // category/etc + audit log) can never leave this invariant-
+                // critical step half-done. Safe to call whenever this edit's
+                // submitted checkbox is checked - idempotent no-op for a
+                // product that is already tracked.
+                if ($trackBatches === 1) {
+                    enableTrackBatches($pdo, $id, $actorId);
+                }
 
                 $pdo->beginTransaction();
                 $stmt = $pdo->prepare('UPDATE products SET
