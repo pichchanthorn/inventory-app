@@ -680,6 +680,85 @@ final class ConcurrencyTest extends TestCase
         $this->assertBatchInvariantHolds($productId);
     }
 
+    // ---- K4-5: Track Batches enablement concurrency ----
+    //
+    // Both tests below drive tests/Concurrency/enable_track_batches_race.php,
+    // which calls the real, unmodified enableTrackBatches() from
+    // includes/stock.php - no application-level lock/mutex of any kind
+    // exists anywhere in this codebase for these tests to exercise.
+    // enableTrackBatches() takes only ONE lock (the product row via
+    // SELECT ... FOR UPDATE) and never touches reference_counters at all
+    // (no stock_transactions row is created for this conversion - see
+    // that function's own comment) - so, unlike every other stock-
+    // mutating path in this file, it cannot participate in an opposite-
+    // lock-order deadlock with anything: a deadlock requires a cycle of
+    // two transactions each waiting on a lock the other holds, and this
+    // function only ever requests the one lock it needs. Whatever safety
+    // these tests observe comes entirely from that single product-row
+    // lock being exclusive.
+
+    public function testConcurrentEnableTrackBatchesOnTheSameProductCreatesExactlyOneOpeningBatch(): void
+    {
+        $productId = $this->seedProduct(40); // track_batches=0, real pre-tracking stock
+        $userId = $this->seedUser();
+
+        $results = $this->runParallel([
+            ['enable_track_batches_race.php', (string) $productId, (string) $userId],
+            ['enable_track_batches_race.php', (string) $productId, (string) $userId],
+        ]);
+
+        foreach ($results as $r) {
+            $this->assertSame('ok', $r['status'], 'both concurrent enable attempts must succeed (the loser is a no-op, not an error): ' . json_encode($results));
+        }
+
+        $stmt = $this->pdo->prepare('SELECT track_batches, current_stock FROM products WHERE id = ?');
+        $stmt->execute([$productId]);
+        $product = $stmt->fetch();
+        $this->assertSame(1, (int) $product['track_batches']);
+        $this->assertSame(40, (int) $product['current_stock'], 'current_stock must never be incremented/decremented by enabling tracking');
+
+        $batches = $this->batchesForProduct($productId);
+        $this->assertCount(1, $batches, 'exactly one opening-balance batch may exist - the second racer must never fabricate a duplicate');
+        $this->assertNull($batches[0]['batch_number']);
+        $this->assertNull($batches[0]['expiry_date']);
+        $this->assertSame(40, (int) $batches[0]['qty_on_hand']);
+        $this->assertSame('opening_balance', $batches[0]['origin']);
+        $this->assertBatchInvariantHolds($productId);
+    }
+
+    public function testConcurrentEnableTrackBatchesAndStockInOnTheSameProductPreserveTheInvariant(): void
+    {
+        // Genuinely order-dependent race (see this phase's implementation
+        // report for the full analysis of both possible orderings) - if
+        // Stock In's product-row lock wins first, it still sees
+        // track_batches=0 (the enable side hasn't committed yet) and
+        // takes the plain untracked increment path, so the enable side
+        // then creates one opening batch covering the ALREADY-increased
+        // current_stock; if the enable side wins first, Stock In sees
+        // track_batches=1 and creates its own separate batch for the new
+        // stock. Both orderings are correct - what must hold regardless
+        // of winner is the invariant and the final total, not a specific
+        // batch layout, so that is all this test asserts.
+        $productId = $this->seedProduct(20); // track_batches=0
+        $userId = $this->seedUser();
+
+        $results = $this->runParallel([
+            ['enable_track_batches_race.php', (string) $productId, (string) $userId],
+            ['stock_in_batch_race.php', (string) $productId, 'LOT-NEW', '2027-12-31', '5', (string) $userId],
+        ]);
+
+        foreach ($results as $r) {
+            $this->assertSame('ok', $r['status'], json_encode($results));
+        }
+
+        $stmt = $this->pdo->prepare('SELECT track_batches, current_stock FROM products WHERE id = ?');
+        $stmt->execute([$productId]);
+        $product = $stmt->fetch();
+        $this->assertSame(1, (int) $product['track_batches']);
+        $this->assertSame(25, (int) $product['current_stock'], '20 + 5, no lost update regardless of which side won the race');
+        $this->assertBatchInvariantHolds($productId);
+    }
+
     // ---- P0 #17: Reference Numbers (concurrent generation) ----
 
     public function testConcurrentReferenceGenerationNeverProducesDuplicates(): void

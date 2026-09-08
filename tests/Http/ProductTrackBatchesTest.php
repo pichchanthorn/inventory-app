@@ -19,6 +19,11 @@ final class ProductTrackBatchesTest extends HttpServerTestCase
     {
         foreach ($this->cleanupProductIds as $id) {
             $this->pdo->exec("DELETE FROM stock_transaction_items WHERE product_id = $id");
+            // K4-5: opening-balance batches created by enabling tracking on
+            // a product with existing stock - must be deleted before
+            // products (product_batches.product_id has no ON DELETE
+            // behavior, same as every other cleanup in this test suite).
+            $this->pdo->exec("DELETE FROM product_batches WHERE product_id = $id");
             $this->pdo->exec("DELETE FROM products WHERE id = $id");
         }
         foreach ($this->cleanupUserIds as $id) {
@@ -96,6 +101,86 @@ final class ProductTrackBatchesTest extends HttpServerTestCase
         $this->assertSame(302, $res['status'], 'update must succeed: ' . $res['body']);
 
         $this->assertSame(1, $this->trackBatchesById($productId));
+    }
+
+    // ---- K4-5: enabling tracking on a product with existing stock ----
+    //
+    // testEditingAProductFromUncheckedToCheckedTurnsTrackBatchesOn() above
+    // already proves the checkbox itself persists correctly - it seeds a
+    // product with current_stock=0 (seedProduct() always does), so it
+    // exercises none of K4-5's opening-balance logic at all. These two
+    // tests are what actually drive that new behavior, through the real
+    // page.
+
+    public function testEnablingTrackBatchesOnAProductWithExistingStockCreatesOneOpeningBalanceBatch(): void
+    {
+        $jar = $this->loggedInUserSession();
+        $productId = $this->seedProductWithStock(40);
+
+        $form = $this->httpGet($jar, '/product/index.php');
+        $token = $this->extractCsrfToken($form['body']);
+        $res = $this->httpPost($jar, '/product/index.php', $this->updateFields($token, $productId, true));
+        $this->assertSame(302, $res['status'], 'update must succeed: ' . $res['body']);
+
+        $this->assertSame(1, $this->trackBatchesById($productId));
+        $this->assertSame(40, $this->currentStockById($productId), 'current_stock must be unchanged by enabling tracking');
+
+        $batches = $this->batchesForProduct($productId);
+        $this->assertCount(1, $batches, 'exactly one opening-balance batch must exist');
+        $this->assertNull($batches[0]['batch_number']);
+        $this->assertNull($batches[0]['expiry_date']);
+        $this->assertSame(40, (int) $batches[0]['qty_on_hand']);
+        $this->assertSame(0, (int) $batches[0]['qty_received']);
+        $this->assertSame('opening_balance', $batches[0]['origin']);
+        $this->assertNull($batches[0]['source_transaction_id']);
+    }
+
+    public function testResubmittingTheSameEnableRequestDoesNotCreateASecondOpeningBatch(): void
+    {
+        $jar = $this->loggedInUserSession();
+        $productId = $this->seedProductWithStock(40);
+
+        $form = $this->httpGet($jar, '/product/index.php');
+        $token = $this->extractCsrfToken($form['body']);
+        $fields = $this->updateFields($token, $productId, true);
+
+        $res1 = $this->httpPost($jar, '/product/index.php', $fields);
+        $this->assertSame(302, $res1['status'], 'first submission must succeed: ' . $res1['body']);
+
+        // Re-submit the exact same edit (same CSRF token is still valid -
+        // CSRF tokens are session-scoped and reusable, unlike POS's
+        // per-form idempotency token - see includes/csrf.php) - simulates
+        // a duplicate/resubmitted edit of an already-tracked product.
+        $res2 = $this->httpPost($jar, '/product/index.php', $fields);
+        $this->assertSame(302, $res2['status'], 'second submission must also succeed (idempotent), not error: ' . $res2['body']);
+
+        $this->assertSame(1, $this->trackBatchesById($productId));
+        $this->assertSame(40, $this->currentStockById($productId));
+        $this->assertCount(1, $this->batchesForProduct($productId), 'no second opening batch may be created');
+    }
+
+    private function seedProductWithStock(int $stock): int
+    {
+        $sku = 'K4-5-SEED-' . bin2hex(random_bytes(4));
+        $stmt = $this->pdo->prepare('INSERT INTO products (name, sku, cost_price, sale_price, current_stock, track_batches) VALUES (?,?,?,?,?,0)');
+        $stmt->execute(['K4-5 Seed Product', $sku, 1, 2, $stock]);
+        $id = (int) $this->pdo->lastInsertId();
+        $this->cleanupProductIds[] = $id;
+        return $id;
+    }
+
+    private function currentStockById(int $id): int
+    {
+        $stmt = $this->pdo->prepare('SELECT current_stock FROM products WHERE id = ?');
+        $stmt->execute([$id]);
+        return (int) $stmt->fetchColumn();
+    }
+
+    private function batchesForProduct(int $productId): array
+    {
+        $stmt = $this->pdo->prepare('SELECT * FROM product_batches WHERE product_id = ? ORDER BY id');
+        $stmt->execute([$productId]);
+        return $stmt->fetchAll();
     }
 
     private function trackBatchesFor(string $sku): int

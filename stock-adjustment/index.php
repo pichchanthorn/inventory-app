@@ -44,6 +44,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Optimistic-lock guard found current_stock had already changed
                 // since it was read - don't overwrite that concurrent change.
                 $error = __('stockadj_err_conflict');
+            } catch (TrackedStockAdjustmentNotSupportedException $e) {
+                // Phase K4-5: adjustStock() itself rejects a track_batches=1
+                // product before any mutation - see includes/stock.php for
+                // why. The JS below already shows this same message as soon
+                // as a tracked product is selected, but the server-side
+                // guard (not this catch) is what actually enforces it - this
+                // only turns the exception into the friendly toast a direct/
+                // bypassed submission would otherwise show as a generic
+                // "transaction failed" error.
+                $error = __('stockadj_err_tracked_not_supported');
             } catch (Throwable $e) {
                 error_log('Stock Adjustment failed: ' . $e->getMessage());
                 $error = __('common_err_transaction_failed');
@@ -130,6 +140,7 @@ const T_PCS = <?= json_encode(__('common_pcs')) ?>;
 const T_NO_RESULTS = <?= json_encode(__('common_no_results_found')) ?>;
 const T_SELECT_PREVIEW = <?= json_encode(__('stockadj_preview_hint')) ?>;
 const T_UNITS = <?= json_encode(__('common_units_word')) ?>;
+const T_TRACKED_NOT_SUPPORTED = <?= json_encode(__('stockadj_err_tracked_not_supported')) ?>;
 
 function productLabel(p) {
   const size = p.package_size ? ` — ${p.package_size}` : '';
@@ -263,6 +274,10 @@ wireProductSelect(document.getElementById('adjProductSelect'), product => {
 function updatePreview() {
   const preview = document.getElementById('adjPreview');
   if (!selectedProduct) { preview.textContent = T_SELECT_PREVIEW; return; }
+  // Phase K4-5: adjustStock() itself rejects this product before any
+  // mutation (includes/stock.php) - this is a client-side heads-up only,
+  // shown as soon as a tracked product is picked, not the enforcement.
+  if (selectedProduct.track_batches) { preview.textContent = T_TRACKED_NOT_SUPPORTED; return; }
   const current = selectedProduct.current_stock;
   const next = Number(document.getElementById('adjQty').value) || 0;
   const diff = next - current;

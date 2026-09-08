@@ -50,6 +50,30 @@ class BatchConsumptionRequiredException extends RuntimeException {
     }
 }
 
+// Thrown by adjustStock() (Phase K4-5) when the target product has
+// track_batches=1. A Stock Adjustment states a single absolute total for
+// the whole product, but for a batch-tracked product that total is
+// inherently ambiguous about which specific lot changed - unlike Stock
+// In (always given an explicit batch identity) or Stock Out/POS (FEFO-
+// ordered consumption against specific batch rows), there is no safe way
+// to decide which batch absorbs the difference without guessing at
+// physical facts (see the K4-5 design audit for the full analysis of why
+// every automatic policy was rejected). Rejected here, before any
+// mutation, rather than silently setting products.current_stock with no
+// corresponding product_batches change - that would immediately break
+// the current_stock = SUM(product_batches.qty_on_hand) invariant this
+// schema requires (the exact defect this phase exists to close).
+// Batch-specific adjustment is deferred to a later phase (K4-6); until
+// then, Stock In/Stock Out remain the supported ways to change a tracked
+// product's stock.
+class TrackedStockAdjustmentNotSupportedException extends RuntimeException {
+    public $productId;
+    public function __construct(int $productId) {
+        parent::__construct('Stock Adjustment is not supported for track_batches=1 product ' . $productId);
+        $this->productId = $productId;
+    }
+}
+
 // Thrown when claimIdempotencyToken() finds its token already claimed -
 // i.e. this exact submission (a double-click, a browser retry, two
 // tabs, a network timeout followed by a resubmit) was already recorded.
@@ -538,6 +562,25 @@ function recordStockOut(PDO $pdo, array $lines, string $date, string $note, int 
 // (a concurrent Stock In, Stock Out, or another Adjustment) between the
 // read and this write, 0 rows are affected and StockConflictException is
 // thrown instead of silently overwriting that concurrent change.
+//
+// Phase K4-5: rejects track_batches=1 products outright (see
+// TrackedStockAdjustmentNotSupportedException above) - this function has
+// no concept of batches at all, and a track_batches=1 product's
+// current_stock must never move without a corresponding, deliberate
+// product_batches change. The check reads track_batches from a freshly
+// locked row (SELECT ... FOR UPDATE), the same pattern recordStockIn()/
+// insertStockOutLines() already use, placed AFTER the reference number is
+// claimed and the transaction header is inserted - so a rejection here
+// rolls back the whole transaction via the existing catch block below,
+// releasing the reference number and leaving no header behind, exactly
+// like every other rejection path in this file. This preserves the
+// established lock order for every stock-mutating transaction in this
+// codebase: the shared reference_counters row first, then the product
+// row - never the reverse. The pre-existing optimistic
+// current_stock = ? guard is kept unchanged below for the untracked path
+// it still serves (both as its original concurrency guard and,
+// incidentally, as this function's only duplicate-submission defense -
+// see includes/stock.php's own idempotency documentation).
 function adjustStock(PDO $pdo, int $productId, float $newQty, float $currentQty, string $reason, string $date, int $userId) {
     try {
         $pdo->beginTransaction();
@@ -546,6 +589,16 @@ function adjustStock(PDO $pdo, int $productId, float $newQty, float $currentQty,
         $stmt = $pdo->prepare('INSERT INTO stock_transactions (reference, type, transaction_date, note, supplier_id, user_id) VALUES (?,?,?,?,NULL,?)');
         $stmt->execute([$reference, 'adjustment', $date, $reason, $userId]);
         $txId = $pdo->lastInsertId();
+
+        $stmt = $pdo->prepare('SELECT track_batches FROM products WHERE id = ? FOR UPDATE');
+        $stmt->execute([$productId]);
+        $product = $stmt->fetch();
+        if ($product === false) {
+            throw new RuntimeException('Stock Adjustment: product ' . $productId . ' not found');
+        }
+        if ((int) $product['track_batches'] === 1) {
+            throw new TrackedStockAdjustmentNotSupportedException($productId);
+        }
 
         $diff = abs($newQty - $currentQty);
         $stmt = $pdo->prepare('INSERT INTO stock_transaction_items (transaction_id, product_id, qty, unit_price, subtotal) VALUES (?,?,?,0,0)');
@@ -559,6 +612,95 @@ function adjustStock(PDO $pdo, int $productId, float $newQty, float $currentQty,
 
         $pdo->commit();
         return $reference;
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
+    }
+}
+
+// Phase K4-5: closes the second invariant hole found in K4-4's browser
+// QA - enabling Track Batches (product/index.php) on a product that
+// already has current_stock > 0 must never leave that stock without a
+// matching product_batches row, or current_stock = SUM(qty_on_hand)
+// breaks the instant tracking turns on. Owns its own transaction, exactly
+// like adjustStock()/recordStockIn() above, rather than running inside
+// product/index.php's own field-update transaction - specifically so
+// this invariant-critical step (flip track_batches + create the opening
+// batch, or neither) can never be left half-done by an unrelated later
+// failure in that other transaction (name/SKU/category/etc + audit log).
+// product/index.php calls this FIRST, as its own separate step, before
+// its normal field-update transaction runs.
+//
+// SELECT ... FOR UPDATE takes the same product-row lock every other
+// stock-mutating path in this file takes before deciding anything about
+// batches - two concurrent requests enabling tracking on the same
+// product can never both decide "not tracked yet" and both create an
+// opening batch: the second's SELECT ... FOR UPDATE blocks until the
+// first commits, then reads back track_batches=1 and returns immediately
+// (see the idempotent no-op branch below).
+//
+// The opening-balance batch (origin='opening_balance', batch_number and
+// expiry_date both NULL) is exactly the placeholder migration
+// 014_add_product_batches.sql's own header comment reserved this origin
+// value for: "pre-tracking stock this database has no real batch history
+// for". qty_received is deliberately left at 0, NOT set to
+// $currentStock - this stock was never received through a real Stock In
+// event, and migration 014 is explicit that only Stock In touches
+// qty_received. No stock_transactions/stock_transaction_items row is
+// created for this conversion - it is not a stock movement (current_stock
+// does not change), just a one-time bookkeeping placeholder for
+// historical stock, the same non-event nature as opening_balance's own
+// name implies.
+//
+// Guarded by two independent conditions, both required before any batch
+// is inserted:
+//   - already tracked (track_batches=1 on the locked row) -> no-op
+//     entirely. Covers a repeat submission of the same 0->1 transition
+//     and any other caller that calls this again on an already-tracked
+//     product.
+//   - current_stock <= 0 -> nothing to explain, no batch created (an
+//     anonymous zero-quantity placeholder batch would be pure noise).
+//   - this product already has ANY product_batches row -> skipped. This
+//     is either a repeat of this same transition (idempotent) or a
+//     pre-existing anomalous state (e.g. tracking was previously enabled
+//     then disabled, leaving old batch rows behind - see this phase's
+//     design audit §B4/B5) - either way, fabricating a second opening
+//     batch on top of real ones would double-count stock, so this
+//     function does nothing rather than guess. The resulting mismatch
+//     (if any) in that anomalous case is a known, documented limitation,
+//     not something this function attempts to reconcile.
+function enableTrackBatches(PDO $pdo, int $productId, int $userId): void {
+    try {
+        $pdo->beginTransaction();
+
+        $stmt = $pdo->prepare('SELECT track_batches, current_stock FROM products WHERE id = ? FOR UPDATE');
+        $stmt->execute([$productId]);
+        $product = $stmt->fetch();
+        if ($product === false) {
+            throw new RuntimeException('enableTrackBatches: product ' . $productId . ' not found');
+        }
+
+        if ((int) $product['track_batches'] === 1) {
+            $pdo->commit();
+            return;
+        }
+
+        $stmt = $pdo->prepare('UPDATE products SET track_batches = 1 WHERE id = ?');
+        $stmt->execute([$productId]);
+
+        $currentStock = (int) $product['current_stock'];
+        if ($currentStock > 0) {
+            $stmt = $pdo->prepare('SELECT COUNT(*) FROM product_batches WHERE product_id = ?');
+            $stmt->execute([$productId]);
+            if ((int) $stmt->fetchColumn() === 0) {
+                $stmt = $pdo->prepare('INSERT INTO product_batches (product_id, batch_number, expiry_date, qty_received, qty_on_hand, origin, source_transaction_id, created_by, updated_by) VALUES (?, NULL, NULL, 0, ?, ?, NULL, ?, ?)');
+                $stmt->execute([$productId, $currentStock, 'opening_balance', $userId, $userId]);
+            }
+        }
+
+        $pdo->commit();
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) {
             $pdo->rollBack();

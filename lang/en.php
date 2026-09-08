@@ -322,6 +322,7 @@ return [
     'stockadj_err_reason_required' => 'Reason is required.',
     'stockadj_err_negative_qty' => 'Stock quantity cannot be negative.',
     'stockadj_err_conflict' => 'This product\'s stock changed just now (from another transaction). Please review the current stock and try again.',
+    'stockadj_err_tracked_not_supported' => 'This product tracks batches and expiry dates, so its total stock can\'t be adjusted directly here. Use Stock In to add stock to a specific batch, or Stock Out to remove stock.',
     'stockadj_applied_prefix' => 'Applied',
     'stockadj_reason_label_plain' => 'Reason',
 
