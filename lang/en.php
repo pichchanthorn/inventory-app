@@ -323,6 +323,12 @@ return [
     'stockadj_err_negative_qty' => 'Stock quantity cannot be negative.',
     'stockadj_err_conflict' => 'This product\'s stock changed just now (from another transaction). Please review the current stock and try again.',
     'stockadj_err_tracked_not_supported' => 'This product tracks batches and expiry dates, so its total stock can\'t be adjusted directly here. Use Stock In to add stock to a specific batch, or Stock Out to remove stock.',
+    // Phase K4-6-1: batch-specific Stock Adjustment backend error messages
+    // (the batch-selection UI itself is K4-6-2).
+    'stockadj_err_batch_untracked' => 'Batch-specific adjustment is only available for products that track batches and expiry dates.',
+    'stockadj_err_batch_not_found' => 'That batch could not be found for this product.',
+    'stockadj_err_batch_conflict' => 'This batch\'s quantity changed just now (from another transaction). Please review the current quantity and try again.',
+    'stockadj_err_batch_negative_qty' => 'Batch quantity cannot be negative.',
     'stockadj_applied_prefix' => 'Applied',
     'stockadj_reason_label_plain' => 'Reason',
 

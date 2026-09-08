@@ -55,7 +55,13 @@ require APP_ROOT . '/config/db.php'; // provides $pdo, using the env vars set ab
 require APP_ROOT . '/includes/stock.php';
 require APP_ROOT . '/includes/debt.php';
 require APP_ROOT . '/includes/currency.php';
-require APP_ROOT . '/includes/audit.php';
+// require_once (not require): Phase K4-6-1's batchAdjustStock()
+// (includes/stock.php) now pulls in audit.php itself via require_once,
+// since it calls logAudit() directly - a plain require here would then
+// try to redeclare logAudit()/userAuditSnapshot() a second time and
+// fatal. require_once makes the load order (stock.php first, this line
+// second) safe regardless of which file actually loads audit.php first.
+require_once APP_ROOT . '/includes/audit.php';
 require APP_ROOT . '/includes/backup.php';
 require TESTS_ROOT . '/SchemaBuilder.php';
 require TESTS_ROOT . '/TestCase.php';
