@@ -14,49 +14,162 @@ unset($_SESSION['stockadj_flash']);
 
 $products = $pdo->query('SELECT * FROM products ORDER BY name')->fetchAll();
 
+// Phase K4-6-2: server-rendered batch data for every product, embedded
+// into the page the same no-AJAX way $products already is - the batch
+// dropdown below is populated entirely from this, never fetched
+// separately. Ordered the same way insertStockOutLineWithBatchConsumption()
+// (includes/stock.php) already orders FEFO candidates - purely a display
+// convenience here (earliest-expiring batch listed first), not a change
+// to FEFO behavior itself, which this page never touches.
+$allBatches = $pdo->query('SELECT * FROM product_batches ORDER BY product_id, (expiry_date IS NULL) ASC, expiry_date ASC, id ASC')->fetchAll();
+$batchesByProduct = [];
+foreach ($allBatches as $b) {
+    $batchesByProduct[(int) $b['product_id']][] = $b;
+}
+
+// Human-readable batch identity for the tracked-adjustment success flash -
+// same vocabulary (and the same "(no batch #)"/"(no expiry)"/"(Opening
+// Balance)" placeholders) the batch dropdown's own JS labels use, so the
+// flash message and the dropdown never describe the same batch two
+// different ways.
+function stockadjBatchLabel(array $batch): string
+{
+    $num = $batch['batch_number'] !== null ? $batch['batch_number'] : __('stockadj_batch_no_number');
+    $exp = $batch['expiry_date'] !== null ? $batch['expiry_date'] : __('stockadj_batch_no_expiry');
+    $label = $num . ', ' . $exp;
+    if ($batch['origin'] === 'opening_balance') {
+        $label .= ' ' . __('stockadj_batch_opening_balance');
+    }
+    return $label;
+}
+
+// True non-negative integer string (no sign, no decimal point, no
+// leading/trailing junk) - deliberately NOT (int) $raw, which would
+// silently truncate "5.7" to 5 instead of rejecting it. Used for both the
+// batch target quantity and expected_qty.
+function isNonNegativeIntegerString(string $raw): bool
+{
+    return $raw !== '' && ctype_digit($raw);
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify();
     if (!canWrite()) {
         $error = __('common_err_forbidden');
     } else {
-        $productId = (int) $_POST['product_id'];
-        $newQty = (float) $_POST['new_qty'];
-        $reason = trim($_POST['reason']);
-        $date = $_POST['transaction_date'];
+        $productId = (int) ($_POST['product_id'] ?? 0);
+        $reason = trim($_POST['reason'] ?? '');
+        $date = $_POST['transaction_date'] ?? '';
 
         if (!$productId) {
             $error = __('stockadj_err_select_product');
         } elseif ($reason === '') {
             $error = __('stockadj_err_reason_required');
-        } elseif ($newQty < 0) {
-            $error = __('stockadj_err_negative_qty');
         } else {
             $stmt = $pdo->prepare('SELECT * FROM products WHERE id = ?');
             $stmt->execute([$productId]);
             $product = $stmt->fetch();
 
-            try {
-                $reference = adjustStock($pdo, $productId, $newQty, $product['current_stock'], $reason, $date, $_SESSION['user_id']);
-                $_SESSION['stockadj_flash'] = __('stockadj_applied_prefix') . " $reference — {$product['name']}: {$product['current_stock']} → $newQty.";
-                header('Location: ' . BASE_URL . '/stock-adjustment/index.php');
-                exit;
-            } catch (StockConflictException $e) {
-                // Optimistic-lock guard found current_stock had already changed
-                // since it was read - don't overwrite that concurrent change.
-                $error = __('stockadj_err_conflict');
-            } catch (TrackedStockAdjustmentNotSupportedException $e) {
-                // Phase K4-5: adjustStock() itself rejects a track_batches=1
-                // product before any mutation - see includes/stock.php for
-                // why. The JS below already shows this same message as soon
-                // as a tracked product is selected, but the server-side
-                // guard (not this catch) is what actually enforces it - this
-                // only turns the exception into the friendly toast a direct/
-                // bypassed submission would otherwise show as a generic
-                // "transaction failed" error.
-                $error = __('stockadj_err_tracked_not_supported');
-            } catch (Throwable $e) {
-                error_log('Stock Adjustment failed: ' . $e->getMessage());
-                $error = __('common_err_transaction_failed');
+            // Phase K4-6-2: which flow applies is decided from the
+            // product's OWN track_batches column, read fresh here - never
+            // from a client-supplied flag - the same "server re-derives
+            // which branch applies" principle batchAdjustStock()/
+            // adjustStock() themselves already use internally under their
+            // own FOR UPDATE lock. Whatever this reads, the field(s) for
+            // the OTHER flow are simply ignored if a bypassed request
+            // includes them.
+            if ($product !== false && (int) $product['track_batches'] === 1) {
+                // ---- Tracked flow: batch-specific adjustment (K4-6-2) ----
+                $batchIdRaw = trim($_POST['batch_id'] ?? '');
+                $newQtyRaw = trim($_POST['batch_new_qty'] ?? '');
+                $expectedQtyRaw = trim($_POST['batch_expected_qty'] ?? '');
+                // Never silently treat a missing/non-numeric selection as
+                // batch id 0 - ctype_digit() also rejects "0" itself only
+                // in the sense that batch ids are always positive
+                // AUTO_INCREMENT values, so a raw value of "0" cannot be a
+                // real batch either.
+                $batchId = ctype_digit($batchIdRaw) ? (int) $batchIdRaw : 0;
+
+                if ($batchId <= 0) {
+                    $error = __('stockadj_err_batch_not_selected');
+                } elseif (!isNonNegativeIntegerString($newQtyRaw)) {
+                    $error = __('stockadj_err_batch_invalid_integer');
+                } elseif (!isNonNegativeIntegerString($expectedQtyRaw)) {
+                    // Hidden field, populated only by this page's own JS
+                    // from the server-rendered batch snapshot below -
+                    // reaching here with a malformed value means a
+                    // bypassed/hand-crafted request, not normal use, but
+                    // it is still validated rather than trusted.
+                    $error = __('stockadj_err_batch_invalid_integer');
+                } else {
+                    $newQty = (int) $newQtyRaw;
+                    $expectedQty = (int) $expectedQtyRaw;
+
+                    try {
+                        $reference = batchAdjustStock($pdo, $productId, $batchId, $newQty, $expectedQty, $reason, $date, $_SESSION['user_id']);
+
+                        $batchStmt = $pdo->prepare('SELECT * FROM product_batches WHERE id = ?');
+                        $batchStmt->execute([$batchId]);
+                        $adjustedBatch = $batchStmt->fetch();
+                        $batchLabel = $adjustedBatch !== false ? stockadjBatchLabel($adjustedBatch) : '';
+
+                        $_SESSION['stockadj_flash'] = __('stockadj_applied_prefix') . " $reference — {$product['name']} ($batchLabel): $expectedQty → $newQty.";
+                        header('Location: ' . BASE_URL . '/stock-adjustment/index.php');
+                        exit;
+                    } catch (UntrackedProductBatchAdjustmentNotSupportedException $e) {
+                        // Structurally unreachable through this page (we
+                        // only take this branch when track_batches=1 was
+                        // just read), kept as defense-in-depth against a
+                        // race where tracking was disabled between our
+                        // read above and batchAdjustStock()'s own lock -
+                        // same convention as the untracked branch below
+                        // keeping its own now-structurally-defensive
+                        // TrackedStockAdjustmentNotSupportedException catch.
+                        $error = __('stockadj_err_batch_untracked');
+                    } catch (ProductBatchNotFoundException $e) {
+                        $error = __('stockadj_err_batch_not_found');
+                    } catch (BatchAdjustmentConflictException $e) {
+                        $error = __('stockadj_err_batch_conflict');
+                    } catch (InvalidBatchAdjustmentQuantityException $e) {
+                        $error = __('stockadj_err_batch_negative_qty');
+                    } catch (Throwable $e) {
+                        error_log('Batch Stock Adjustment failed: ' . $e->getMessage());
+                        $error = __('common_err_transaction_failed');
+                    }
+                }
+            } else {
+                // ---- Untracked flow: legacy product-level adjustment,
+                // byte-for-byte the same behavior as before K4-6-2 ----
+                $newQty = (float) ($_POST['new_qty'] ?? -1);
+
+                if ($newQty < 0) {
+                    $error = __('stockadj_err_negative_qty');
+                } else {
+                    try {
+                        $reference = adjustStock($pdo, $productId, $newQty, $product['current_stock'], $reason, $date, $_SESSION['user_id']);
+                        $_SESSION['stockadj_flash'] = __('stockadj_applied_prefix') . " $reference — {$product['name']}: {$product['current_stock']} → $newQty.";
+                        header('Location: ' . BASE_URL . '/stock-adjustment/index.php');
+                        exit;
+                    } catch (StockConflictException $e) {
+                        // Optimistic-lock guard found current_stock had already changed
+                        // since it was read - don't overwrite that concurrent change.
+                        $error = __('stockadj_err_conflict');
+                    } catch (TrackedStockAdjustmentNotSupportedException $e) {
+                        // Phase K4-5: adjustStock() itself rejects a track_batches=1
+                        // product before any mutation - see includes/stock.php for
+                        // why. Structurally unreachable through this branch under
+                        // normal operation now that K4-6-2 routes track_batches=1
+                        // products to the tracked flow above instead - kept as
+                        // defense-in-depth against the same kind of race the
+                        // tracked branch's own defensive catch above guards
+                        // against (tracking enabled between our read and
+                        // adjustStock()'s own lock).
+                        $error = __('stockadj_err_tracked_not_supported');
+                    } catch (Throwable $e) {
+                        error_log('Stock Adjustment failed: ' . $e->getMessage());
+                        $error = __('common_err_transaction_failed');
+                    }
+                }
             }
         }
     }
@@ -104,11 +217,37 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="product-search-menu"></div>
           </div>
         </div>
-        <div class="mb-3">
-          <label class="form-label"><?= __('stockadj_new_qty_label') ?></label>
-          <input type="number" name="new_qty" id="adjQty" class="form-control" value="0" min="0" oninput="updatePreview()">
+
+        <!-- Untracked product: legacy product-level adjustment, unchanged
+             markup/behavior from before K4-6-2. Hidden instead of shown
+             once a tracked product is selected. -->
+        <div id="untrackedAdjustmentSection">
+          <div class="mb-3">
+            <label class="form-label"><?= __('stockadj_new_qty_label') ?></label>
+            <input type="number" name="new_qty" id="adjQty" class="form-control" value="0" min="0" oninput="updatePreview()">
+          </div>
+          <div id="adjPreview" class="small text-secondary mb-3"><?= __('stockadj_preview_hint') ?></div>
         </div>
-        <div id="adjPreview" class="small text-secondary mb-3"><?= __('stockadj_preview_hint') ?></div>
+
+        <!-- Tracked product (K4-6-2): batch-specific adjustment. Batch
+             identity (number/expiry/origin) is display-only here - never
+             editable from this screen. Selection posts product_batches.id
+             (the <select>'s own value), never batch_number/expiry_date. -->
+        <div id="trackedAdjustmentSection" style="display:none;">
+          <div class="mb-3">
+            <label class="form-label"><?= __('stockadj_batch_label') ?></label>
+            <select class="form-select" id="adjBatchSelect" name="batch_id" onchange="onBatchChange()"></select>
+            <div id="adjBatchEmptyState" class="small text-secondary mt-2" style="display:none;"><?= __('stockadj_batch_none_available') ?></div>
+          </div>
+          <input type="hidden" id="batchExpectedQtyHidden" name="batch_expected_qty" value="">
+          <div id="adjBatchQtyGroup" class="mb-3" style="display:none;">
+            <div class="small text-secondary mb-1"><?= __('stockadj_batch_current_qty_label') ?>: <span id="adjBatchCurrentQty">—</span></div>
+            <label class="form-label"><?= __('stockadj_batch_target_qty_label') ?></label>
+            <input type="number" name="batch_new_qty" id="adjBatchNewQty" class="form-control" value="0" min="0" oninput="updateBatchPreview()">
+          </div>
+          <div id="adjBatchPreview" class="small text-secondary mb-3"><?= __('stockadj_preview_hint') ?></div>
+        </div>
+
         <div class="alert alert-warning small"><?= __('stockadj_warning') ?></div>
         <button class="btn btn-primary w-100"><i class="bi bi-arrow-repeat"></i> <?= __('stockadj_submit_button') ?></button>
       </div>
@@ -135,12 +274,16 @@ require_once __DIR__ . '/../includes/header.php';
 
 <script>
 const PRODUCTS = <?= json_encode($products) ?>;
+const BATCHES_BY_PRODUCT = <?= json_encode($batchesByProduct) ?>;
 const T_NOW = <?= json_encode(__('common_now_label')) ?>;
 const T_PCS = <?= json_encode(__('common_pcs')) ?>;
 const T_NO_RESULTS = <?= json_encode(__('common_no_results_found')) ?>;
 const T_SELECT_PREVIEW = <?= json_encode(__('stockadj_preview_hint')) ?>;
 const T_UNITS = <?= json_encode(__('common_units_word')) ?>;
-const T_TRACKED_NOT_SUPPORTED = <?= json_encode(__('stockadj_err_tracked_not_supported')) ?>;
+const T_SELECT_BATCH = <?= json_encode(__('stockadj_select_batch')) ?>;
+const T_NO_BATCH_NUMBER = <?= json_encode(__('stockadj_batch_no_number')) ?>;
+const T_NO_EXPIRY = <?= json_encode(__('stockadj_batch_no_expiry')) ?>;
+const T_OPENING_BALANCE = <?= json_encode(__('stockadj_batch_opening_balance')) ?>;
 
 function productLabel(p) {
   const size = p.package_size ? ` — ${p.package_size}` : '';
@@ -269,17 +412,108 @@ let selectedProduct = null;
 wireProductSelect(document.getElementById('adjProductSelect'), product => {
   selectedProduct = product;
   updatePreview();
+  renderBatchSection(product);
 });
 
 function updatePreview() {
   const preview = document.getElementById('adjPreview');
   if (!selectedProduct) { preview.textContent = T_SELECT_PREVIEW; return; }
-  // Phase K4-5: adjustStock() itself rejects this product before any
-  // mutation (includes/stock.php) - this is a client-side heads-up only,
-  // shown as soon as a tracked product is picked, not the enforcement.
-  if (selectedProduct.track_batches) { preview.textContent = T_TRACKED_NOT_SUPPORTED; return; }
+  if (selectedProduct.track_batches) { return; } // tracked products use adjBatchPreview instead - see renderBatchSection()
   const current = selectedProduct.current_stock;
   const next = Number(document.getElementById('adjQty').value) || 0;
+  const diff = next - current;
+  preview.innerHTML = `${current} → <strong>${next}</strong> (${diff >= 0 ? '+' : ''}${diff} ${T_UNITS})`;
+}
+
+// ---- K4-6-2: batch-specific adjustment section ----
+
+function batchLabel(b) {
+  const num = b.batch_number ? b.batch_number : T_NO_BATCH_NUMBER;
+  const exp = b.expiry_date ? b.expiry_date : T_NO_EXPIRY;
+  const originSuffix = b.origin === 'opening_balance' ? ` (${T_OPENING_BALANCE})` : '';
+  return `${num} · ${exp} · ${b.qty_on_hand} ${T_PCS}${originSuffix}`;
+}
+
+function renderBatchSection(product) {
+  const untrackedSection = document.getElementById('untrackedAdjustmentSection');
+  const trackedSection = document.getElementById('trackedAdjustmentSection');
+
+  if (!product || !product.track_batches) {
+    untrackedSection.style.display = '';
+    trackedSection.style.display = 'none';
+    return;
+  }
+  untrackedSection.style.display = 'none';
+  trackedSection.style.display = '';
+
+  const batches = BATCHES_BY_PRODUCT[String(product.id)] || [];
+  const select = document.getElementById('adjBatchSelect');
+  const emptyState = document.getElementById('adjBatchEmptyState');
+  const qtyGroup = document.getElementById('adjBatchQtyGroup');
+
+  select.innerHTML = '';
+  if (!batches.length) {
+    select.style.display = 'none';
+    emptyState.style.display = '';
+    qtyGroup.style.display = 'none';
+    document.getElementById('batchExpectedQtyHidden').value = '';
+    updateBatchPreview();
+    return;
+  }
+  select.style.display = '';
+  emptyState.style.display = 'none';
+
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = T_SELECT_BATCH;
+  select.appendChild(placeholder);
+
+  batches.forEach(b => {
+    const opt = document.createElement('option');
+    opt.value = String(b.id);
+    opt.textContent = batchLabel(b);
+    opt.dataset.qty = String(b.qty_on_hand);
+    select.appendChild(opt);
+  });
+  select.value = '';
+  qtyGroup.style.display = 'none';
+  document.getElementById('batchExpectedQtyHidden').value = '';
+  updateBatchPreview();
+}
+
+function onBatchChange() {
+  const select = document.getElementById('adjBatchSelect');
+  const opt = select.options[select.selectedIndex];
+  const expectedHidden = document.getElementById('batchExpectedQtyHidden');
+  const currentQtyEl = document.getElementById('adjBatchCurrentQty');
+  const qtyGroup = document.getElementById('adjBatchQtyGroup');
+
+  if (!opt || opt.value === '') {
+    expectedHidden.value = '';
+    currentQtyEl.textContent = '—';
+    qtyGroup.style.display = 'none';
+    updateBatchPreview();
+    return;
+  }
+
+  // The batch's quantity as embedded in this page's own server-rendered
+  // BATCHES_BY_PRODUCT (page-load time), never re-read from anywhere
+  // else - this is exactly what gets submitted as expected_qty, so it
+  // must be captured here (on selection) and left untouched until the
+  // user picks a different batch.
+  expectedHidden.value = opt.dataset.qty;
+  currentQtyEl.textContent = `${opt.dataset.qty} ${T_PCS}`;
+  qtyGroup.style.display = '';
+  document.getElementById('adjBatchNewQty').value = opt.dataset.qty;
+  updateBatchPreview();
+}
+
+function updateBatchPreview() {
+  const preview = document.getElementById('adjBatchPreview');
+  const expectedHidden = document.getElementById('batchExpectedQtyHidden');
+  if (expectedHidden.value === '') { preview.textContent = T_SELECT_PREVIEW; return; }
+  const current = Number(expectedHidden.value);
+  const next = Number(document.getElementById('adjBatchNewQty').value) || 0;
   const diff = next - current;
   preview.innerHTML = `${current} → <strong>${next}</strong> (${diff >= 0 ? '+' : ''}${diff} ${T_UNITS})`;
 }

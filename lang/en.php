@@ -329,6 +329,19 @@ return [
     'stockadj_err_batch_not_found' => 'That batch could not be found for this product.',
     'stockadj_err_batch_conflict' => 'This batch\'s quantity changed just now (from another transaction). Please review the current quantity and try again.',
     'stockadj_err_batch_negative_qty' => 'Batch quantity cannot be negative.',
+    // Phase K4-6-2: batch-selection UI (product/expiry identity display,
+    // empty state, and the two new UI-level validation errors that are
+    // caught before batchAdjustStock() is ever called).
+    'stockadj_batch_label' => 'Batch',
+    'stockadj_select_batch' => '— Select batch —',
+    'stockadj_batch_none_available' => 'No batches available for this product.',
+    'stockadj_batch_current_qty_label' => 'Current quantity',
+    'stockadj_batch_target_qty_label' => 'Target quantity',
+    'stockadj_batch_no_number' => '(no batch #)',
+    'stockadj_batch_no_expiry' => '(no expiry)',
+    'stockadj_batch_opening_balance' => '(Opening Balance)',
+    'stockadj_err_batch_not_selected' => 'Select a batch.',
+    'stockadj_err_batch_invalid_integer' => 'Enter a whole number of 0 or more.',
     'stockadj_applied_prefix' => 'Applied',
     'stockadj_reason_label_plain' => 'Reason',
 

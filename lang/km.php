@@ -328,6 +328,19 @@ return [
     'stockadj_err_batch_not_found' => 'រកមិនឃើញឡុតនោះសម្រាប់ផលិតផលនេះទេ។',
     'stockadj_err_batch_conflict' => 'បរិមាណឡុតនេះទើបតែផ្លាស់ប្តូរ (ពីប្រតិបត្តិការមួយផ្សេងទៀត)។ សូមពិនិត្យបរិមាណបច្ចុប្បន្ន ហើយសាកល្បងម្តងទៀត។',
     'stockadj_err_batch_negative_qty' => 'បរិមាណឡុតមិនអាចជាចំនួនអវិជ្ជមានទេ។',
+    // Phase K4-6-2: batch-selection UI (product/expiry identity display,
+    // empty state, and the two new UI-level validation errors that are
+    // caught before batchAdjustStock() is ever called).
+    'stockadj_batch_label' => 'ឡុត',
+    'stockadj_select_batch' => '— ជ្រើសរើសឡុត —',
+    'stockadj_batch_none_available' => 'មិនមានឡុតសម្រាប់ផលិតផលនេះទេ។',
+    'stockadj_batch_current_qty_label' => 'បរិមាណបច្ចុប្បន្ន',
+    'stockadj_batch_target_qty_label' => 'បរិមាណគោលដៅ',
+    'stockadj_batch_no_number' => '(គ្មានលេខឡុត)',
+    'stockadj_batch_no_expiry' => '(គ្មានកាលបរិច្ឆេទផុតកំណត់)',
+    'stockadj_batch_opening_balance' => '(សមតុល្យដើម)',
+    'stockadj_err_batch_not_selected' => 'សូមជ្រើសរើសឡុត។',
+    'stockadj_err_batch_invalid_integer' => 'សូមបញ្ចូលចំនួនគត់ដែលមានតម្លៃ ០ ឬច្រើនជាងនេះ។',
     'stockadj_applied_prefix' => 'បានអនុវត្ត',
     'stockadj_reason_label_plain' => 'មូលហេតុ',
 
