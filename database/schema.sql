@@ -289,6 +289,67 @@ CREATE TABLE stock_transaction_item_batches (
     CONSTRAINT chk_stock_transaction_item_batches_unit_cost_nonneg CHECK (unit_cost >= 0)
 );
 
+-- Purchase / Supplier Order Management (Phase P1) - draft-only PO core.
+-- status carries the FULL future lifecycle enum even though P1
+-- application code only ever writes 'draft' - avoids a later destructive
+-- ALTER ... MODIFY ENUM once P2 (submit/cancel) and P3 (receiving) ship.
+-- supplier_id is NOT NULL, unlike stock_transactions.supplier_id
+-- (nullable there only for historical reasons predating suppliers being
+-- mandatory) - a PO is inherently about exactly one supplier. No stored
+-- header total - always SUM(purchase_order_items.subtotal) at read time,
+-- the same "store the line, derive the aggregate" pattern
+-- stock_transaction_items.subtotal / stock_transactions' own absent
+-- total column already establish. See database/migrations/
+-- 016_add_purchase_orders.sql for the full design reasoning.
+CREATE TABLE purchase_orders (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    reference VARCHAR(30) NOT NULL UNIQUE,
+    supplier_id INT NOT NULL,
+    status ENUM('draft','ordered','partially_received','received','cancelled')
+        NOT NULL DEFAULT 'draft',
+    order_date DATE NOT NULL,
+    expected_date DATE NULL,
+    note TEXT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    created_by INT NULL,
+    updated_by INT NULL,
+    FOREIGN KEY (supplier_id) REFERENCES suppliers(id),
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL,
+    INDEX idx_supplier_status (supplier_id, status),
+    INDEX idx_status_order_date (status, order_date)
+);
+
+-- product_id has no ON DELETE clause (defaults to RESTRICT), matching
+-- stock_transaction_items.product_id exactly - a product with PO history
+-- must not be deletable out from under it (the existing 1451-catch
+-- convention, see product/index.php's delete handler, covers this the
+-- same way it already covers Stock In/Out/Adjustment/Sale history).
+-- received_qty exists now, defaulted 0, purely for future P3 receiving
+-- compatibility - P1 never writes anything else to it. subtotal is a
+-- STORED generated column (ordered_qty * unit_cost) rather than
+-- application-maintained, so it can never drift from that invariant on
+-- a future edit path - MariaDB has supported STORED generated columns
+-- since 10.2, already proven in this exact schema by customer_debts.
+-- balance/.status above.
+CREATE TABLE purchase_order_items (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    purchase_order_id INT NOT NULL,
+    product_id INT NOT NULL,
+    ordered_qty INT NOT NULL,
+    unit_cost DECIMAL(10,2) NOT NULL,
+    subtotal DECIMAL(10,2) GENERATED ALWAYS AS (ordered_qty * unit_cost) STORED,
+    received_qty INT NOT NULL DEFAULT 0,
+    FOREIGN KEY (purchase_order_id) REFERENCES purchase_orders(id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES products(id),
+    INDEX idx_purchase_order (purchase_order_id),
+    CONSTRAINT chk_po_items_ordered_qty_positive CHECK (ordered_qty > 0),
+    CONSTRAINT chk_po_items_unit_cost_nonneg CHECK (unit_cost >= 0),
+    CONSTRAINT chk_po_items_received_qty_nonneg CHECK (received_qty >= 0),
+    CONSTRAINT chk_po_items_received_not_over_ordered CHECK (received_qty <= ordered_qty)
+);
+
 -- Customers (credit/debt-tracking counterparties - farmers who buy on
 -- credit and pay later). Structurally mirrors suppliers (name/phone/
 -- address/note + audit columns) since a customer is the same kind of
@@ -510,10 +571,14 @@ CREATE TABLE idempotency_keys (
 -- which raced under concurrent requests. 'stock_transactions' backs the
 -- STI/STO/ADJ/SAL prefixes (one shared counter, matching
 -- nextStockReference()'s original un-filtered COUNT(*) FROM
--- stock_transactions), 'customer_debts' backs DBT. Seeded at 1 for both
--- here since a fresh install has no existing rows to count yet - see
--- database/migrations/012_add_reference_counters.sql for the equivalent
--- seed against an existing, already-populated database.
+-- stock_transactions), 'customer_debts' backs DBT. 'purchase_orders'
+-- (Phase P1) backs PUR - deliberately its own counter, not shared with
+-- 'stock_transactions', since a Purchase Order is a structurally
+-- different entity from a stock_transactions row. Seeded at 1 for all
+-- three here since a fresh install has no existing rows to count yet -
+-- see database/migrations/012_add_reference_counters.sql and
+-- 016_add_purchase_orders.sql for the equivalent seeds against an
+-- existing, already-populated database.
 CREATE TABLE reference_counters (
     counter_key VARCHAR(30) NOT NULL PRIMARY KEY,
     next_value INT NOT NULL
@@ -521,4 +586,5 @@ CREATE TABLE reference_counters (
 
 INSERT INTO reference_counters (counter_key, next_value) VALUES
     ('stock_transactions', 1),
-    ('customer_debts', 1);
+    ('customer_debts', 1),
+    ('purchase_orders', 1);

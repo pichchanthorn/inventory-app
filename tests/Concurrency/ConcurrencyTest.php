@@ -34,6 +34,12 @@ final class ConcurrencyTest extends TestCase
     // passed null), K4-3's tests deliberately pass real tokens, so their
     // idempotency_keys rows need explicit cleanup here too.
     private array $cleanupIdempotencyTokens = [];
+    // Phase P1: purchase_order_create_race.php workers create real
+    // purchase_orders/purchase_order_items rows - cleaned up explicitly
+    // here, same "children first (FK order)" discipline as every other
+    // cleanup list in this class.
+    private array $cleanupPurchaseOrderIds = [];
+    private array $cleanupSupplierIds = [];
 
     protected function setUp(): void
     {
@@ -47,6 +53,22 @@ final class ConcurrencyTest extends TestCase
         // leftover row here cannot corrupt another test's own
         // before/after delta assertions, but tidying up keeps the test
         // database legible between runs.
+        //
+        // Phase P1: purchase_orders must be cleaned up before products/
+        // suppliers below - purchase_order_items.product_id and
+        // purchase_orders.supplier_id both have no ON DELETE behavior
+        // (RESTRICT by default), so a product/supplier referenced by a
+        // leftover PO would otherwise fail to delete. purchase_order_
+        // items itself cascades automatically (ON DELETE CASCADE on
+        // purchase_order_id), so only the header + its audit rows need
+        // an explicit delete here.
+        foreach ($this->cleanupPurchaseOrderIds as $id) {
+            $this->pdo->exec("DELETE FROM audit_log WHERE entity_type = 'purchase_order' AND entity_id = $id");
+            $this->pdo->exec("DELETE FROM purchase_orders WHERE id = $id");
+        }
+        foreach ($this->cleanupSupplierIds as $id) {
+            $this->pdo->exec("DELETE FROM suppliers WHERE id = $id");
+        }
         foreach ($this->cleanupCustomerIds as $id) {
             $this->pdo->exec("DELETE cdp FROM customer_debt_payments cdp JOIN customer_debts cd ON cd.id = cdp.debt_id WHERE cd.customer_id = $id");
             $this->pdo->exec("DELETE FROM customer_debts WHERE customer_id = $id");
@@ -997,6 +1019,111 @@ final class ConcurrencyTest extends TestCase
         sort($values);
         $expected = range($startValue, $startValue + $workerCount - 1);
         $this->assertSame($expected, $values, 'with no failures, the counter must advance without gaps');
+    }
+
+    // ---- Phase P1: Purchase Order reference/creation concurrency ----
+    //
+    // Two complementary checks, same "raw counter mechanism" +
+    // "full real business operation" pairing this file already uses
+    // elsewhere: the first reuses reference_race.php UNCHANGED (it
+    // already takes an arbitrary counter key as its own argument) against
+    // the new 'purchase_orders' key, proving nextReferenceSequence()'s
+    // row-lock guarantee holds for this key exactly as it does for
+    // 'stock_transactions'/'customer_debts'. The second drives the real,
+    // unmodified createPurchaseOrder() end to end from two genuinely
+    // concurrent OS processes - not just the counter increment in
+    // isolation - proving the full create path (supplier/product checks,
+    // reference draw, header insert, item insert, audit) is safe under
+    // real concurrency, with zero PHP-level lock/mutex anywhere in it.
+
+    public function testConcurrentPurchaseOrderReferenceGenerationNeverProducesDuplicates(): void
+    {
+        $counterKey = 'purchase_orders';
+        $stmt = $this->pdo->prepare('SELECT next_value FROM reference_counters WHERE counter_key = ?');
+        $stmt->execute([$counterKey]);
+        $startValue = (int) $stmt->fetchColumn();
+
+        $workerCount = 8;
+        $commands = [];
+        for ($i = 0; $i < $workerCount; $i++) {
+            $commands[] = ['reference_race.php', $counterKey];
+        }
+        $results = $this->runParallel($commands);
+
+        $values = [];
+        foreach ($results as $r) {
+            $this->assertSame('ok', $r['status'], 'every worker must succeed: ' . json_encode($r));
+            $values[] = $r['value'];
+        }
+
+        $this->assertCount($workerCount, array_unique($values), 'no two concurrent callers may receive the same PUR sequence number');
+
+        sort($values);
+        $expected = range($startValue, $startValue + $workerCount - 1);
+        $this->assertSame($expected, $values, 'with no failures, the purchase_orders counter must advance without gaps');
+    }
+
+    public function testConcurrentPurchaseOrderCreationNeverProducesDuplicateReferencesOrCorruption(): void
+    {
+        $supplierId = $this->seedSupplier();
+        $productId = $this->seedProduct(0);
+        $userId = $this->seedUser();
+
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM purchase_orders');
+        $stmt->execute();
+        $countBefore = (int) $stmt->fetchColumn();
+
+        $workerCount = 2;
+        $commands = [];
+        for ($i = 0; $i < $workerCount; $i++) {
+            $commands[] = ['purchase_order_create_race.php', (string) $supplierId, (string) $productId, (string) $userId];
+        }
+        $results = $this->runParallel($commands);
+
+        $references = [];
+        $ids = [];
+        foreach ($results as $r) {
+            $this->assertSame('ok', $r['status'], 'every concurrent createPurchaseOrder() call must succeed: ' . json_encode($r));
+            $references[] = $r['reference'];
+            $ids[] = $r['id'];
+            $this->cleanupPurchaseOrderIds[] = $r['id'];
+        }
+
+        $this->assertCount($workerCount, array_unique($references), 'no two concurrent PO creations may receive the same reference');
+        $this->assertCount($workerCount, array_unique($ids), 'no two concurrent PO creations may collapse onto the same row');
+
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM purchase_orders');
+        $stmt->execute();
+        $countAfter = (int) $stmt->fetchColumn();
+        $this->assertSame($countBefore + $workerCount, $countAfter, 'exactly one PO per worker must exist, no more and no fewer');
+
+        // Corruption check: every created PO must have exactly one
+        // correctly-quantified item row (ordered_qty=1, unit_cost=1.00,
+        // subtotal=1.00 via the generated column) and status='draft' -
+        // proving no interleaving between the two concurrent transactions
+        // left a PO with a missing/duplicated/miscalculated line.
+        foreach ($ids as $id) {
+            $stmt = $this->pdo->prepare("SELECT status FROM purchase_orders WHERE id = ?");
+            $stmt->execute([$id]);
+            $this->assertSame('draft', $stmt->fetchColumn());
+
+            $stmt = $this->pdo->prepare('SELECT ordered_qty, unit_cost, subtotal FROM purchase_order_items WHERE purchase_order_id = ?');
+            $stmt->execute([$id]);
+            $items = $stmt->fetchAll();
+            $this->assertCount(1, $items, "PO $id must have exactly one item row");
+            $this->assertSame(1, (int) $items[0]['ordered_qty']);
+            $this->assertSame('1.00', $items[0]['unit_cost']);
+            $this->assertSame('1.00', $items[0]['subtotal']);
+        }
+    }
+
+    private function seedSupplier(): int
+    {
+        $stmt = $this->pdo->prepare('INSERT INTO suppliers (name) VALUES (?)');
+        $stmt->execute(['Concurrency Test Supplier ' . bin2hex(random_bytes(4))]);
+        $id = (int) $this->pdo->lastInsertId();
+        $this->cleanupSupplierIds[] = $id;
+        return $id;
     }
 
     /** @return array{status:string, value?:int} */
