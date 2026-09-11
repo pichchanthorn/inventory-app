@@ -17,7 +17,7 @@ use Tests\SchemaBuilder;
 //     tests/bootstrap.php already built for the whole suite - no new
 //     infrastructure needed for this half.
 //
-//  2. testMigrations001Through014ApplyCleanlyToACompatibleDatabase() -
+//  2. testMigrations001Through015ApplyCleanlyToACompatibleDatabase() -
 //     every migration file's own header comment says it must run
 //     "against an EXISTING database that predates this change" (a truly
 //     empty database does not qualify - these are additive ALTER/CREATE
@@ -25,7 +25,7 @@ use Tests\SchemaBuilder;
 //     therefore builds tests/fixtures/schema_baseline_pre_migrations.sql
 //     (a reconstruction of that pre-migration-001 shape - see that
 //     file's own header for exactly how it was derived) in a SEPARATE,
-//     dedicated scratch database, applies migrations 001-014 to it in
+//     dedicated scratch database, applies migrations 001-015 to it in
 //     order, and compares the resulting structure against the real
 //     schema.sql-built database using information_schema queries -
 //     structural/semantic checks, never a raw-text diff of the .sql
@@ -84,6 +84,7 @@ final class MigrationIntegrityTest extends TestCase
 
         $this->assertTrue($this->columnExists($this->mainPdo, $dbName, 'products', 'current_stock'));
         $this->assertTrue($this->columnExists($this->mainPdo, $dbName, 'products', 'track_batches'));
+        $this->assertTrue($this->columnExists($this->mainPdo, $dbName, 'products', 'reorder_quantity'));
         $this->assertTrue($this->columnExists($this->mainPdo, $dbName, 'customer_debts', 'balance'));
         $this->assertTrue($this->columnExists($this->mainPdo, $dbName, 'idempotency_keys', 'token'));
 
@@ -91,7 +92,7 @@ final class MigrationIntegrityTest extends TestCase
         $this->assertSame(2, $seedCount, 'a fresh install must seed both reference_counters rows');
     }
 
-    public function testMigrations001Through014ApplyCleanlyToACompatibleDatabase(): void
+    public function testMigrations001Through015ApplyCleanlyToACompatibleDatabase(): void
     {
         $builder = new SchemaBuilder($this->scratchPdo);
         $builder->dropAllTables();
@@ -99,9 +100,9 @@ final class MigrationIntegrityTest extends TestCase
 
         $migrationsDir = dirname(__DIR__, 2) . '/database/migrations';
         $files = glob($migrationsDir . '/0*.sql');
-        sort($files); // filenames are zero-padded (001_..014_..), so lexical sort is numeric order
+        sort($files); // filenames are zero-padded (001_..015_..), so lexical sort is numeric order
 
-        $this->assertCount(14, $files, 'expected exactly migrations 001 through 014 to be present');
+        $this->assertCount(15, $files, 'expected exactly migrations 001 through 015 to be present');
 
         foreach ($files as $file) {
             try {
@@ -116,10 +117,10 @@ final class MigrationIntegrityTest extends TestCase
 
     private function assertMigratedSchemaIsStructurallyEquivalentToFreshInstall(): void
     {
-        // Columns/tables that migrations 001-014 are specifically
+        // Columns/tables that migrations 001-015 are specifically
         // responsible for adding - the actual thing under test here.
         $expectedColumns = [
-            'products' => ['active_ingredient', 'expiry_date', 'package_size', 'updated_at', 'created_by', 'updated_by', 'track_batches'],
+            'products' => ['active_ingredient', 'expiry_date', 'package_size', 'updated_at', 'created_by', 'updated_by', 'track_batches', 'reorder_quantity'],
             'stock_transactions' => ['cash_received'],
             'categories' => ['updated_at', 'created_by', 'updated_by'],
             'units' => ['created_at', 'updated_at', 'created_by', 'updated_by'],

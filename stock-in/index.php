@@ -16,6 +16,25 @@ unset($_SESSION['stockin_flash']);
 $suppliers = $pdo->query('SELECT * FROM suppliers ORDER BY name')->fetchAll();
 $products  = $pdo->query('SELECT * FROM products ORDER BY name')->fetchAll();
 
+// Phase L1: Low Stock / Reorder page's "Stock In" quick link
+// (?product_id=N) - pre-selects the first line's product so the user
+// doesn't have to search for it again, without ever auto-creating a
+// transaction or trusting the query string as authoritative. Validated
+// against the SAME $products array the page already renders from (no
+// extra query) - an unknown/tampered id is silently ignored, leaving the
+// page in its normal empty-first-row state, exactly as if no query
+// string had been given at all.
+$preselectProductId = null;
+if (isset($_GET['product_id']) && ctype_digit((string) $_GET['product_id'])) {
+    $candidateId = (int) $_GET['product_id'];
+    foreach ($products as $p) {
+        if ((int) $p['id'] === $candidateId) {
+            $preselectProductId = $candidateId;
+            break;
+        }
+    }
+}
+
 // Used both server-side (resolvePriceField, below) to convert a KHR entry
 // to the USD value actually passed to recordStockIn(), and exposed to JS
 // as a page-global constant purely for the live "≈" preview text - the
@@ -227,6 +246,7 @@ const T_SCAN_LIB_ERROR = <?= json_encode(__('stockin_scan_lib_error')) ?>;
 const T_BATCH_NUMBER_LABEL = <?= json_encode(__('stockin_batch_number_label')) ?>;
 const T_BATCH_NUMBER_PLACEHOLDER = <?= json_encode(__('stockin_batch_number_placeholder')) ?>;
 const T_EXPIRY_DATE_LABEL = <?= json_encode(__('stockin_expiry_date_label')) ?>;
+const PRESELECT_PRODUCT_ID = <?= json_encode($preselectProductId) ?>;
 // Live-preview-only KHR<->USD conversion for the Unit Cost currency
 // toggle - the server always resolves the real submitted value via
 // resolvePriceField(), independently of this preview.
@@ -501,7 +521,7 @@ function updatePricePreview(input) {
     : `≈ $${(amount / EXCHANGE_RATE).toFixed(2)}`;
 }
 
-addRow();
+addRow(PRESELECT_PRODUCT_ID);
 
 // ---- Barcode scanning (camera-based, Html5Qrcode) ----
 // The scan button on a row just remembers which <tr> to fill and opens

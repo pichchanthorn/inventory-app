@@ -98,7 +98,7 @@ require_once __DIR__ . '/includes/header.php';
       <?php else: ?>
         <div class="dash-stat-status dash-stat-status-good"><i class="bi bi-check-circle"></i> <?= __('dashboard_status_good') ?></div>
       <?php endif; ?>
-      <a href="<?= BASE_URL ?>/product/index.php?filter=low_stock" class="stretched-link" aria-label="<?= htmlspecialchars(__('dashboard_low_stock')) ?>"></a>
+      <a href="<?= BASE_URL ?>/stock-alert/index.php" class="stretched-link" aria-label="<?= htmlspecialchars(__('dashboard_low_stock')) ?>"></a>
     </div>
   </div>
   <div class="col-6 col-md-3">

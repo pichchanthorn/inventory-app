@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/auth_check.php';
 require_once __DIR__ . '/../includes/stock.php';
+require_once __DIR__ . '/../includes/validation.php';
 require_once __DIR__ . '/../config/db.php';
 
 $activePage = 'stock-adjustment';
@@ -41,15 +42,6 @@ function stockadjBatchLabel(array $batch): string
         $label .= ' ' . __('stockadj_batch_opening_balance');
     }
     return $label;
-}
-
-// True non-negative integer string (no sign, no decimal point, no
-// leading/trailing junk) - deliberately NOT (int) $raw, which would
-// silently truncate "5.7" to 5 instead of rejecting it. Used for both the
-// batch target quantity and expected_qty.
-function isNonNegativeIntegerString(string $raw): bool
-{
-    return $raw !== '' && ctype_digit($raw);
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

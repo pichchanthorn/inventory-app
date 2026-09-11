@@ -24,6 +24,7 @@ return [
     'nav_customers' => 'Customers & Debts',
     'nav_reports' => 'Reports',
     'nav_stock_reports' => 'Stock Reports',
+    'nav_stock_alert' => 'Low Stock',
     'nav_administration' => 'Administration',
     'nav_users' => 'Users',
     'nav_settings' => 'Settings',
@@ -81,6 +82,9 @@ return [
     'common_err_invalid_price' => 'Unit price cannot be negative.',
     'common_saving' => 'Saving...',
     'common_view' => 'View',
+    'common_severity_critical' => 'CRITICAL',
+    'common_severity_low' => 'LOW',
+    'common_severity_normal' => 'NORMAL',
 
     // Roles
     'role_admin' => 'Admin',
@@ -198,6 +202,9 @@ return [
     'product_cost_price' => 'Cost price',
     'product_sale_price' => 'Sale price',
     'product_min_stock' => 'Min stock',
+    'product_reorder_qty' => 'Reorder quantity',
+    'product_reorder_qty_placeholder' => 'e.g. 20 (optional)',
+    'product_err_invalid_stock_number' => 'Min stock and reorder quantity must be whole numbers of 0 or more (reorder quantity may be left blank).',
     'product_stock_hint' => 'Stock starts at 0 — add quantity via Stock In.',
     'product_filter_low_stock_active' => 'Showing low-stock products only.',
     'product_low_stock_badge' => 'LOW',
@@ -372,6 +379,15 @@ return [
     'stockreport_col_level' => 'Level',
     'stockreport_badge_low' => 'LOW',
     'stockreport_badge_normal' => 'NORMAL',
+
+    // Low Stock Alert / Reorder Management (Phase L1)
+    'stockalert_title' => 'Low Stock & Reorder',
+    'stockalert_col_current_stock' => 'Current Stock',
+    'stockalert_col_reorder_level' => 'Reorder Level',
+    'stockalert_col_suggested_qty' => 'Suggested Reorder Qty',
+    'stockalert_col_severity' => 'Severity',
+    'stockalert_reorder_not_set' => 'Not set',
+    'stockalert_empty' => 'No products need reordering right now.',
 
     // Customer & Debts
     'customer_title' => 'Customers & Debts',

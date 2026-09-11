@@ -117,6 +117,16 @@ CREATE TABLE products (
     cost_price DECIMAL(10,2) DEFAULT 0,
     sale_price DECIMAL(10,2) DEFAULT 0,
     min_stock INT DEFAULT 0,
+    -- Low Stock Alert / Reorder Management (Phase L1, Migration 015).
+    -- Purely informational/suggestive - never enforced, never read by
+    -- Stock In/Out/POS/Adjustment, and never a factor in whether a
+    -- product is classified CRITICAL/LOW/NORMAL (see
+    -- includes/stock_alert.php) - it only describes what to do once a
+    -- product already IS flagged by current_stock <= min_stock. NULL
+    -- ("no suggested quantity configured yet") is distinct from 0
+    -- ("reorder zero units", meaningless) - same nullable-means-not-
+    -- applicable convention as product_batches.batch_number/expiry_date.
+    reorder_quantity INT NULL DEFAULT NULL,
     current_stock INT DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     -- created_by/updated_by: same nullable/ON DELETE SET NULL pattern as
@@ -137,7 +147,15 @@ CREATE TABLE products (
     -- MariaDB 10.2.1+ (this project's Docker image is MySQL 8.4.10); on
     -- an older MySQL it is parsed but silently not enforced, same as not
     -- having it at all — no regression either way.
-    CONSTRAINT chk_products_current_stock_nonneg CHECK (current_stock >= 0)
+    CONSTRAINT chk_products_current_stock_nonneg CHECK (current_stock >= 0),
+    -- Phase L1, Migration 015. min_stock had no CHECK before this - a
+    -- pre-existing gap, closed here since reorder_quantity's own CHECK
+    -- is being added in this same migration anyway. Same backstop
+    -- philosophy as chk_products_current_stock_nonneg; server-side
+    -- validation in product/index.php (includes/validation.php's
+    -- isNonNegativeIntegerString()) is the primary guard.
+    CONSTRAINT chk_products_min_stock_nonneg CHECK (min_stock >= 0),
+    CONSTRAINT chk_products_reorder_quantity_nonneg CHECK (reorder_quantity IS NULL OR reorder_quantity >= 0)
 );
 
 -- Stock transactions (Stock In / Stock Out / Adjustment / Sale headers)
