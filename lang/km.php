@@ -24,6 +24,7 @@ return [
     'nav_customers' => 'អតិថិជន និងបំណុល',
     'nav_reports' => 'របាយការណ៍',
     'nav_stock_reports' => 'របាយការណ៍ស្តុក',
+    'nav_stock_alert' => 'ស្តុកជិតអស់',
     'nav_administration' => 'រដ្ឋបាល',
     'nav_users' => 'អ្នកប្រើប្រាស់',
     'nav_settings' => 'ការកំណត់',
@@ -81,6 +82,9 @@ return [
     'common_err_invalid_price' => 'តម្លៃឯកតាមិនអាចជាចំនួនអវិជ្ជមានទេ។',
     'common_saving' => 'កំពុងរក្សាទុក...',
     'common_view' => 'មើល',
+    'common_severity_critical' => 'អស់ស្តុក',
+    'common_severity_low' => 'ជិតអស់',
+    'common_severity_normal' => 'ធម្មតា',
 
     // Roles
     'role_admin' => 'អ្នកគ្រប់គ្រង',
@@ -198,6 +202,9 @@ return [
     'product_cost_price' => 'ថ្លៃដើម',
     'product_sale_price' => 'តម្លៃលក់',
     'product_min_stock' => 'ស្តុកអប្បបរមា',
+    'product_reorder_qty' => 'បរិមាណត្រូវបញ្ជាទិញបន្ថែម',
+    'product_reorder_qty_placeholder' => 'ឧ. 20 (មិនចាំបាច់)',
+    'product_err_invalid_stock_number' => 'ស្តុកអប្បបរមា និងបរិមាណត្រូវបញ្ជាទិញបន្ថែម ត្រូវតែជាចំនួនគត់ ០ ឬច្រើនជាងនេះ (អាចទុកឲ្យទទេសម្រាប់បរិមាណត្រូវបញ្ជាទិញបន្ថែម)។',
     'product_stock_hint' => 'ស្តុកចាប់ផ្តើមពី 0 — បន្ថែមបរិមាណតាមរយៈ ស្តុកចូល។',
     'product_filter_low_stock_active' => 'កំពុងបង្ហាញតែផលិតផលដែលនៅសល់តិចប៉ុណ្ណោះ។',
     'product_low_stock_badge' => 'តិច',
@@ -371,6 +378,15 @@ return [
     'stockreport_col_level' => 'កម្រិត',
     'stockreport_badge_low' => 'ជិតអស់',
     'stockreport_badge_normal' => 'ធម្មតា',
+
+    // Low Stock Alert / Reorder Management (Phase L1)
+    'stockalert_title' => 'ស្តុកជិតអស់ និងការបញ្ជាទិញបន្ថែម',
+    'stockalert_col_current_stock' => 'ស្តុកបច្ចុប្បន្ន',
+    'stockalert_col_reorder_level' => 'កម្រិតត្រូវបញ្ជាទិញបន្ថែម',
+    'stockalert_col_suggested_qty' => 'បរិមាណណែនាំឲ្យបញ្ជាទិញ',
+    'stockalert_col_severity' => 'កម្រិតធ្ងន់ធ្ងរ',
+    'stockalert_reorder_not_set' => 'មិនទាន់កំណត់',
+    'stockalert_empty' => 'មិនមានផលិតផលណាត្រូវការបញ្ជាទិញបន្ថែមទេពេលនេះ។',
 
     // Customer & Debts
     'customer_title' => 'អតិថិជន និងបំណុល',

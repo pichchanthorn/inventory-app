@@ -4,6 +4,8 @@ require_once __DIR__ . '/../includes/sortable.php';
 require_once __DIR__ . '/../includes/currency.php';
 require_once __DIR__ . '/../includes/audit.php';
 require_once __DIR__ . '/../includes/stock.php';
+require_once __DIR__ . '/../includes/validation.php';
+require_once __DIR__ . '/../includes/stock_alert.php';
 require_once __DIR__ . '/../config/db.php';
 
 $activePage = 'product';
@@ -21,6 +23,37 @@ $khrRateRow = $pdo->query('SELECT usd_to_khr_rate FROM app_settings WHERE id = 1
 $khrRate = $khrRateRow !== false ? (float) $khrRateRow : null;
 
 function nullableInt($v) { return $v === '' ? null : (int) $v; }
+
+// Phase L1 (Low Stock Alert / Reorder Management): true non-negative
+// integer validation for min_stock/reorder_quantity, reusing
+// includes/validation.php's isNonNegativeIntegerString() rather than a
+// silent (int) cast - (int) "5.7" would truncate to 5, (int) "-1" would
+// truncate to -1, and neither would ever be rejected the way a real
+// integer-validation check must. Throws InvalidArgumentException (caught
+// by this page's existing generic Throwable catch, same as
+// PriceConversionException does for cost/sale price) rather than
+// returning a sentinel, so a failing field can never silently fall
+// through to being saved as some other value.
+//
+// $allowBlank=true lets reorder_quantity treat a blank submitted value
+// as "not configured" (NULL) - see the column's own nullable design in
+// database/migrations/015_add_reorder_quantity.sql. min_stock has no
+// such NULL state (it is not nullable in practice - every existing row
+// already has a real integer, and the form always submits one), so its
+// own call below uses $allowBlank=false: a blank min_stock is now
+// rejected as invalid input rather than silently becoming 0 the way the
+// old bare (int) cast used to. min_stock=0 itself remains fully valid
+// and keeps its existing meaning unchanged (see includes/stock_alert.php).
+function parseNonNegativeIntOrNull(string $raw, bool $allowBlank): ?int {
+    $trimmed = trim($raw);
+    if ($trimmed === '' && $allowBlank) {
+        return null;
+    }
+    if (!isNonNegativeIntegerString($trimmed)) {
+        throw new InvalidArgumentException('not a valid non-negative integer');
+    }
+    return (int) $trimmed;
+}
 
 // Supplementary, non-authoritative provenance for the audit snapshot:
 // present only when a price field was actually entered in KHR, so an
@@ -68,18 +101,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'create') {
                     $unitId = nullableInt($_POST['unit_id']);
                     $packageSize = trim($_POST['package_size']);
                     $note = trim($_POST['note']);
-                    $minStock = (int) $_POST['min_stock'];
+                    // Phase L1: true non-negative integer validation - see
+                    // parseNonNegativeIntOrNull()'s own comment for why a
+                    // blank/decimal/negative/non-numeric value is now
+                    // rejected (InvalidArgumentException, caught below)
+                    // rather than silently coerced the way the old bare
+                    // (int) cast used to.
+                    $minStock = parseNonNegativeIntOrNull($_POST['min_stock'] ?? '', false);
+                    $reorderQuantity = parseNonNegativeIntOrNull($_POST['reorder_quantity'] ?? '', true);
                     // Phase K2b-1A: standard unchecked-checkbox-omitted-from-POST
                     // handling, same convention as must_change_password (user/index.php).
                     $trackBatches = isset($_POST['track_batches']) ? 1 : 0;
 
                     $pdo->beginTransaction();
                     $stmt = $pdo->prepare('INSERT INTO products
-                        (name, sku, barcode, category_id, supplier_id, unit_id, package_size, note, cost_price, sale_price, min_stock, current_stock, track_batches, created_by, updated_by)
-                        VALUES (?,?,?,?,?,?,?,?,?,?,?,0,?,?,?)');
+                        (name, sku, barcode, category_id, supplier_id, unit_id, package_size, note, cost_price, sale_price, min_stock, reorder_quantity, current_stock, track_batches, created_by, updated_by)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?)');
                     $stmt->execute([
                         $name, $sku, $barcode, $categoryId, $supplierId, $unitId,
-                        $packageSize, $note, $costPrice, $salePrice, $minStock,
+                        $packageSize, $note, $costPrice, $salePrice, $minStock, $reorderQuantity,
                         $trackBatches, $actorId, $actorId,
                     ]);
                     $newId = (int) $pdo->lastInsertId();
@@ -105,6 +145,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'create') {
                 } catch (PriceConversionException $e) {
                     if ($pdo->inTransaction()) $pdo->rollBack();
                     $error = $e->getMessage();
+                } catch (InvalidArgumentException $e) {
+                    if ($pdo->inTransaction()) $pdo->rollBack();
+                    $error = __('product_err_invalid_stock_number');
                 } catch (Throwable $e) {
                     if ($pdo->inTransaction()) $pdo->rollBack();
                     error_log('Product create failed: ' . $e->getMessage());
@@ -147,7 +190,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'update') {
                 $unitId = nullableInt($_POST['unit_id']);
                 $packageSize = trim($_POST['package_size']);
                 $note = trim($_POST['note']);
-                $minStock = (int) $_POST['min_stock'];
+                // Phase L1: same true non-negative integer validation as the
+                // create handler above - thrown before enableTrackBatches()
+                // runs below, so an invalid min_stock/reorder_quantity can
+                // never leave track_batches half-flipped.
+                $minStock = parseNonNegativeIntOrNull($_POST['min_stock'] ?? '', false);
+                $reorderQuantity = parseNonNegativeIntOrNull($_POST['reorder_quantity'] ?? '', true);
                 // Phase K2b-1A: same unchecked-checkbox-omitted-from-POST
                 // handling as the create form above - editing any other
                 // field on this form always re-submits the checkbox's
@@ -173,11 +221,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'update') {
 
                 $pdo->beginTransaction();
                 $stmt = $pdo->prepare('UPDATE products SET
-                    name=?, sku=?, barcode=?, category_id=?, supplier_id=?, unit_id=?, package_size=?, note=?, cost_price=?, sale_price=?, min_stock=?, track_batches=?, updated_by=?
+                    name=?, sku=?, barcode=?, category_id=?, supplier_id=?, unit_id=?, package_size=?, note=?, cost_price=?, sale_price=?, min_stock=?, reorder_quantity=?, track_batches=?, updated_by=?
                     WHERE id=?');
                 $stmt->execute([
                     $name, $sku, $barcode, $categoryId, $supplierId, $unitId,
-                    $packageSize, $note, $costPrice, $salePrice, $minStock,
+                    $packageSize, $note, $costPrice, $salePrice, $minStock, $reorderQuantity,
                     $trackBatches, $actorId, $id,
                 ]);
 
@@ -196,6 +244,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'update') {
             } catch (PriceConversionException $e) {
                 if ($pdo->inTransaction()) $pdo->rollBack();
                 $error = $e->getMessage();
+            } catch (InvalidArgumentException $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                $error = __('product_err_invalid_stock_number');
             } catch (Throwable $e) {
                 if ($pdo->inTransaction()) $pdo->rollBack();
                 error_log('Product update failed: ' . $e->getMessage());
@@ -317,12 +368,20 @@ require_once __DIR__ . '/../includes/header.php';
       <?php endif; ?>
       <?php foreach ($products as $i => $p):
         $margin = $p['sale_price'] > 0 ? round((($p['sale_price'] - $p['cost_price']) / $p['sale_price']) * 100) : 0;
-        $low = $p['current_stock'] <= $p['min_stock'];
+        // Phase L1: CRITICAL/LOW/NORMAL replaces the old binary $low - see
+        // includes/stock_alert.php's lowStockTier() for the exact formula.
+        // CRITICAL union LOW is exactly the old current_stock <= min_stock
+        // condition, so row-low-stock/the corner triangle badge still
+        // appear in precisely the same cases as before, just now labeled
+        // more specifically.
+        $tier = lowStockTier((int) $p['current_stock'], (int) $p['min_stock']);
+        $tierBadgeClass = ['critical' => 'badge-low', 'low' => 'badge-warn', 'normal' => 'badge-normal'][$tier];
+        $tierLabel = ['critical' => __('common_severity_critical'), 'low' => __('common_severity_low'), 'normal' => __('common_severity_normal')][$tier];
       ?>
-      <tr class="<?= $low ? 'row-low-stock' : '' ?>">
+      <tr class="<?= $tier !== 'normal' ? 'row-low-stock' : '' ?>">
         <td class="row-number"><?= $i + 1 ?></td>
         <td class="row-title">
-          <?php if ($low): ?><span class="low-stock-badge"><i class="bi bi-exclamation-triangle-fill"></i> <?= __('product_low_stock_badge') ?></span><?php endif; ?>
+          <?php if ($tier !== 'normal'): ?><span class="low-stock-badge"><i class="bi bi-exclamation-triangle-fill"></i> <?= $tierLabel ?></span><?php endif; ?>
           <div class="fw-semibold"><?= htmlspecialchars($p['name']) ?></div>
           <span class="slug-pill"><?= htmlspecialchars($p['sku']) ?></span>
           <?php if (!empty($p['package_size'])): ?><span class="text-secondary small ms-1"><?= htmlspecialchars($p['package_size']) ?></span><?php endif; ?>
@@ -332,7 +391,7 @@ require_once __DIR__ . '/../includes/header.php';
         <td class="mono row-cost" data-label="<?= htmlspecialchars(__('product_col_cost')) ?>">$<?= number_format($p['cost_price'], 2) ?></td>
         <td class="mono row-price" data-label="<?= htmlspecialchars(__('product_col_price')) ?>">$<?= number_format($p['sale_price'], 2) ?></td>
         <td class="row-margin" data-label="<?= htmlspecialchars(__('product_col_margin')) ?>" style="color:<?= $margin >= 30 ? 'var(--good)' : ($margin >= 15 ? 'var(--warn)' : 'var(--danger)') ?>;"><?= $margin ?>%</td>
-        <td class="row-stock" data-label="<?= htmlspecialchars(__('product_col_stock')) ?>"><span class="badge-stock <?= $low ? 'badge-low' : 'badge-normal' ?>"><?= $p['current_stock'] ?> <?= __('common_pcs') ?></span></td>
+        <td class="row-stock" data-label="<?= htmlspecialchars(__('product_col_stock')) ?>"><span class="badge-stock <?= $tierBadgeClass ?>"><?= $p['current_stock'] ?> <?= __('common_pcs') ?></span></td>
         <td class="text-end row-actions">
           <?php if (canWrite()): ?>
           <button class="btn btn-sm btn-outline-primary"
@@ -417,7 +476,11 @@ require_once __DIR__ . '/../includes/header.php';
               </div>
               <div class="text-secondary small price-preview"></div></div>
             <div class="col-12 col-md-4 mb-3"><label class="form-label"><?= __('product_min_stock') ?></label>
-              <input type="number" name="min_stock" class="form-control" value="<?= $p['min_stock'] ?>"></div>
+              <input type="number" name="min_stock" class="form-control" value="<?= $p['min_stock'] ?>" min="0" step="1"></div>
+          </div>
+          <div class="row">
+            <div class="col-12 col-md-4 mb-3"><label class="form-label"><?= __('product_reorder_qty') ?></label>
+              <input type="number" name="reorder_quantity" class="form-control" value="<?= $p['reorder_quantity'] !== null ? (int) $p['reorder_quantity'] : '' ?>" min="0" step="1" placeholder="<?= __('product_reorder_qty_placeholder') ?>"></div>
           </div>
           <div class="mb-3"><label class="form-label"><?= __('common_note') ?></label>
             <textarea name="note" class="form-control"><?= htmlspecialchars($p['note']) ?></textarea></div>
@@ -496,7 +559,11 @@ require_once __DIR__ . '/../includes/header.php';
               </div>
               <div class="text-secondary small price-preview"></div></div>
             <div class="col-12 col-md-4 mb-3"><label class="form-label"><?= __('product_min_stock') ?></label>
-              <input type="number" name="min_stock" class="form-control" value="0"></div>
+              <input type="number" name="min_stock" class="form-control" value="0" min="0" step="1"></div>
+          </div>
+          <div class="row">
+            <div class="col-12 col-md-4 mb-3"><label class="form-label"><?= __('product_reorder_qty') ?></label>
+              <input type="number" name="reorder_quantity" class="form-control" value="" min="0" step="1" placeholder="<?= __('product_reorder_qty_placeholder') ?>"></div>
           </div>
           <div class="mb-3"><label class="form-label"><?= __('common_note') ?></label>
             <textarea name="note" class="form-control"></textarea></div>

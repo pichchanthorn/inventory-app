@@ -27,7 +27,7 @@
     <span><?= __('nav_bottom_pos') ?></span>
   </a>
   <div class="dropup bottom-nav-item-wrap">
-    <button type="button" class="bottom-nav-link<?= in_array($activePage, ['stock-in', 'stock-out', 'stock-adjustment', 'stock-report'], true) ? ' active' : '' ?>" data-bs-toggle="dropdown" aria-expanded="false">
+    <button type="button" class="bottom-nav-link<?= in_array($activePage, ['stock-in', 'stock-out', 'stock-adjustment', 'stock-report', 'stock-alert'], true) ? ' active' : '' ?>" data-bs-toggle="dropdown" aria-expanded="false">
       <i class="bi bi-box-seam"></i>
       <span><?= __('nav_bottom_stock') ?></span>
     </button>
@@ -35,6 +35,7 @@
       <li><a class="dropdown-item" href="<?= BASE_URL ?>/stock-in/index.php"><i class="bi bi-download me-2"></i><?= __('nav_stock_in') ?></a></li>
       <li><a class="dropdown-item" href="<?= BASE_URL ?>/stock-out/index.php"><i class="bi bi-upload me-2"></i><?= __('nav_stock_out') ?></a></li>
       <li><a class="dropdown-item" href="<?= BASE_URL ?>/stock-adjustment/index.php"><i class="bi bi-arrow-repeat me-2"></i><?= __('nav_stock_adjustments') ?></a></li>
+      <li><a class="dropdown-item" href="<?= BASE_URL ?>/stock-alert/index.php"><i class="bi bi-exclamation-triangle me-2"></i><?= __('nav_stock_alert') ?></a></li>
     </ul>
   </div>
   <button type="button" class="bottom-nav-link" data-bs-toggle="offcanvas" data-bs-target="#appSidebar" aria-controls="appSidebar">

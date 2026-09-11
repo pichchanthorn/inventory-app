@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/auth_check.php';
 require_once __DIR__ . '/../includes/sortable.php';
+require_once __DIR__ . '/../includes/stock_alert.php';
 require_once __DIR__ . '/../config/db.php';
 
 $activePage = 'stock-report';
@@ -108,7 +109,14 @@ require_once __DIR__ . '/../includes/header.php';
       <thead class="table-light"><tr><th><?= __('common_product') ?></th><th><?= __('common_category') ?></th><th><?= __('stockreport_col_current_stock') ?></th><th><?= __('stockreport_col_level') ?></th></tr></thead>
       <tbody>
         <?php if (!$rows): ?><tr><td colspan="4" class="text-center text-secondary py-4"><i class="bi bi-inbox fs-3 d-block mb-2"></i><?= __('product_empty') ?></td></tr><?php endif; ?>
-        <?php foreach ($rows as $p): $low = $p['current_stock'] <= $p['min_stock']; ?>
+        <?php foreach ($rows as $p):
+          // Phase L1: CRITICAL/LOW/NORMAL - see includes/stock_alert.php's
+          // lowStockTier(). Calculations/transaction logic on this page are
+          // otherwise completely unchanged.
+          $tier = lowStockTier((int) $p['current_stock'], (int) $p['min_stock']);
+          $tierBadgeClass = ['critical' => 'badge-low', 'low' => 'badge-warn', 'normal' => 'badge-normal'][$tier];
+          $tierLabel = ['critical' => __('common_severity_critical'), 'low' => __('common_severity_low'), 'normal' => __('common_severity_normal')][$tier];
+        ?>
         <tr>
           <td class="row-title">
             <div class="fw-semibold"><?= htmlspecialchars($p['name']) ?></div>
@@ -116,7 +124,7 @@ require_once __DIR__ . '/../includes/header.php';
           </td>
           <td data-label="<?= htmlspecialchars(__('common_category')) ?>"><?= $p['category_name'] ? htmlspecialchars($p['category_name']) : '<span class="text-secondary">—</span>' ?></td>
           <td data-label="<?= htmlspecialchars(__('stockreport_col_current_stock')) ?>"><?= $p['current_stock'] ?></td>
-          <td data-label="<?= htmlspecialchars(__('stockreport_col_level')) ?>"><span class="badge-stock <?= $low ? 'badge-low' : 'badge-normal' ?>"><?= $low ? __('stockreport_badge_low') : __('stockreport_badge_normal') ?></span></td>
+          <td data-label="<?= htmlspecialchars(__('stockreport_col_level')) ?>"><span class="badge-stock <?= $tierBadgeClass ?>"><?= $tierLabel ?></span></td>
         </tr>
         <?php endforeach; ?>
       </tbody>

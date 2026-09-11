@@ -83,6 +83,7 @@ $hasStickyAction = in_array($activePage, ['pos', 'stock-in', 'stock-out'], true)
 
     <div class="sidebar-section"><?= __('nav_reports') ?></div>
     <a class="<?= navClass('stock-report', $activePage) ?>" href="<?= BASE_URL ?>/stock-report/index.php"><i class="bi bi-bar-chart me-2"></i><?= __('nav_stock_reports') ?></a>
+    <a class="<?= navClass('stock-alert', $activePage) ?>" href="<?= BASE_URL ?>/stock-alert/index.php"><i class="bi bi-exclamation-triangle me-2"></i><?= __('nav_stock_alert') ?></a>
 
     <?php if (function_exists('isAdmin') && isAdmin()): ?>
     <div class="sidebar-section"><?= __('nav_administration') ?></div>
