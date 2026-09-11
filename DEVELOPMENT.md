@@ -446,3 +446,119 @@ non-blocking gaps that remain are tracked below under Known Limitations.
       sensitive Admin action in the app. **Severity: MEDIUM, deferred**
       — a real accountability gap, not a data-safety or correctness
       issue; does not affect the backup feature's own reliability.
+
+---
+
+## Phase K4-6 — Batch-Specific Stock Adjustment (Product Batch & Expiry Management)
+
+The Product Batch & Expiry Management feature (batch/expiry tracking on
+Stock In, FEFO consumption on Stock Out/POS, and the invariant
+`products.current_stock = SUM(product_batches.qty_on_hand)`) had one
+remaining gap after its earlier phases: a `track_batches=1` product's
+Stock Adjustment could only be rejected outright (no way to correct a
+single batch's count without going through Stock In/Out). K4-6 closed
+that gap in two implementation phases plus an independent final QA
+pass.
+
+**K4-6-1 — Batch-specific Stock Adjustment backend.** Added
+`batchAdjustStock()` to `includes/stock.php`: for a tracked product, it
+targets exactly one `product_batches` row by id (Target semantics,
+matching the existing untracked `adjustStock()` convention), locks the
+product row before the batch row (the same order every other
+batch-touching function in that file already uses, so no new deadlock
+risk), and synchronizes `products.current_stock` by the exact delta. A
+caller-supplied `expectedQty` — read once, before the mutating
+transaction begins — guards against a stale or duplicate submission via
+direct comparison against the freshly locked value, deliberately instead
+of an idempotency token (the CAS check already makes a duplicate/
+resubmitted request fail safely on its own). No row is written to
+`stock_transaction_item_batches` for an adjustment in either direction —
+that table's `CHECK (qty > 0)` cannot represent a decrease — so batch
+identity is instead recorded in the transaction's own note text plus a
+queryable `audit_log` entry (`entity_type='product_batch'`), reusing
+existing infrastructure rather than adding a new ledger shape. Opening-
+balance batches remain adjustable without their `origin`/
+`source_transaction_id` ever changing. Covered by 38 Integration tests
+(`tests/Integration/StockBatchAdjustmentTest.php`) and 6 new OS-process
+concurrency scenarios in `tests/Concurrency/ConcurrencyTest.php` (same
+batch, different batches, vs. Stock In, vs. Stock Out, vs. POS, and
+batch-A-vs-batch-B). Merged via PR #74.
+
+**K4-6-2 — Batch-specific Stock Adjustment UI + HTTP integration.**
+Extended `stock-adjustment/index.php` with a batch-selection flow for
+tracked products, branching server-side on the product's own
+`track_batches` column (never a client-supplied flag) so the existing
+untracked flow stays byte-for-byte unchanged. Batch data is embedded
+server-rendered (`BATCHES_BY_PRODUCT`, the same no-AJAX pattern the page's
+`PRODUCTS` array already used) — selection posts `product_batches.id`
+only, never `batch_number`/`expiry_date`, and the submitted `expected_qty`
+is captured once, at batch-selection time, from that same server-rendered
+snapshot rather than being re-read at submit time, preserving the CAS
+guard `batchAdjustStock()` depends on. Target quantity and `expected_qty`
+are both validated as true non-negative integers server-side — a value
+like `"5.7"` is rejected outright, never silently truncated to `5`. New
+`lang/en.php`/`lang/km.php` keys cover the batch selector, the empty-state
+message, and the new UI-level validation errors, with full EN/KM parity.
+`tests/Http/StockAdjustmentBatchTest.php` (18 tests) drives the real page
+over real HTTP, covering the untracked legacy path, every tracked
+scenario (increase/decrease/zero/no-op, expired batch, opening-balance
+batch), rejection cases (missing/wrong-product batch id, negative/non-
+integer/stale quantities), Viewer RBAC, and CSRF — each rejection
+additionally asserted to cause no product/batch mutation, no audit row,
+and no reference-number burn. Manually verified across 360×800/390×844/
+412×915/1366×768 × English/Khmer × light/dark with no horizontal overflow.
+Merged via PR #75.
+
+**K4-6-3 — Final QA (independent verification pass).** A read-only audit
+of the complete K4-6 feature (and a re-verification of K1–K4-5's own
+areas) against `origin/main` at `10ac0a5`:
+
+- Full automated suite: **221 tests / 1,434 assertions**, run twice,
+  identical both times.
+- Concurrency suite: **29 tests / 524 assertions**, run three times,
+  identical every time — no deadlocks, no flakiness.
+- The `current_stock = SUM(qty_on_hand)` invariant was verified both by
+  inspecting the live database's full accumulated history (zero
+  violations found) and by a complete live functional pass exercising
+  Stock In (tracked batch/expiry capture), Stock Out FEFO (earliest-
+  expiry-first, multi-batch consumption), POS cash and credit FEFO, Track
+  Batches enablement (existing stock and zero stock), and the full
+  batch-specific Stock Adjustment flow (increase, decrease, zero, no-op,
+  expired batch, opening-balance batch, and rejection of a negative
+  target, a non-integer target, and a batch id belonging to another
+  product) — the invariant held exactly in every case.
+- RBAC/CSRF, the audit trail (`entity_type='product_batch'` rows with
+  correct before/after snapshots, none created for any rejected
+  attempt), reporting/transaction-detail rendering, and currency/business
+  behavior were all reverified and found unaffected.
+- Browser QA passed at all four required viewports (360×800, 390×844,
+  412×915, 1366×768) in both English and Khmer and both light and dark
+  themes, with no horizontal overflow or clipping.
+- All temporary QA data was created and fully cleaned up against an
+  isolated copy of the working database; the repository working tree was
+  confirmed unchanged (no production, test, or schema file was modified
+  by this QA pass).
+- **P0 = 0, P1 = 0.**
+
+**Deferred, non-blocking (P3):**
+
+- The Audit Log page (`audit/index.php`) does not yet have a friendly
+  label or entity-name display for `entity_type='product_batch'` rows —
+  it currently shows the raw string and a blank name column. The
+  underlying audit data itself is complete and correct (before/after
+  snapshots, actor, timestamp); this is a cosmetic display gap only,
+  intentionally left for a separate follow-up rather than folded into
+  K4-6.
+- The Stock Adjustment page's "Apply Adjustment" button is not wrapped in
+  a `canWrite()` UI guard, so a Viewer sees it — this predates the entire
+  K-series (confirmed via `git log`/`git show` against history well
+  before Phase K1). Purely a UI-visibility inconsistency: the server-side
+  `canWrite()` gate in the POST handler is unaffected and continues to
+  reject any resulting write.
+
+**K4-6 Product Batch & Expiry MVP = COMPLETE.**
+**K4-6-3 Final QA = PASS.**
+
+Which feature area to take on next is a separate roadmap decision, to be
+made at a future feature-selection/audit checkpoint — not decided or
+started as part of this entry.
