@@ -562,3 +562,95 @@ areas) against `origin/main` at `10ac0a5`:
 Which feature area to take on next is a separate roadmap decision, to be
 made at a future feature-selection/audit checkpoint — not decided or
 started as part of this entry.
+
+## Low Stock Alert / Reorder Management
+
+**Status: COMPLETE.**
+
+**Implementation:**
+
+- Feature branch: `feature/low-stock-reorder`.
+- Implementation commit: `7ce7a26` ("feat: add low stock reorder
+  management").
+- Merged via PR #77.
+- Main merge commit: `9b8f13f`.
+
+**Scope:**
+
+- Added `products.reorder_quantity` (nullable, purely informational —
+  never enforced, never affects classification).
+- Added migration `015_add_reorder_quantity.sql`.
+- Added a non-negative CHECK constraint on `min_stock` (closing a
+  pre-existing gap) alongside the new `reorder_quantity` CHECK.
+- Added a derived CRITICAL / LOW / NORMAL severity classification
+  (`lowStockTier()` in `includes/stock_alert.php`), a strict refinement
+  of the pre-existing `current_stock <= min_stock` signal: CRITICAL when
+  `current_stock = 0`, LOW when `0 < current_stock <= min_stock`, NORMAL
+  otherwise. `min_stock = 0` does not disable alerting.
+- Added a dedicated, read-only Low Stock / Reorder page
+  (`stock-alert/index.php`) listing CRITICAL and LOW products only,
+  CRITICAL sorted before LOW.
+- Added a Stock In quick-link/preselection from the new page.
+- Updated the Dashboard Low Stock KPI to link to the new page (its
+  underlying count query is unchanged).
+- Preserved the existing Product list `?filter=low_stock` behavior.
+- Updated the Product list and Stock Report severity badges to the new
+  three-tier presentation.
+- Added full English/Khmer localization for all new UI text.
+- Added shared server-side true-integer validation
+  (`includes/validation.php`), extracted from the existing Stock
+  Adjustment validation helper and reused by the Product form.
+- Preserved the tracked/untracked inventory invariant
+  (`current_stock = SUM(product_batches.qty_on_hand)`) — the feature is
+  purely read-derived and never writes to `product_batches` or any
+  transaction table.
+- No alerts table, no persisted/acknowledged alerts, no alert history.
+- No email/SMS/push notifications.
+
+**QA (L2 — Final QA):**
+
+- **L2 Final QA = PASS.**
+- Full automated suite: **269 tests / 2,412 assertions**, run twice,
+  identical both times.
+- Concurrency suite: **29 tests / 524 assertions**.
+- Migration/schema verification: PASS (migration 015 replays cleanly;
+  `schema.sql` matches; both new CHECK constraints and the
+  `reorder_quantity` column confirmed present on the live database).
+- Business-rule boundary verification: PASS (all 6 required
+  CRITICAL/LOW/NORMAL boundary cases confirmed, including
+  `min_stock = 0` and zero-stock-always-CRITICAL; `reorder_quantity`
+  confirmed to have no effect on classification at NULL/0/positive
+  values; tracked vs. untracked products at identical stock/threshold
+  classified identically).
+- RBAC/CSRF: PASS (Viewer can view the new page but not modify
+  thresholds; invalid/negative/decimal/non-numeric threshold submissions
+  rejected server-side with no mutation; missing CSRF token rejected
+  with HTTP 403).
+- English/Khmer localization: PASS (full key parity, no hardcoded
+  strings, all new keys translated).
+- Browser QA performed at 360×800, 390×844, 412×915, and 1366×768.
+- Light/dark themes and English/Khmer both verified at each viewport,
+  with no horizontal overflow.
+- **P0 = 0, P1 = 0, P2 = 0, P3 = 0** — no findings.
+- All temporary QA data was created against the working database and
+  fully cleaned up afterward; baseline row counts confirmed restored.
+- Working tree confirmed unchanged throughout (no production, test, or
+  schema file modified by this QA pass).
+
+**Deferred / out of scope (not part of this feature):**
+
+- Email/SMS/push notifications.
+- Alert history.
+- Alert acknowledgement/dismissal.
+- Purchase orders.
+- Automatic purchasing.
+- Forecasting.
+- AI/ML-based reorder suggestions.
+- PWA/native app delivery.
+
+**Low Stock Alert / Reorder Management = COMPLETE.**
+**L2 Final QA = PASS.**
+
+Which feature area to take on next is a separate roadmap decision, to be
+made at a future feature-selection/audit checkpoint — not decided or
+started as part of this entry.
