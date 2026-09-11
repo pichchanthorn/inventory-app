@@ -421,6 +421,174 @@ final class StockTest extends TestCase
         $this->assertSame(5, (int) $batch['qty_received']);
     }
 
+    // ---- Phase P0: Stock In transaction-boundary refactor ----
+    //
+    // recordStockIn()'s own mutation body was extracted into
+    // insertStockInTransaction() (includes/stock.php) - a transaction-less
+    // helper with the same "caller owns the transaction" contract
+    // insertStockOutLines() already has, so a future Purchase Order
+    // receiving function can call it from within its own transaction
+    // instead of nesting a second, independently-committing transaction
+    // inside its own. recordStockIn() itself keeps its exact prior
+    // signature/return value/behavior - already reproven by every
+    // pre-existing test above passing unmodified. These tests cover what
+    // is genuinely new: the extracted helper's own transaction-less
+    // contract and its return value, plus the multi-batch/multi-product
+    // tracked scenarios not previously exercised within a single call.
+
+    public function testInsertStockInTransactionReturnsReferenceTransactionIdAndItemIdsInOrder(): void
+    {
+        $p1 = testSeedProduct($this->pdo, 10);
+        $p2 = testSeedProduct($this->pdo, 20);
+        $userId = $this->admin();
+
+        $this->pdo->beginTransaction();
+        $result = insertStockInTransaction(
+            $this->pdo,
+            [
+                ['product_id' => $p1['id'], 'qty' => 5, 'cost' => 1.00],
+                ['product_id' => $p2['id'], 'qty' => 7, 'cost' => 2.00],
+            ],
+            date('Y-m-d'),
+            null,
+            'return-contract check',
+            $userId
+        );
+        $this->pdo->commit();
+
+        $this->assertStringStartsWith('STI-', $result['reference']);
+        $this->assertIsInt($result['transaction_id']);
+        $this->assertCount(2, $result['item_ids']);
+
+        $stmt = $this->pdo->prepare('SELECT reference FROM stock_transactions WHERE id = ?');
+        $stmt->execute([$result['transaction_id']]);
+        $this->assertSame($result['reference'], $stmt->fetchColumn(), 'transaction_id must resolve to the same row as reference');
+
+        $stmt = $this->pdo->prepare('SELECT product_id, qty FROM stock_transaction_items WHERE id = ?');
+        $stmt->execute([$result['item_ids'][0]]);
+        $item0 = $stmt->fetch();
+        $this->assertSame($p1['id'], (int) $item0['product_id'], 'item_ids must be positionally aligned with the input lines');
+        $this->assertSame(5, (int) $item0['qty']);
+
+        $stmt->execute([$result['item_ids'][1]]);
+        $item1 = $stmt->fetch();
+        $this->assertSame($p2['id'], (int) $item1['product_id']);
+        $this->assertSame(7, (int) $item1['qty']);
+    }
+
+    public function testInsertStockInTransactionDoesNotOwnTheTransactionAndRollsBackWithTheCaller(): void
+    {
+        $product = testSeedProduct($this->pdo, 10, ['track_batches' => 1]);
+        $userId = $this->admin();
+        $countBefore = $this->countRows('stock_transactions');
+
+        $this->pdo->beginTransaction();
+        $result = insertStockInTransaction(
+            $this->pdo,
+            [['product_id' => $product['id'], 'qty' => 5, 'cost' => 1.00, 'batch_number' => 'P0-LOT', 'expiry_date' => null]],
+            date('Y-m-d'),
+            null,
+            'caller rolls back, not the helper',
+            $userId
+        );
+        // The helper must not have committed anything on its own - the
+        // caller (this test) is still free to roll the whole thing back.
+        $this->pdo->rollBack();
+
+        $this->assertStringStartsWith('STI-', $result['reference'], 'the helper still did its work inside the still-open transaction');
+        $this->assertSame(10, $this->currentStock($product['id']), 'a caller-initiated rollback must undo the helper\'s mutation entirely');
+        $this->assertSame($countBefore, $this->countRows('stock_transactions'));
+
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM product_batches WHERE product_id = ?');
+        $stmt->execute([$product['id']]);
+        $this->assertSame(0, (int) $stmt->fetchColumn(), 'no batch row must survive the caller\'s rollback');
+    }
+
+    public function testStockInCreatesTwoDistinctBatchesForTheSameTrackedProductInOneCall(): void
+    {
+        $product = testSeedProduct($this->pdo, 0, ['track_batches' => 1]);
+        $userId = $this->admin();
+
+        recordStockIn(
+            $this->pdo,
+            [
+                ['product_id' => $product['id'], 'qty' => 5, 'cost' => 1.00, 'batch_number' => 'LOT-A', 'expiry_date' => '2030-01-01'],
+                ['product_id' => $product['id'], 'qty' => 8, 'cost' => 1.50, 'batch_number' => 'LOT-B', 'expiry_date' => '2031-01-01'],
+            ],
+            date('Y-m-d'),
+            null,
+            'two batches in one call',
+            $userId
+        );
+
+        $this->assertSame(13, $this->currentStock($product['id']));
+
+        $stmt = $this->pdo->prepare('SELECT batch_number, qty_on_hand, qty_received FROM product_batches WHERE product_id = ? ORDER BY batch_number');
+        $stmt->execute([$product['id']]);
+        $batches = $stmt->fetchAll();
+        $this->assertCount(2, $batches, 'one recordStockIn() call with two distinct batch identities must create two batch rows');
+        $this->assertSame('LOT-A', $batches[0]['batch_number']);
+        $this->assertSame(5, (int) $batches[0]['qty_on_hand']);
+        $this->assertSame('LOT-B', $batches[1]['batch_number']);
+        $this->assertSame(8, (int) $batches[1]['qty_on_hand']);
+
+        $batchSum = $batches[0]['qty_on_hand'] + $batches[1]['qty_on_hand'];
+        $this->assertSame($this->currentStock($product['id']), (int) $batchSum, 'current_stock must equal SUM(product_batches.qty_on_hand)');
+    }
+
+    public function testStockInHandlesMultipleTrackedProductsInOneCallEachWithItsOwnBatch(): void
+    {
+        $p1 = testSeedProduct($this->pdo, 0, ['track_batches' => 1]);
+        $p2 = testSeedProduct($this->pdo, 0, ['track_batches' => 1]);
+        $userId = $this->admin();
+
+        recordStockIn(
+            $this->pdo,
+            [
+                ['product_id' => $p1['id'], 'qty' => 6, 'cost' => 1.00, 'batch_number' => 'P1-LOT', 'expiry_date' => null],
+                ['product_id' => $p2['id'], 'qty' => 9, 'cost' => 2.00, 'batch_number' => 'P2-LOT', 'expiry_date' => null],
+            ],
+            date('Y-m-d'),
+            null,
+            'two tracked products in one call',
+            $userId
+        );
+
+        $this->assertSame(6, $this->currentStock($p1['id']));
+        $this->assertSame(9, $this->currentStock($p2['id']));
+
+        $stmt = $this->pdo->prepare('SELECT batch_number, qty_on_hand FROM product_batches WHERE product_id = ?');
+        $stmt->execute([$p1['id']]);
+        $b1 = $stmt->fetch();
+        $this->assertSame('P1-LOT', $b1['batch_number']);
+        $this->assertSame(6, (int) $b1['qty_on_hand']);
+
+        $stmt->execute([$p2['id']]);
+        $b2 = $stmt->fetch();
+        $this->assertSame('P2-LOT', $b2['batch_number']);
+        $this->assertSame(9, (int) $b2['qty_on_hand']);
+    }
+
+    public function testStockInOnAnUntrackedProductStillCreatesNoBatchRow(): void
+    {
+        $product = testSeedProduct($this->pdo, 0);
+        $userId = $this->admin();
+
+        recordStockIn(
+            $this->pdo,
+            [['product_id' => $product['id'], 'qty' => 12, 'cost' => 3.00]],
+            date('Y-m-d'),
+            null,
+            'untracked product',
+            $userId
+        );
+
+        $this->assertSame(12, $this->currentStock($product['id']));
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM product_batches WHERE product_id = ?');
+        $stmt->execute([$product['id']]);
+        $this->assertSame(0, (int) $stmt->fetchColumn(), 'an untracked product must never gain a product_batches row from Stock In');
+    }
+
     // ---- K3-1: Stock Out + FEFO batch consumption ----
     //
     // All tests below call recordStockOut(..., consumeBatches: true) -
