@@ -30,7 +30,7 @@ $actionLabels = ['create' => __('audit_action_create'), 'update' => __('audit_ac
 // entity_type values are the lowercase singular strings each module
 // passes to logAudit() ('category'/'unit'/'supplier'/'product'/'user') -
 // reusing the existing common_* labels rather than inventing new ones.
-$entityTypeLabels = ['category' => __('common_category'), 'unit' => __('common_unit'), 'supplier' => __('common_supplier'), 'product' => __('common_product'), 'user' => __('common_user')];
+$entityTypeLabels = ['category' => __('common_category'), 'unit' => __('common_unit'), 'supplier' => __('common_supplier'), 'product' => __('common_product'), 'user' => __('common_user'), 'purchase_order' => __('po_entity_label')];
 
 require_once __DIR__ . '/../includes/header.php';
 ?>

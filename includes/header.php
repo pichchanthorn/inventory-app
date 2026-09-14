@@ -76,6 +76,7 @@ $hasStickyAction = in_array($activePage, ['pos', 'stock-in', 'stock-out'], true)
 
     <div class="sidebar-section"><?= __('nav_operation') ?></div>
     <a class="<?= navClass('pos', $activePage) ?>" href="<?= BASE_URL ?>/pos/index.php"><i class="bi bi-cash-register me-2"></i><?= __('nav_pos') ?></a>
+    <a class="<?= navClass('purchase-order', $activePage) ?>" href="<?= BASE_URL ?>/purchase-order/index.php"><i class="bi bi-cart-check me-2"></i><?= __('nav_purchase_orders') ?></a>
     <a class="<?= navClass('stock-in', $activePage) ?>" href="<?= BASE_URL ?>/stock-in/index.php"><i class="bi bi-download me-2"></i><?= __('nav_stock_in') ?></a>
     <a class="<?= navClass('stock-out', $activePage) ?>" href="<?= BASE_URL ?>/stock-out/index.php"><i class="bi bi-upload me-2"></i><?= __('nav_stock_out') ?></a>
     <a class="<?= navClass('stock-adjustment', $activePage) ?>" href="<?= BASE_URL ?>/stock-adjustment/index.php"><i class="bi bi-arrow-repeat me-2"></i><?= __('nav_stock_adjustments') ?></a>

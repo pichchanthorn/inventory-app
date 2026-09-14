@@ -59,6 +59,19 @@ function testSeedCustomer(PDO $pdo, string $name = 'Test Customer'): array
     return ['id' => (int) $pdo->lastInsertId(), 'name' => $name];
 }
 
+// Phase P1 (Purchase Order Management). Mirrors testSeedCustomer()
+// exactly - suppliers/customers are structurally the same kind of
+// counterparty entity (see database/schema.sql's own comment on
+// customers), just on opposite sides of a transaction. No uniqueness
+// constraint on suppliers.name, same as customers.name, so no counter
+// is needed to keep repeated calls collision-free.
+function testSeedSupplier(PDO $pdo, string $name = 'Test Supplier'): array
+{
+    $stmt = $pdo->prepare('INSERT INTO suppliers (name, phone) VALUES (?, ?)');
+    $stmt->execute([$name, '0000000000']);
+    return ['id' => (int) $pdo->lastInsertId(), 'name' => $name];
+}
+
 function testRandomToken(): string
 {
     return bin2hex(random_bytes(32));
