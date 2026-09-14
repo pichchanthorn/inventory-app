@@ -541,4 +541,10 @@ return [
     'po_err_not_receivable' => 'This purchase order cannot be received in its current status.',
     'po_err_item_mismatch' => 'One of the submitted line items does not belong to this purchase order.',
     'po_err_over_receive' => 'The received quantity exceeds what remains outstanding for that line.',
+
+    // Purchase Order Cancellation (Phase P3-A)
+    'po_cancel_button' => 'Cancel Order',
+    'po_cancel_confirm' => 'Cancel this purchase order? Already received quantities and stock are not affected. This cannot be undone.',
+    'po_cancelled_toast' => 'Purchase order cancelled.',
+    'po_err_not_cancellable' => 'This purchase order cannot be cancelled in its current status.',
 ];

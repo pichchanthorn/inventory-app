@@ -87,6 +87,12 @@ $statusLabels = [
     <?php endif; ?>
     <?php if (canWrite() && in_array($po['status'], ['ordered', 'partially_received'], true)): ?>
     <a href="<?= BASE_URL ?>/purchase-order/receive.php?id=<?= $po['id'] ?>" class="btn btn-primary btn-sm"><i class="bi bi-box-seam"></i> <?= __('po_receive_button') ?></a>
+    <form method="post" action="<?= BASE_URL ?>/purchase-order/index.php" class="d-inline" onsubmit="return confirm('<?= __('po_cancel_confirm') ?>')">
+      <?= csrf_field() ?>
+      <input type="hidden" name="action" value="cancel">
+      <input type="hidden" name="id" value="<?= $po['id'] ?>">
+      <button type="submit" class="btn btn-outline-danger btn-sm"><i class="bi bi-x-circle"></i> <?= __('po_cancel_button') ?></button>
+    </form>
     <?php endif; ?>
   </div>
 </div>

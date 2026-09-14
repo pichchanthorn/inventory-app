@@ -1219,6 +1219,90 @@ final class ConcurrencyTest extends TestCase
         $this->assertSame('received', $stmt->fetchColumn(), 'the PO must end up fully received once both of its lines are fully received');
     }
 
+    // ---- Phase P3-A: Purchase Order Cancellation concurrency ----
+    //
+    // Two scenarios required by the approved P3-A architecture, both
+    // driving the real, unmodified cancelPurchaseOrder() (and, for the
+    // first, the real, unmodified receivePurchaseOrder()) end to end from
+    // genuinely concurrent OS processes. Whatever safety these observe
+    // comes entirely from the purchase_orders row's own SELECT ... FOR
+    // UPDATE lock - the SAME lock both functions take as their first
+    // mutating step - no PHP-level lock/mutex is introduced anywhere.
+
+    public function testConcurrentCancelVsReceiveOnTheSamePurchaseOrderExactlyOneSucceeds(): void
+    {
+        [$poId, $itemIds] = $this->seedOrderedPurchaseOrder([['ordered_qty' => 10, 'unit_cost' => 1.00]]);
+        $itemId = $itemIds[0];
+        $userId = $this->seedUser();
+
+        $results = $this->runParallel([
+            ['purchase_order_cancel_race.php', (string) $poId, (string) $userId],
+            ['purchase_order_receive_race.php', (string) $poId, (string) $itemId, '6', '1.00', (string) $userId],
+        ]);
+
+        $succeeded = array_filter($results, static fn(array $r): bool => $r['status'] === 'ok');
+        $failed = array_filter($results, static fn(array $r): bool => $r['status'] === 'error');
+        $this->assertCount(1, $succeeded, 'exactly one of Cancel/Receive racing on the same PO must succeed: ' . json_encode($results));
+        $this->assertCount(1, $failed);
+
+        $stmt = $this->pdo->prepare('SELECT status FROM purchase_orders WHERE id = ?');
+        $stmt->execute([$poId]);
+        $finalStatus = $stmt->fetchColumn();
+        $this->assertContains($finalStatus, ['cancelled', 'partially_received'], 'the PO must land in a single, valid, non-corrupted state');
+
+        // Whichever side lost must have left ZERO trace: if Receive lost,
+        // no receipt/stock/received_qty change; if Cancel lost, the PO
+        // must not be 'cancelled'. Assert both directions from the one
+        // observed final status so the test is meaningful either way the
+        // race resolves.
+        $stmt = $this->pdo->prepare('SELECT received_qty FROM purchase_order_items WHERE id = ?');
+        $stmt->execute([$itemId]);
+        $receivedQty = (int) $stmt->fetchColumn();
+
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM purchase_order_receipts WHERE purchase_order_item_id = ?');
+        $stmt->execute([$itemId]);
+        $receiptCount = (int) $stmt->fetchColumn();
+
+        if ($finalStatus === 'cancelled') {
+            $this->assertSame(0, $receivedQty, 'Cancel won: Receive must have left zero mutation');
+            $this->assertSame(0, $receiptCount, 'Cancel won: no receipt row may exist from the losing Receive attempt');
+        } else {
+            $this->assertSame(6, $receivedQty, 'Receive won: its quantity must be fully applied');
+            $this->assertSame(1, $receiptCount, 'Receive won: exactly one receipt row must exist');
+        }
+
+        // Exactly one purchase_order audit row total from this race (the
+        // winner's) - the loser's rejected attempt must never audit.
+        $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM audit_log WHERE entity_type = 'purchase_order' AND entity_id = ? AND action = 'update'");
+        $stmt->execute([$poId]);
+        $this->assertSame(1, (int) $stmt->fetchColumn(), 'exactly one audit row must exist - the loser must never audit a mutation it never made');
+    }
+
+    public function testConcurrentCancelVsCancelOnTheSamePurchaseOrderExactlyOneSucceeds(): void
+    {
+        [$poId,] = $this->seedOrderedPurchaseOrder([['ordered_qty' => 10, 'unit_cost' => 1.00]]);
+        $userId = $this->seedUser();
+
+        $results = $this->runParallel([
+            ['purchase_order_cancel_race.php', (string) $poId, (string) $userId],
+            ['purchase_order_cancel_race.php', (string) $poId, (string) $userId],
+        ]);
+
+        $succeeded = array_filter($results, static fn(array $r): bool => $r['status'] === 'ok');
+        $failed = array_filter($results, static fn(array $r): bool => $r['status'] === 'error');
+        $this->assertCount(1, $succeeded, 'exactly one of two concurrent cancels must succeed: ' . json_encode($results));
+        $this->assertCount(1, $failed);
+        $this->assertSame('PurchaseOrderNotCancellableException', array_values($failed)[0]['exception']);
+
+        $stmt = $this->pdo->prepare('SELECT status FROM purchase_orders WHERE id = ?');
+        $stmt->execute([$poId]);
+        $this->assertSame('cancelled', $stmt->fetchColumn());
+
+        $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM audit_log WHERE entity_type = 'purchase_order' AND entity_id = ? AND action = 'update'");
+        $stmt->execute([$poId]);
+        $this->assertSame(1, (int) $stmt->fetchColumn(), 'exactly one successful-cancellation audit row must exist, never two');
+    }
+
     /**
      * @param array<int, array{ordered_qty:int, unit_cost:float}> $itemsSpec
      * @return array{0:int, 1:int[]} [purchaseOrderId, itemIds in the same order as $itemsSpec]
