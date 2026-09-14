@@ -523,4 +523,22 @@ return [
     'po_err_not_found' => 'Purchase order not found.',
     'po_err_not_draft' => 'Only a draft purchase order can be edited or deleted.',
     'po_err_duplicate_submission' => 'This purchase order was already created. Please check the list before submitting again.',
+
+    // Purchase Order Receiving (Phase P2)
+    'po_submit_button' => 'Submit Order',
+    'po_submit_confirm' => 'Submit this purchase order? Line items cannot be edited after submitting.',
+    'po_submitted_toast' => 'Purchase order submitted.',
+    'po_receive_button' => 'Receive',
+    'po_receive_title' => 'Receive Purchase Order',
+    'po_col_ordered_qty' => 'Ordered',
+    'po_col_received_qty' => 'Received',
+    'po_col_remaining_qty' => 'Remaining',
+    'po_receive_qty_label' => 'Receiving Qty',
+    'po_receive_outstanding_lines' => 'Outstanding Lines',
+    'po_receive_nothing_outstanding' => 'Every line on this purchase order has already been fully received.',
+    'po_receive_note_placeholder' => 'Receiving for %s',
+    'po_received_toast' => 'Purchase order received.',
+    'po_err_not_receivable' => 'This purchase order cannot be received in its current status.',
+    'po_err_item_mismatch' => 'One of the submitted line items does not belong to this purchase order.',
+    'po_err_over_receive' => 'The received quantity exceeds what remains outstanding for that line.',
 ];

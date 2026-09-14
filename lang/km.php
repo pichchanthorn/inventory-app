@@ -522,4 +522,22 @@ return [
     'po_err_not_found' => 'រកមិនឃើញការបញ្ជាទិញ។',
     'po_err_not_draft' => 'មានតែការបញ្ជាទិញសេចក្តីព្រាងទេដែលអាចកែសម្រួល ឬលុបបាន។',
     'po_err_duplicate_submission' => 'ការបញ្ជាទិញនេះត្រូវបានបង្កើតរួចហើយ។ សូមពិនិត្យបញ្ជីមុននឹងដាក់ស្នើម្តងទៀត។',
+
+    // Purchase Order Receiving (Phase P2)
+    'po_submit_button' => 'ដាក់ស្នើការបញ្ជាទិញ',
+    'po_submit_confirm' => 'ដាក់ស្នើការបញ្ជាទិញនេះ? មិនអាចកែសម្រួលបន្ទាត់ទំនិញបានទៀតទេបន្ទាប់ពីដាក់ស្នើ។',
+    'po_submitted_toast' => 'បានដាក់ស្នើការបញ្ជាទិញ។',
+    'po_receive_button' => 'ទទួលទំនិញ',
+    'po_receive_title' => 'ទទួលការបញ្ជាទិញ',
+    'po_col_ordered_qty' => 'បានបញ្ជាទិញ',
+    'po_col_received_qty' => 'បានទទួល',
+    'po_col_remaining_qty' => 'នៅសល់',
+    'po_receive_qty_label' => 'បរិមាណកំពុងទទួល',
+    'po_receive_outstanding_lines' => 'បន្ទាត់ដែលនៅសល់',
+    'po_receive_nothing_outstanding' => 'រាល់បន្ទាត់ទាំងអស់ក្នុងការបញ្ជាទិញនេះត្រូវបានទទួលរួចហើយ។',
+    'po_receive_note_placeholder' => 'ការទទួលសម្រាប់ %s',
+    'po_received_toast' => 'បានទទួលការបញ្ជាទិញ។',
+    'po_err_not_receivable' => 'ការបញ្ជាទិញនេះមិនអាចទទួលបានទេនៅស្ថានភាពបច្ចុប្បន្ន។',
+    'po_err_item_mismatch' => 'បន្ទាត់ទំនិញមួយដែលបានដាក់ស្នើមិនមែនជារបស់ការបញ្ជាទិញនេះទេ។',
+    'po_err_over_receive' => 'បរិមាណដែលទទួលលើសពីបរិមាណនៅសល់សម្រាប់បន្ទាត់នោះ។',
 ];

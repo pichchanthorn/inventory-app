@@ -63,6 +63,14 @@ final class ConcurrencyTest extends TestCase
         // purchase_order_id), so only the header + its audit rows need
         // an explicit delete here.
         foreach ($this->cleanupPurchaseOrderIds as $id) {
+            // Phase P2: purchase_order_receipts.purchase_order_item_id has
+            // no ON DELETE behavior (RESTRICT), so any receipt row must be
+            // removed before the cascade-delete of purchase_order_items
+            // (triggered by deleting the purchase_orders row below) can
+            // succeed.
+            $this->pdo->exec("DELETE por FROM purchase_order_receipts por
+                               JOIN purchase_order_items poi ON poi.id = por.purchase_order_item_id
+                               WHERE poi.purchase_order_id = $id");
             $this->pdo->exec("DELETE FROM audit_log WHERE entity_type = 'purchase_order' AND entity_id = $id");
             $this->pdo->exec("DELETE FROM purchase_orders WHERE id = $id");
         }
@@ -1115,6 +1123,123 @@ final class ConcurrencyTest extends TestCase
             $this->assertSame('1.00', $items[0]['unit_cost']);
             $this->assertSame('1.00', $items[0]['subtotal']);
         }
+    }
+
+    // ---- Phase P2: Purchase Order Receiving concurrency ----
+    //
+    // Three scenarios required by the approved P2 architecture, all
+    // driving the real, unmodified receivePurchaseOrder() end to end from
+    // genuinely concurrent OS processes via purchase_order_receive_race.php.
+    // Whatever safety these observe comes entirely from (a) the atomic
+    // guarded UPDATE on purchase_order_items ("received_qty + ? <=
+    // ordered_qty") and (b) the purchase_orders row's own SELECT ... FOR
+    // UPDATE lock, taken before either line is touched - no PHP-level
+    // lock/mutex is introduced anywhere.
+
+    public function testTwoConcurrentReceiptsOfTheSameLineThatTogetherFitSucceedAndBothAccumulate(): void
+    {
+        [$poId, $itemIds] = $this->seedOrderedPurchaseOrder([['ordered_qty' => 20, 'unit_cost' => 1.00]]);
+        $itemId = $itemIds[0];
+        $userId = $this->seedUser();
+
+        $results = $this->runParallel([
+            ['purchase_order_receive_race.php', (string) $poId, (string) $itemId, '8', '1.00', (string) $userId],
+            ['purchase_order_receive_race.php', (string) $poId, (string) $itemId, '7', '1.00', (string) $userId],
+        ]);
+
+        foreach ($results as $r) {
+            $this->assertSame('ok', $r['status'], 'both concurrent receipts must succeed when their combined quantity still fits: ' . json_encode($r));
+        }
+
+        $stmt = $this->pdo->prepare('SELECT received_qty, ordered_qty FROM purchase_order_items WHERE id = ?');
+        $stmt->execute([$itemId]);
+        $row = $stmt->fetch();
+        $this->assertSame(15, (int) $row['received_qty'], 'both increments must be preserved - no lost update');
+        $this->assertLessThanOrEqual((int) $row['ordered_qty'], (int) $row['received_qty']);
+
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM purchase_order_receipts WHERE purchase_order_item_id = ?');
+        $stmt->execute([$itemId]);
+        $this->assertSame(2, (int) $stmt->fetchColumn(), 'each successful receipt must create its own receipt row');
+    }
+
+    public function testTwoConcurrentReceiptsOfTheSameLineThatTogetherWouldOverReceiveExactlyOneSucceeds(): void
+    {
+        [$poId, $itemIds] = $this->seedOrderedPurchaseOrder([['ordered_qty' => 10, 'unit_cost' => 1.00]]);
+        $itemId = $itemIds[0];
+        $userId = $this->seedUser();
+
+        // Each request alone (7) is within the ordered quantity (10), but
+        // together (14) they would over-receive - the atomic guarded
+        // UPDATE must let exactly one through.
+        $results = $this->runParallel([
+            ['purchase_order_receive_race.php', (string) $poId, (string) $itemId, '7', '1.00', (string) $userId],
+            ['purchase_order_receive_race.php', (string) $poId, (string) $itemId, '7', '1.00', (string) $userId],
+        ]);
+
+        $succeeded = array_filter($results, static fn(array $r): bool => $r['status'] === 'ok');
+        $failed = array_filter($results, static fn(array $r): bool => $r['status'] === 'error');
+        $this->assertCount(1, $succeeded, 'exactly one of the two conflicting receipts must succeed: ' . json_encode($results));
+        $this->assertCount(1, $failed);
+        $this->assertSame('PurchaseOrderOverReceiveException', array_values($failed)[0]['exception']);
+
+        $stmt = $this->pdo->prepare('SELECT received_qty FROM purchase_order_items WHERE id = ?');
+        $stmt->execute([$itemId]);
+        $this->assertSame(7, (int) $stmt->fetchColumn(), 'received_qty must reflect exactly one successful receipt, never both and never neither');
+
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM purchase_order_receipts WHERE purchase_order_item_id = ?');
+        $stmt->execute([$itemId]);
+        $this->assertSame(1, (int) $stmt->fetchColumn());
+    }
+
+    public function testTwoConcurrentReceiptsOfDifferentLinesOnTheSamePurchaseOrderBothSucceedWithoutDeadlock(): void
+    {
+        [$poId, $itemIds] = $this->seedOrderedPurchaseOrder([
+            ['ordered_qty' => 5, 'unit_cost' => 1.00],
+            ['ordered_qty' => 9, 'unit_cost' => 2.00],
+        ]);
+        $userId = $this->seedUser();
+
+        $results = $this->runParallel([
+            ['purchase_order_receive_race.php', (string) $poId, (string) $itemIds[0], '5', '1.00', (string) $userId],
+            ['purchase_order_receive_race.php', (string) $poId, (string) $itemIds[1], '9', '2.00', (string) $userId],
+        ]);
+
+        foreach ($results as $r) {
+            $this->assertSame('ok', $r['status'], 'two receipts against different lines of the same PO must never deadlock or fail each other: ' . json_encode($r));
+        }
+
+        $stmt = $this->pdo->prepare('SELECT id, received_qty, ordered_qty FROM purchase_order_items WHERE purchase_order_id = ? ORDER BY id');
+        $stmt->execute([$poId]);
+        foreach ($stmt->fetchAll() as $row) {
+            $this->assertSame((int) $row['ordered_qty'], (int) $row['received_qty'], "item {$row['id']} must be fully received");
+        }
+
+        $stmt = $this->pdo->prepare('SELECT status FROM purchase_orders WHERE id = ?');
+        $stmt->execute([$poId]);
+        $this->assertSame('received', $stmt->fetchColumn(), 'the PO must end up fully received once both of its lines are fully received');
+    }
+
+    /**
+     * @param array<int, array{ordered_qty:int, unit_cost:float}> $itemsSpec
+     * @return array{0:int, 1:int[]} [purchaseOrderId, itemIds in the same order as $itemsSpec]
+     */
+    private function seedOrderedPurchaseOrder(array $itemsSpec): array
+    {
+        $supplierId = $this->seedSupplier();
+        $stmt = $this->pdo->prepare("INSERT INTO purchase_orders (reference, supplier_id, status, order_date) VALUES (?,?,'ordered',?)");
+        $stmt->execute(['PUR-CONCTEST-' . bin2hex(random_bytes(4)), $supplierId, date('Y-m-d')]);
+        $poId = (int) $this->pdo->lastInsertId();
+        $this->cleanupPurchaseOrderIds[] = $poId;
+
+        $itemIds = [];
+        foreach ($itemsSpec as $spec) {
+            $productId = $this->seedProduct(0);
+            $stmt = $this->pdo->prepare('INSERT INTO purchase_order_items (purchase_order_id, product_id, ordered_qty, unit_cost) VALUES (?,?,?,?)');
+            $stmt->execute([$poId, $productId, $spec['ordered_qty'], $spec['unit_cost']]);
+            $itemIds[] = (int) $this->pdo->lastInsertId();
+        }
+
+        return [$poId, $itemIds];
     }
 
     private function seedSupplier(): int

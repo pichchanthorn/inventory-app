@@ -350,6 +350,38 @@ CREATE TABLE purchase_order_items (
     CONSTRAINT chk_po_items_received_not_over_ordered CHECK (received_qty <= ordered_qty)
 );
 
+-- Purchase Order receiving (Phase P2) - links one purchase_order_items
+-- row to the specific stock_transaction_items row that fulfilled it, one
+-- row per receiving event per line - what makes partial-receiving history
+-- ("which delivery contributed how much to this line") recoverable, not
+-- just the current cumulative purchase_order_items.received_qty.
+-- purchase_order_item_id has no uniqueness constraint - one PO line
+-- legitimately accumulates many receipt rows across partial deliveries.
+-- UNIQUE on stock_transaction_item_id: a single receiving-form line is
+-- always sourced from at most one PO line, so a given Stock In line item
+-- can only ever be the receipt for one PO line - a data-integrity
+-- backstop, not the primary duplicate-prevention mechanism (that is the
+-- receiving idempotency token plus the guarded received_qty UPDATE, see
+-- includes/purchase_order.php's receivePurchaseOrder()). No ON DELETE on
+-- either FK - a receipt row is real inventory-movement history and must
+-- never be silently destroyed by deleting what it links. See
+-- database/migrations/017_add_purchase_order_receipts.sql for the full
+-- design reasoning.
+CREATE TABLE purchase_order_receipts (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    purchase_order_item_id INT NOT NULL,
+    stock_transaction_item_id INT NOT NULL,
+    qty INT NOT NULL,
+    created_by INT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (purchase_order_item_id) REFERENCES purchase_order_items(id),
+    FOREIGN KEY (stock_transaction_item_id) REFERENCES stock_transaction_items(id),
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+    INDEX idx_purchase_order_item (purchase_order_item_id),
+    UNIQUE KEY uq_por_stock_transaction_item (stock_transaction_item_id),
+    CONSTRAINT chk_por_qty_positive CHECK (qty > 0)
+);
+
 -- Customers (credit/debt-tracking counterparties - farmers who buy on
 -- credit and pay later). Structurally mirrors suppliers (name/phone/
 -- address/note + audit columns) since a customer is the same kind of

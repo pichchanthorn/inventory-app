@@ -44,6 +44,56 @@ class PurchaseOrderNotDraftException extends RuntimeException {
     }
 }
 
+// Phase P2: thrown when receivePurchaseOrder() is called against a PO
+// whose status is not 'ordered' or 'partially_received' - a draft
+// (nothing to receive yet), an already-fully-received PO, or (in a
+// future phase) a cancelled one. Carries the actual status for the same
+// precise-message reason as PurchaseOrderNotDraftException above.
+class PurchaseOrderNotReceivableException extends RuntimeException {
+    public $poId;
+    public $status;
+    public function __construct(int $poId, string $status) {
+        parent::__construct('Purchase Order ' . $poId . ' is not receivable (status: ' . $status . ')');
+        $this->poId = $poId;
+        $this->status = $status;
+    }
+}
+
+// Phase P2: thrown when a posted purchase_order_items id does not belong
+// to the posted purchase_order_id - either the item id does not exist at
+// all, or it exists but for a DIFFERENT PO. This is the server-side
+// ownership check that must never trust a client-supplied parent/child
+// relationship, the same discipline ProductBatchNotFoundException
+// (includes/stock.php) already enforces for a batch id under a product.
+class PurchaseOrderItemMismatchException extends RuntimeException {
+    public $poId;
+    public $poItemId;
+    public function __construct(int $poId, int $poItemId) {
+        parent::__construct('Purchase order item ' . $poItemId . ' does not belong to Purchase Order ' . $poId);
+        $this->poId = $poId;
+        $this->poItemId = $poItemId;
+    }
+}
+
+// Phase P2: thrown when the guarded UPDATE in receivePurchaseOrder()
+// (below) affects 0 rows - the requested quantity would receive more
+// than the line's remaining (ordered_qty - received_qty) allows. This is
+// the correctness mechanism, not a PHP-side pre-check alone: the WHERE
+// clause's "received_qty + ? <= ordered_qty" condition is evaluated
+// atomically by the database at the moment of the write, so this
+// exception firing means the write was genuinely rejected, not that a
+// stale PHP-side read was merely inconsistent with a value read moments
+// earlier.
+class PurchaseOrderOverReceiveException extends RuntimeException {
+    public $poId;
+    public $poItemId;
+    public function __construct(int $poId, int $poItemId) {
+        parent::__construct('Requested quantity exceeds the remaining ordered quantity for purchase order item ' . $poItemId);
+        $this->poId = $poId;
+        $this->poItemId = $poItemId;
+    }
+}
+
 // "PUR-000123" - same nextReferenceSequence()-backed pattern as
 // nextStockReference()/nextDebtReference(), its own independent counter
 // key ('purchase_orders', migration 016) rather than sharing
@@ -276,6 +326,253 @@ function deletePurchaseOrder(PDO $pdo, int $poId, int $userId): void {
         logAudit($pdo, $userId, 'delete', 'purchase_order', $poId, $before, null);
 
         $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
+    }
+}
+
+// Phase P2: submits a draft Purchase Order (draft -> ordered). Owns the
+// transaction end to end - same shape as every other function in this
+// file. No idempotency token: a duplicate Submit POST is naturally
+// idempotent by construction (the second call's lock-then-check sees
+// status='ordered' already and is rejected by
+// PurchaseOrderNotDraftException, with zero side effect either time) -
+// unlike Receive below, Submit never mutates inventory, so there is
+// nothing a replay could double.
+function submitPurchaseOrder(PDO $pdo, int $poId, int $userId): void {
+    try {
+        $pdo->beginTransaction();
+
+        $stmt = $pdo->prepare('SELECT * FROM purchase_orders WHERE id = ? FOR UPDATE');
+        $stmt->execute([$poId]);
+        $before = $stmt->fetch();
+        if ($before === false) {
+            throw new PurchaseOrderNotFoundException($poId);
+        }
+        if ($before['status'] !== 'draft') {
+            throw new PurchaseOrderNotDraftException($poId, $before['status']);
+        }
+        $before['name'] = $before['reference'];
+
+        $stmt = $pdo->prepare("UPDATE purchase_orders SET status = 'ordered', updated_by = ? WHERE id = ?");
+        $stmt->execute([$userId, $poId]);
+
+        logAudit($pdo, $userId, 'update', 'purchase_order', $poId, $before, [
+            'name' => $before['reference'],
+            'status' => 'ordered',
+        ]);
+
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
+    }
+}
+
+// Phase P2: receives against an 'ordered' or 'partially_received'
+// Purchase Order. Owns ONE transaction end to end - idempotency claim,
+// PO-domain locking/validation, the actual Stock In mutation, receipt
+// linkage, status recompute, and audit all succeed or fail together.
+//
+// Lock order (must never be inverted - reviewed and confirmed against
+// every other lock-taking function in this codebase, none of which ever
+// touches a purchase_orders/purchase_order_items row, so there is no
+// existing code path that could conflict with this order):
+//   1. purchase_orders row (SELECT ... FOR UPDATE) - PO-domain, parent.
+//   2. purchase_order_items rows - PO-domain, children. NOT locked via a
+//      separate SELECT ... FOR UPDATE - the guarded UPDATE below (step
+//      3) takes its own row lock atomically as part of the write itself,
+//      exactly like insertStockOutLines()'s guarded current_stock
+//      decrement (includes/stock.php) needs no separate prior lock
+//      either. This is the "atomic DB guard is the correctness
+//      mechanism, not a PHP-side pre-check alone" design: the plain
+//      (non-locking) SELECT just above it only reads product_id/ordered_
+//      qty/received_qty for ownership validation and the audit "before"
+//      snapshot - it makes no concurrency-relevant decision itself.
+//   3. insertStockInTransaction()'s OWN internal products/product_batches
+//      locks - inventory-domain, entered only after 1+2 above are fully
+//      done for every line being received this call. insertStockInTransaction()
+//      is called completely unmodified; this function never touches a
+//      products or product_batches row directly.
+// No code in this function ever acquires a product/batch lock before the
+// purchase_orders row lock - verified by inspection: the PO row lock is
+// the first statement after the idempotency claim, and every subsequent
+// statement either targets purchase_orders/purchase_order_items/
+// purchase_order_receipts directly, or is the single call into
+// insertStockInTransaction() which owns its own internal ordering.
+//
+// $receiptLines: each entry is ['purchase_order_item_id'=>int, 'qty'=>int,
+// 'unit_cost'=>float, 'batch_number'=>?string, 'expiry_date'=>?string].
+// Caller is responsible for validating qty/unit_cost FORMAT before
+// calling this (non-negative-integer-string, no silent truncation;
+// non-negative numeric cost) - the same division of responsibility
+// createPurchaseOrder()'s own $items parameter already documents. This
+// function's own responsibility is what only a DB round-trip under lock
+// can decide: that every $purchase_order_item_id actually belongs to
+// $poId (never trusts a client-supplied parent/child relationship - see
+// PurchaseOrderItemMismatchException), and that the requested quantity
+// does not exceed what remains (via the guarded UPDATE, never a PHP-side
+// arithmetic check alone).
+//
+// Mapping contract this function relies on and itself preserves: builds
+// one internal ordered array ($receiptPlan) from $receiptLines, derives
+// the Stock In $lines for insertStockInTransaction() from that SAME
+// array in that SAME order, and zips $receiptPlan[i]['purchase_order_item_id']
+// with $result['item_ids'][i] to build each purchase_order_receipts row -
+// relying on insertStockInTransaction()'s own documented guarantee
+// (includes/stock.php) that item_ids is positionally aligned with its
+// input $lines, with no reordering/filtering, ever (see
+// tests/Integration/StockTest.php's
+// testInsertStockInTransactionReturnsReferenceTransactionIdAndItemIdsInOrder
+// for the existing proof of that producer-side contract, and this
+// phase's own multi-line receiving test for the consumer side).
+//
+// Audits exactly once per successful call, unconditionally - even when
+// the resulting status is unchanged (partially_received -> partially_received).
+// The event, not the status delta, is what is audited (same "audit the
+// event, not the value change" principle updatePurchaseOrder() already
+// follows). The audit's 'received_this_event' key is what this
+// specific call added, independent of the PO's cumulative state.
+//
+// Returns ['status'=>string, 'stock_reference'=>string, 'receipts'=>array]
+// - the new PO status, the Stock In reference this receipt produced, and
+// the per-line receipt linkage, everything a caller needs to show a
+// confirmation and redirect to the PO detail page.
+function receivePurchaseOrder(PDO $pdo, int $poId, array $receiptLines, string $date, ?string $note, int $userId, string $idempotencyToken): array {
+    try {
+        $pdo->beginTransaction();
+        claimIdempotencyToken($pdo, $idempotencyToken, $userId);
+
+        // Step 1: PO-domain parent lock, before anything else.
+        $stmt = $pdo->prepare('SELECT * FROM purchase_orders WHERE id = ? FOR UPDATE');
+        $stmt->execute([$poId]);
+        $po = $stmt->fetch();
+        if ($po === false) {
+            throw new PurchaseOrderNotFoundException($poId);
+        }
+        if (!in_array($po['status'], ['ordered', 'partially_received'], true)) {
+            throw new PurchaseOrderNotReceivableException($poId, $po['status']);
+        }
+
+        if (!$receiptLines) {
+            throw new InvalidArgumentException('at least one line must be received');
+        }
+
+        // Plain (non-locking) read: ownership validation + the audit
+        // "before" snapshot only - makes no concurrency-relevant decision
+        // itself (that is the guarded UPDATE below, per line).
+        $stmt = $pdo->prepare('SELECT id, product_id, ordered_qty, received_qty FROM purchase_order_items WHERE purchase_order_id = ?');
+        $stmt->execute([$poId]);
+        $itemsBeforeById = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $itemsBeforeById[(int) $row['id']] = $row;
+        }
+
+        // Step 2 (PO-domain children) + build the ordered $receiptPlan
+        // the mapping contract above depends on.
+        $receiptPlan = [];
+        foreach ($receiptLines as $line) {
+            $poItemId = (int) $line['purchase_order_item_id'];
+            $qty = (int) $line['qty'];
+            if ($qty <= 0) {
+                throw new InvalidArgumentException('received quantity must be a whole number greater than zero');
+            }
+            if (!isset($itemsBeforeById[$poItemId])) {
+                throw new PurchaseOrderItemMismatchException($poId, $poItemId);
+            }
+
+            // The guarded UPDATE IS the concurrency guarantee - its own
+            // WHERE clause is evaluated atomically by the database at
+            // the moment of the write, not from the plain SELECT above.
+            $stmt = $pdo->prepare('UPDATE purchase_order_items
+                                    SET received_qty = received_qty + ?
+                                    WHERE id = ? AND purchase_order_id = ? AND received_qty + ? <= ordered_qty');
+            $stmt->execute([$qty, $poItemId, $poId, $qty]);
+            if ($stmt->rowCount() === 0) {
+                throw new PurchaseOrderOverReceiveException($poId, $poItemId);
+            }
+
+            $receiptPlan[] = [
+                'purchase_order_item_id' => $poItemId,
+                'product_id' => (int) $itemsBeforeById[$poItemId]['product_id'],
+                'qty' => $qty,
+                'unit_cost' => (float) $line['unit_cost'],
+                'batch_number' => $line['batch_number'] ?? null,
+                'expiry_date' => $line['expiry_date'] ?? null,
+            ];
+        }
+
+        // Step 3: the ONE canonical Stock In mutation - reused, never
+        // duplicated. $lines derived from $receiptPlan in the SAME order.
+        $stockInLines = array_map(static fn(array $r): array => [
+            'product_id' => $r['product_id'],
+            'qty' => $r['qty'],
+            'cost' => $r['unit_cost'],
+            'batch_number' => $r['batch_number'],
+            'expiry_date' => $r['expiry_date'],
+        ], $receiptPlan);
+
+        $stockInNote = ($note !== null && trim($note) !== '') ? $note : ('Receiving for ' . $po['reference']);
+        $result = insertStockInTransaction($pdo, $stockInLines, $date, (int) $po['supplier_id'], $stockInNote, $userId);
+
+        // Zip $receiptPlan[i] with $result['item_ids'][i] - the mapping
+        // contract this whole design rests on (see this function's own
+        // header comment).
+        $receivedThisEvent = [];
+        foreach ($receiptPlan as $i => $r) {
+            $stiId = $result['item_ids'][$i];
+            $stmt = $pdo->prepare('INSERT INTO purchase_order_receipts (purchase_order_item_id, stock_transaction_item_id, qty, created_by) VALUES (?,?,?,?)');
+            $stmt->execute([$r['purchase_order_item_id'], $stiId, $r['qty'], $userId]);
+            $receivedThisEvent[] = [
+                'purchase_order_item_id' => $r['purchase_order_item_id'],
+                'qty' => $r['qty'],
+                'stock_transaction_item_id' => $stiId,
+            ];
+        }
+
+        // Recompute status from a FRESH read of every line (post-write) -
+        // never trusts the pre-write $itemsBeforeById snapshot, since
+        // this call may have just changed some of those rows.
+        $stmt = $pdo->prepare('SELECT id, ordered_qty, received_qty FROM purchase_order_items WHERE purchase_order_id = ?');
+        $stmt->execute([$poId]);
+        $itemsAfter = $stmt->fetchAll();
+        $allFullyReceived = true;
+        foreach ($itemsAfter as $row) {
+            if ((int) $row['received_qty'] < (int) $row['ordered_qty']) {
+                $allFullyReceived = false;
+                break;
+            }
+        }
+        $newStatus = $allFullyReceived ? 'received' : 'partially_received';
+
+        $stmt = $pdo->prepare('UPDATE purchase_orders SET status = ?, updated_by = ? WHERE id = ?');
+        $stmt->execute([$newStatus, $userId, $poId]);
+
+        // Audited unconditionally, even when $newStatus === $po['status']
+        // (partially_received -> partially_received) - the event is what
+        // is audited, not whether the status label happened to move.
+        logAudit($pdo, $userId, 'update', 'purchase_order', $poId, [
+            'name' => $po['reference'],
+            'status' => $po['status'],
+            'items' => array_map(static fn(array $row): array => [
+                'id' => (int) $row['id'], 'ordered_qty' => (int) $row['ordered_qty'], 'received_qty' => (int) $row['received_qty'],
+            ], array_values($itemsBeforeById)),
+        ], [
+            'name' => $po['reference'],
+            'status' => $newStatus,
+            'items' => array_map(static fn(array $row): array => [
+                'id' => (int) $row['id'], 'ordered_qty' => (int) $row['ordered_qty'], 'received_qty' => (int) $row['received_qty'],
+            ], $itemsAfter),
+            'received_this_event' => $receivedThisEvent,
+        ]);
+
+        $pdo->commit();
+        return ['status' => $newStatus, 'stock_reference' => $result['reference'], 'receipts' => $receivedThisEvent];
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) {
             $pdo->rollBack();

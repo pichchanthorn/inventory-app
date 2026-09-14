@@ -72,12 +72,21 @@ $statusLabels = [
     <a href="<?= BASE_URL ?>/purchase-order/index.php" class="btn btn-outline-secondary btn-sm"><?= __('po_back_to_list') ?></a>
     <?php if (canWrite() && $po['status'] === 'draft'): ?>
     <a href="<?= BASE_URL ?>/purchase-order/edit.php?id=<?= $po['id'] ?>" class="btn btn-outline-primary btn-sm"><i class="bi bi-pencil"></i> <?= __('po_edit_button') ?></a>
+    <form method="post" action="<?= BASE_URL ?>/purchase-order/index.php" class="d-inline" onsubmit="return confirm('<?= __('po_submit_confirm') ?>')">
+      <?= csrf_field() ?>
+      <input type="hidden" name="action" value="submit">
+      <input type="hidden" name="id" value="<?= $po['id'] ?>">
+      <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-send-check"></i> <?= __('po_submit_button') ?></button>
+    </form>
     <form method="post" action="<?= BASE_URL ?>/purchase-order/index.php" class="d-inline" onsubmit="return confirm('<?= __('po_delete_confirm') ?>')">
       <?= csrf_field() ?>
       <input type="hidden" name="action" value="delete">
       <input type="hidden" name="id" value="<?= $po['id'] ?>">
       <button type="submit" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i> <?= __('po_delete_button') ?></button>
     </form>
+    <?php endif; ?>
+    <?php if (canWrite() && in_array($po['status'], ['ordered', 'partially_received'], true)): ?>
+    <a href="<?= BASE_URL ?>/purchase-order/receive.php?id=<?= $po['id'] ?>" class="btn btn-primary btn-sm"><i class="bi bi-box-seam"></i> <?= __('po_receive_button') ?></a>
     <?php endif; ?>
   </div>
 </div>
@@ -114,27 +123,33 @@ $statusLabels = [
     <thead class="table-light">
       <tr>
         <th><?= __('common_product') ?></th>
-        <th class="text-end"><?= __('common_qty') ?></th>
+        <th class="text-end"><?= __('po_col_ordered_qty') ?></th>
+        <th class="text-end"><?= __('po_col_received_qty') ?></th>
+        <th class="text-end"><?= __('po_col_remaining_qty') ?></th>
         <th class="text-end"><?= __('po_unit_cost') ?></th>
         <th class="text-end"><?= __('po_subtotal') ?></th>
       </tr>
     </thead>
     <tbody>
-      <?php foreach ($items as $it): ?>
+      <?php foreach ($items as $it):
+        $remaining = (int) $it['ordered_qty'] - (int) $it['received_qty'];
+      ?>
       <tr>
         <td class="row-title">
           <?= htmlspecialchars($it['product_name']) ?>
           <?php if ($it['package_size']): ?><span class="text-secondary small"> — <?= htmlspecialchars($it['package_size']) ?></span><?php endif; ?>
           <div><span class="slug-pill"><?= htmlspecialchars($it['sku']) ?></span></div>
         </td>
-        <td class="mono text-end" data-label="<?= htmlspecialchars(__('common_qty')) ?>"><?= (int) $it['ordered_qty'] ?></td>
+        <td class="mono text-end" data-label="<?= htmlspecialchars(__('po_col_ordered_qty')) ?>"><?= (int) $it['ordered_qty'] ?></td>
+        <td class="mono text-end" data-label="<?= htmlspecialchars(__('po_col_received_qty')) ?>"><?= (int) $it['received_qty'] ?></td>
+        <td class="mono text-end" data-label="<?= htmlspecialchars(__('po_col_remaining_qty')) ?>"><?= $remaining ?></td>
         <td class="mono text-end" data-label="<?= htmlspecialchars(__('po_unit_cost')) ?>">$<?= number_format((float) $it['unit_cost'], 2) ?></td>
         <td class="mono text-end" data-label="<?= htmlspecialchars(__('po_subtotal')) ?>">$<?= number_format((float) $it['subtotal'], 2) ?></td>
       </tr>
       <?php endforeach; ?>
     </tbody>
     <tfoot>
-      <tr><td colspan="3" class="text-end fw-bold"><?= __('po_col_total') ?></td><td class="text-end fw-bold mono">$<?= number_format($total, 2) ?></td></tr>
+      <tr><td colspan="5" class="text-end fw-bold"><?= __('po_col_total') ?></td><td class="text-end fw-bold mono">$<?= number_format($total, 2) ?></td></tr>
     </tfoot>
   </table>
 </div>
