@@ -94,6 +94,24 @@ class PurchaseOrderOverReceiveException extends RuntimeException {
     }
 }
 
+// Phase P3-A: thrown when cancelPurchaseOrder() is called against a PO
+// whose status is not 'ordered' or 'partially_received' - a draft (use
+// deletePurchaseOrder() instead: a draft has no receiving history worth
+// preserving, so it is removed outright rather than marked cancelled),
+// an already-fully-received PO (nothing left to cancel), or an
+// already-cancelled PO (repeated cancellation must reject, not silently
+// no-op or double-audit). Carries the actual status for the same
+// precise-message reason as the exceptions above.
+class PurchaseOrderNotCancellableException extends RuntimeException {
+    public $poId;
+    public $status;
+    public function __construct(int $poId, string $status) {
+        parent::__construct('Purchase Order ' . $poId . ' is not cancellable (status: ' . $status . ')');
+        $this->poId = $poId;
+        $this->status = $status;
+    }
+}
+
 // "PUR-000123" - same nextReferenceSequence()-backed pattern as
 // nextStockReference()/nextDebtReference(), its own independent counter
 // key ('purchase_orders', migration 016) rather than sharing
@@ -573,6 +591,81 @@ function receivePurchaseOrder(PDO $pdo, int $poId, array $receiptLines, string $
 
         $pdo->commit();
         return ['status' => $newStatus, 'stock_reference' => $result['reference'], 'receipts' => $receivedThisEvent];
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
+    }
+}
+
+// Phase P3-A: cancels an 'ordered' or 'partially_received' Purchase
+// Order. Owns ONE short transaction end to end - same shape as
+// submitPurchaseOrder() above, since Cancel is exactly as simple as
+// Submit: a single-row status transition with no downstream mutation of
+// any kind.
+//
+// Deliberately touches ONLY the purchase_orders row:
+//   - purchase_order_items (ordered_qty/received_qty) is never written.
+//   - purchase_order_receipts is never written.
+//   - products/current_stock, product_batches, stock_transactions,
+//     stock_transaction_items are never touched.
+// A partially received PO's already-received quantities, its receipt
+// rows, and the stock they produced are historical fact and stay
+// exactly as they are - Cancel only stops the REMAINING, unreceived
+// portion from ever being received.
+//
+// Locking: SELECT ... FOR UPDATE on the purchase_orders row, the
+// identical lock receivePurchaseOrder() takes as its own first
+// mutating step. Whichever of a concurrent Cancel/Receive (or
+// Cancel/Cancel) pair commits first wins; the loser's own status check
+// - Cancel requires {ordered, partially_received}, Receive requires the
+// same set - fails cleanly against the now-different committed status,
+// with zero partial mutation on either side. Cancel never descends past
+// the PO header, so it is strictly shallower in the lock hierarchy than
+// Receive and introduces no new deadlock risk.
+//
+// No idempotency token: Cancel never mutates inventory, so a duplicate/
+// replayed Cancel POST is naturally idempotent-by-rejection - the
+// second call's lock-then-check sees status='cancelled' already and is
+// rejected by PurchaseOrderNotCancellableException, with zero side
+// effect either time. Identical reasoning to submitPurchaseOrder()'s
+// own "no token" comment above.
+//
+// $reason is optional and audit-only (per approved P3 architecture): it
+// is never written to any column (no cancel_reason field exists, and
+// none is added by this phase) and is never appended to the PO's own
+// `note` - it only appears inside the audit 'after' snapshot, exactly
+// like receivePurchaseOrder()'s 'received_this_event' is audit-only
+// data describing what a specific event did.
+function cancelPurchaseOrder(PDO $pdo, int $poId, int $userId, ?string $reason = null): void {
+    try {
+        $pdo->beginTransaction();
+
+        $stmt = $pdo->prepare('SELECT * FROM purchase_orders WHERE id = ? FOR UPDATE');
+        $stmt->execute([$poId]);
+        $before = $stmt->fetch();
+        if ($before === false) {
+            throw new PurchaseOrderNotFoundException($poId);
+        }
+        if (!in_array($before['status'], ['ordered', 'partially_received'], true)) {
+            throw new PurchaseOrderNotCancellableException($poId, $before['status']);
+        }
+        $before['name'] = $before['reference'];
+
+        $stmt = $pdo->prepare("UPDATE purchase_orders SET status = 'cancelled', updated_by = ? WHERE id = ?");
+        $stmt->execute([$userId, $poId]);
+
+        $after = [
+            'name' => $before['reference'],
+            'status' => 'cancelled',
+        ];
+        if ($reason !== null && trim($reason) !== '') {
+            $after['cancel_reason'] = trim($reason);
+        }
+        logAudit($pdo, $userId, 'update', 'purchase_order', $poId, $before, $after);
+
+        $pdo->commit();
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) {
             $pdo->rollBack();

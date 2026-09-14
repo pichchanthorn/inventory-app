@@ -35,6 +35,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'submi
     }
 }
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'cancel') {
+    csrf_verify();
+    if (!canWrite()) {
+        $error = __('common_err_forbidden');
+    } else {
+        $id = (int) $_POST['id'];
+        $reason = trim($_POST['cancel_reason'] ?? '');
+        try {
+            cancelPurchaseOrder($pdo, $id, (int) $_SESSION['user_id'], $reason !== '' ? $reason : null);
+            $_SESSION['po_flash'] = __('po_cancelled_toast');
+            header('Location: ' . BASE_URL . '/purchase-order/view.php?id=' . $id);
+            exit;
+        } catch (PurchaseOrderNotFoundException $e) {
+            $error = __('po_err_not_found');
+        } catch (PurchaseOrderNotCancellableException $e) {
+            $error = __('po_err_not_cancellable');
+        } catch (Throwable $e) {
+            error_log('Purchase Order cancel failed: ' . $e->getMessage());
+            $error = __('common_err_transaction_failed');
+        }
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete') {
     csrf_verify();
     if (!canWrite()) {
