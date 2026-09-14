@@ -13,6 +13,28 @@ unset($_SESSION['po_flash']);
 $error = $_SESSION['po_flash_error'] ?? '';
 unset($_SESSION['po_flash_error']);
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'submit') {
+    csrf_verify();
+    if (!canWrite()) {
+        $error = __('common_err_forbidden');
+    } else {
+        $id = (int) $_POST['id'];
+        try {
+            submitPurchaseOrder($pdo, $id, (int) $_SESSION['user_id']);
+            $_SESSION['po_flash'] = __('po_submitted_toast');
+            header('Location: ' . BASE_URL . '/purchase-order/view.php?id=' . $id);
+            exit;
+        } catch (PurchaseOrderNotFoundException $e) {
+            $error = __('po_err_not_found');
+        } catch (PurchaseOrderNotDraftException $e) {
+            $error = __('po_err_not_draft');
+        } catch (Throwable $e) {
+            error_log('Purchase Order submit failed: ' . $e->getMessage());
+            $error = __('common_err_transaction_failed');
+        }
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete') {
     csrf_verify();
     if (!canWrite()) {

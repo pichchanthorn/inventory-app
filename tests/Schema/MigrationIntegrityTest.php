@@ -17,7 +17,7 @@ use Tests\SchemaBuilder;
 //     tests/bootstrap.php already built for the whole suite - no new
 //     infrastructure needed for this half.
 //
-//  2. testMigrations001Through016ApplyCleanlyToACompatibleDatabase() -
+//  2. testMigrations001Through017ApplyCleanlyToACompatibleDatabase() -
 //     every migration file's own header comment says it must run
 //     "against an EXISTING database that predates this change" (a truly
 //     empty database does not qualify - these are additive ALTER/CREATE
@@ -77,7 +77,7 @@ final class MigrationIntegrityTest extends TestCase
             'customer_debts', 'customer_debt_payments', 'app_settings',
             'audit_log', 'idempotency_keys', 'reference_counters',
             'product_batches', 'stock_transaction_item_batches',
-            'purchase_orders', 'purchase_order_items',
+            'purchase_orders', 'purchase_order_items', 'purchase_order_receipts',
         ];
         foreach ($expectedTables as $table) {
             $this->assertTrue($this->tableExists($this->mainPdo, $dbName, $table), "expected table '$table' to exist after a fresh schema.sql install");
@@ -90,12 +90,13 @@ final class MigrationIntegrityTest extends TestCase
         $this->assertTrue($this->columnExists($this->mainPdo, $dbName, 'idempotency_keys', 'token'));
         $this->assertTrue($this->columnExists($this->mainPdo, $dbName, 'purchase_orders', 'status'));
         $this->assertTrue($this->columnExists($this->mainPdo, $dbName, 'purchase_order_items', 'subtotal'));
+        $this->assertTrue($this->columnExists($this->mainPdo, $dbName, 'purchase_order_receipts', 'stock_transaction_item_id'));
 
         $seedCount = (int) $this->mainPdo->query('SELECT COUNT(*) FROM reference_counters')->fetchColumn();
         $this->assertSame(3, $seedCount, 'a fresh install must seed all three reference_counters rows (stock_transactions, customer_debts, purchase_orders)');
     }
 
-    public function testMigrations001Through016ApplyCleanlyToACompatibleDatabase(): void
+    public function testMigrations001Through017ApplyCleanlyToACompatibleDatabase(): void
     {
         $builder = new SchemaBuilder($this->scratchPdo);
         $builder->dropAllTables();
@@ -103,9 +104,9 @@ final class MigrationIntegrityTest extends TestCase
 
         $migrationsDir = dirname(__DIR__, 2) . '/database/migrations';
         $files = glob($migrationsDir . '/0*.sql');
-        sort($files); // filenames are zero-padded (001_..016_..), so lexical sort is numeric order
+        sort($files); // filenames are zero-padded (001_..017_..), so lexical sort is numeric order
 
-        $this->assertCount(16, $files, 'expected exactly migrations 001 through 016 to be present');
+        $this->assertCount(17, $files, 'expected exactly migrations 001 through 017 to be present');
 
         foreach ($files as $file) {
             try {
@@ -131,6 +132,7 @@ final class MigrationIntegrityTest extends TestCase
             'users' => ['updated_at', 'created_by', 'updated_by'],
             'purchase_orders' => ['reference', 'supplier_id', 'status', 'order_date', 'expected_date', 'note'],
             'purchase_order_items' => ['ordered_qty', 'unit_cost', 'subtotal', 'received_qty'],
+            'purchase_order_receipts' => ['purchase_order_item_id', 'stock_transaction_item_id', 'qty'],
         ];
         foreach ($expectedColumns as $table => $columns) {
             foreach ($columns as $column) {
@@ -141,7 +143,7 @@ final class MigrationIntegrityTest extends TestCase
             }
         }
 
-        $expectedNewTables = ['app_settings', 'audit_log', 'customers', 'customer_debts', 'customer_debt_payments', 'idempotency_keys', 'reference_counters', 'product_batches', 'stock_transaction_item_batches', 'purchase_orders', 'purchase_order_items'];
+        $expectedNewTables = ['app_settings', 'audit_log', 'customers', 'customer_debts', 'customer_debt_payments', 'idempotency_keys', 'reference_counters', 'product_batches', 'stock_transaction_item_batches', 'purchase_orders', 'purchase_order_items', 'purchase_order_receipts'];
         foreach ($expectedNewTables as $table) {
             $this->assertTrue($this->tableExists($this->scratchPdo, $this->scratchDbName, $table), "migrated database is missing table '$table'");
         }
