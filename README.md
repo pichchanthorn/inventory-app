@@ -8,6 +8,8 @@
 **Course:** Advanced PHP & MySQL
 **Business:** PCTN Fertilizer Shop, Cambodia — built for real day-to-day shop use, not just as a coursework demo
 **Stack:** PHP (PDO) · MySQL/MariaDB · Bootstrap 5 · Vanilla JS
+**Version:** v1.0.0
+**Status:** Stable
 
 A full-stack inventory management system for tracking agrochemical products
 (fertilizers, pesticides), suppliers, customers, and stock movements. It
