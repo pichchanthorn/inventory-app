@@ -651,6 +651,189 @@ started as part of this entry.
 **Low Stock Alert / Reorder Management = COMPLETE.**
 **L2 Final QA = PASS.**
 
-Which feature area to take on next is a separate roadmap decision, to be
-made at a future feature-selection/audit checkpoint — not decided or
-started as part of this entry.
+
+The feature area taken on next was Purchase Orders — see the three
+phases below.
+
+---
+
+## Purchase Order Management — Phase P1 (Schema / Draft-Only Core)
+
+**Status: COMPLETE / MERGED.**
+
+- Feature branch: `feature/p1-purchase-order-core`.
+- Implementation commit: `f729838` ("feat: add purchase order schema and
+  draft-only PO core").
+- Merged via PR #80. Main merge commit: `2283319`.
+- Migration `016_add_purchase_orders.sql` adds `purchase_orders` and
+  `purchase_order_items`.
+- `purchase_orders.status` is a plain `ENUM('draft','ordered',
+  'partially_received','received','cancelled')` column (not a generated
+  column, since later phases need to aggregate across
+  `purchase_order_items` rows, which a generated column cannot do) —
+  deliberately carrying the full future lifecycle even though this phase
+  only ever writes `draft`, to avoid a later destructive `ALTER ...
+  MODIFY ENUM` once receiving/cancellation shipped.
+- `purchase_order_items.subtotal` is a generated column
+  (`ordered_qty * unit_cost`), matching the existing
+  "store the line, derive the aggregate" pattern already used elsewhere
+  in the schema (no stored header total on `purchase_orders` either —
+  always summed from items at read time).
+- Own reference-counter key (`'purchase_orders'`, format `PUR-000123`),
+  independent of the existing `'stock_transactions'`/`'customer_debts'`
+  counters, using the same `nextReferenceSequence()` row-lock mechanism.
+- Scope: create / view / edit / delete a **draft** Purchase Order only.
+  No submit, receive, or cancel — `updatePurchaseOrder()`/
+  `deletePurchaseOrder()` both re-validate `status = 'draft'` under a
+  row lock at the moment of write, never trusting an earlier read.
+- Full English/Khmer localization; RBAC (`canWrite()`) and CSRF on every
+  mutating action; idempotency token support on create, reusing the
+  existing `claimIdempotencyToken()` mechanism.
+- Verified via the project's standard Integration/HTTP/Concurrency test
+  layers (reference-generation and full-creation races run as genuinely
+  separate OS processes) plus a full regression run, all green, before
+  merge.
+
+**Deferred to later phases (by design):** submit, receive, cancel,
+amend-after-submit, any status other than `draft`.
+
+---
+
+## Purchase Order Management — Phase P2 (Receiving / Stock In Integration)
+
+**Status: COMPLETE / MERGED.**
+
+- Feature branch: `feature/p2-po-receiving`.
+- Implementation commit: `759ddb4` ("Add Purchase Order receiving /
+  Stock In integration").
+- Merged via PR #81. Main merge commit: `976c371`.
+- Migration `017_add_purchase_order_receipts.sql` adds
+  `purchase_order_receipts` (links each `purchase_order_items` row to
+  the `stock_transaction_items` row it produced; `UNIQUE` on
+  `stock_transaction_item_id`, `CHECK (qty > 0)`, no uniqueness on
+  `purchase_order_item_id` since one line can accumulate receipts across
+  several partial deliveries).
+- `submitPurchaseOrder()`: `draft → ordered`. No idempotency token
+  needed — it never mutates inventory, so a duplicate submit attempt is
+  naturally rejected (status already `ordered`) with zero side effect.
+- `receivePurchaseOrder()`: full or partial receiving from `ordered`/
+  `partially_received`, owning one transaction end to end — claims a
+  Receive idempotency token first, locks the `purchase_orders` row
+  (`SELECT ... FOR UPDATE`), guards `received_qty` with a single atomic
+  `UPDATE ... WHERE received_qty + ? <= ordered_qty` (the database guard
+  itself is the concurrency mechanism, not a PHP-side pre-check), calls
+  the existing `insertStockInTransaction()` directly (never duplicates
+  Stock In logic, never calls `recordStockIn()`), builds an explicit
+  ordered `$receiptPlan` so the PO-item ↔ `stock_transaction_item`
+  mapping is deterministic rather than inferred from row order, then
+  recomputes `purchase_orders.status` from a fresh read of every line.
+- Audit: one `purchase_order` row per Submit; exactly one per successful
+  Receive, **including** a `partially_received → partially_received`
+  event where the aggregate status doesn't change — a receiving event is
+  auditable independent of whether the header status moved.
+- Batch/expiry receiving reuses the existing Stock In batch architecture
+  unchanged; receiving cost defaults to the PO's own quoted `unit_cost`
+  but remains editable at receipt time.
+- Post-merge verification (independent read-only pass against `main`)
+  confirmed: full regression **359 tests / 2,904 assertions**;
+  concurrency suite **34 tests / 613 assertions**; PO-domain lock
+  ordering (`purchase_orders` → `purchase_order_items` →
+  products/batches) verified with no reverse-lock/deadlock risk; RBAC,
+  CSRF, and receipt-linkage mapping all confirmed correct against the
+  live database, not merely by test assertions.
+
+**Deferred to later phases (by design):** cancellation, low-stock → PO
+integration, notifications, forecasting, COGS/weighted-average costing,
+supplier portal, multi-warehouse, PWA, a dedicated receiving queue,
+bulk multi-PO receiving.
+
+---
+
+## Purchase Order Management — Phase P3-A (Cancellation)
+
+**Status: COMPLETE / MERGED.**
+
+- Feature branch: `feature/p3a-po-cancellation`.
+- Implementation commit: `d355e62` ("feat: add purchase order
+  cancellation").
+- Merged via PR #82. Main merge commit: `ad066ee`.
+- No new migration — the `cancelled` status value already existed in
+  `purchase_orders.status`'s ENUM since P1, specifically anticipating
+  this phase.
+- `cancelPurchaseOrder(PDO $pdo, int $poId, int $userId, ?string $reason
+  = null): void` added to `includes/purchase_order.php`, the same shape
+  as `submitPurchaseOrder()`: one short transaction, `SELECT ... FOR
+  UPDATE` on the `purchase_orders` row (the identical lock
+  `receivePurchaseOrder()` takes as its own first mutating step, so a
+  concurrent Cancel/Receive or Cancel/Cancel pair always resolves to
+  exactly one winner with zero partial mutation), allows only `ordered`
+  and `partially_received` as source statuses, and touches **only** the
+  `purchase_orders` row — `purchase_order_items`, `purchase_order_
+  receipts`, `products`/`current_stock`, and `stock_transactions` are
+  never written. A `draft` PO is still removed via the existing
+  `deletePurchaseOrder()` (a draft has no receiving history worth
+  preserving); Cancel deliberately does not accept `draft` as a source
+  status, to avoid two competing removal paths for the same state.
+- No idempotency token needed, by the same reasoning as Submit — Cancel
+  never mutates inventory, so a duplicate/replayed request is naturally
+  rejected (`PurchaseOrderNotCancellableException`) with zero side
+  effect.
+- An optional cancellation reason is accepted but is **audit-only** —
+  it is never written to any column (no `cancel_reason` field was
+  added) and never appended to the PO's own `note`; it appears only
+  inside the audit row's `after` snapshot, on the same principle as
+  Receive's own `received_this_event` audit data.
+- New Cancel action/button added to `purchase-order/index.php` and
+  `view.php`, gated by the existing `canWrite()`/CSRF conventions,
+  visible only for `ordered`/`partially_received` status — the existing
+  `cancelled` status badge/filter/localization, already present since
+  P1, needed no changes.
+
+**Final QA (independent verification pass, this session):**
+
+- **Final QA = PASS.**
+- Integration (`tests/Integration/PurchaseOrderCancellationTest.php`):
+  **18 tests / 31 assertions** — covers every allowed/forbidden
+  transition, exactly-one-audit-row-per-cancel, and explicit
+  before/after snapshot comparisons proving stock, `received_qty`,
+  `purchase_order_receipts`, and `purchase_order_items` are all left
+  byte-for-byte unchanged by a partially-received cancellation.
+- HTTP (`tests/Http/PurchaseOrderCancellationHttpTest.php`): **12 tests
+  / 40 assertions**; the full `tests/Http/` directory (every consumer of
+  the shared HTTP test base class): **128 tests / 629 assertions**.
+- Concurrency: the two dedicated Cancel scenarios (Cancel vs. Receive,
+  Cancel vs. Cancel, both against genuinely separate OS processes) —
+  **2 tests / 23 assertions**, run 3 times with identical results; full
+  concurrency suite: **36 tests / 636 assertions**.
+- Full regression suite: **391 tests / 3,006 assertions**.
+- `git diff --check`: clean.
+- RBAC/CSRF: Viewer cannot cancel (direct POST with a valid CSRF token
+  still rejected server-side, not merely a hidden button); missing/
+  invalid CSRF rejected with HTTP 403 and zero mutation; a GET with
+  `action=cancel` in the query string never mutates; a tampered/
+  nonexistent PO id is rejected safely.
+- **Known limitation (environment, not an application defect):** the
+  Windows/XAMPP PHP built-in-server HTTP test suite intermittently times
+  out under PHPUnit on that specific platform. This was investigated
+  extensively (stdout/stderr pipe → file → `NUL`-device redirection;
+  cumulative request-count, test-identity, and page-render-repetition
+  isolation experiments) without ever reproducing on Linux and without
+  any experiment result implicating P3-A's own application logic — the
+  evidence is most consistent with a probabilistic, platform-specific
+  factor outside this codebase's control (most plausibly antivirus/
+  real-time-scanning interference or a Windows-specific PHP built-in-
+  server socket-teardown timing characteristic). No test assertion was
+  weakened and no sleep/retry/timeout workaround was introduced to mask
+  it. Documented here as a known test-infrastructure limitation, tracked
+  separately from P3-A's own correctness.
+
+**Deferred / out of scope (not part of this feature):** Low Stock → PO
+integration, automatic PO creation/submission, a Dashboard PO KPI,
+notifications, forecasting, supplier portal, multi-warehouse, PWA,
+PO amendment/edit-after-submit.
+
+**Purchase Order Management (P1 → P3-A) = COMPLETE.**
+
+The next planned phase is **P3-B — Low Stock → Assisted Draft Purchase
+Order** (read-only planning only as of this entry; not yet implemented,
+not yet branched).
