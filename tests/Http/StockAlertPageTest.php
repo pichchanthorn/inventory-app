@@ -259,6 +259,173 @@ final class StockAlertPageTest extends HttpServerTestCase
         $this->assertStringContainsString('&lt;script&gt;', $body, 'the supplier name must render HTML-escaped');
     }
 
+    // ---- Phase P3-B3: Low Stock -> assisted Draft PO action ----
+
+    public function testSupplierGroupOffersACreateDraftPoLinkCarryingItsProducts(): void
+    {
+        $jar = $this->loggedInUserSession();
+        $token = bin2hex(random_bytes(4));
+        $supplier = $this->seedSupplier("P3B3 Supplier $token");
+        $first = $this->seedProduct("P3B3 First $token", 1, 5, 10, $supplier['id']);
+        $second = $this->seedProduct("P3B3 Second $token", 2, 5, null, $supplier['id']);
+
+        $res = $this->httpGet($jar, '/stock-alert/index.php');
+        $this->assertSame(200, $res['status']);
+        $body = $res['body'];
+
+        $this->assertStringContainsString('Create Draft PO', $body, 'a supplier group must offer the action');
+
+        $url = $this->createPoUrlForSupplier($body, $supplier['id']);
+        $this->assertNotNull($url, 'a Create Draft PO link naming this supplier must render');
+
+        $query = $this->parsePrefillUrl($url);
+        $this->assertSame((string) $supplier['id'], $query['supplier_id']);
+        $this->assertEqualsCanonicalizing(
+            [(string) $first, (string) $second],
+            $query['product_id'],
+            'the link must carry exactly this supplier\'s low-stock product ids'
+        );
+    }
+
+    public function testCreateDraftPoUrlIsProperlyEncoded(): void
+    {
+        $jar = $this->loggedInUserSession();
+        $token = bin2hex(random_bytes(4));
+        $supplier = $this->seedSupplier("P3B3 Encoding $token");
+        $productId = $this->seedProduct("P3B3 Encoded Product $token", 1, 5, 5, $supplier['id']);
+
+        $res = $this->httpGet($jar, '/stock-alert/index.php');
+        $url = $this->createPoUrlForSupplier($res['body'], $supplier['id']);
+        $this->assertNotNull($url);
+
+        // http_build_query percent-encodes the array brackets; the raw
+        // '[' / ']' must never appear unencoded in the emitted href.
+        $this->assertStringContainsString('product_id%5B0%5D=' . $productId, $url, 'array keys must be percent-encoded');
+        $this->assertStringNotContainsString('product_id[]', $url);
+
+        // And it must round-trip back into the shape P3-B2 parses.
+        $query = $this->parsePrefillUrl($url);
+        $this->assertSame([(string) $productId], $query['product_id']);
+    }
+
+    public function testCreateDraftPoLinkActuallyPrefillsThePurchaseOrderForm(): void
+    {
+        $jar = $this->loggedInUserSession();
+        $token = bin2hex(random_bytes(4));
+        $supplier = $this->seedSupplier("P3B3 EndToEnd $token");
+        $productId = $this->seedProduct("P3B3 EndToEnd Product $token", 1, 5, 9, $supplier['id']);
+
+        $alertRes = $this->httpGet($jar, '/stock-alert/index.php');
+        $url = $this->createPoUrlForSupplier($alertRes['body'], $supplier['id']);
+        $this->assertNotNull($url);
+
+        // Follow the generated link exactly as a browser would.
+        $poRes = $this->httpGet($jar, $this->stripBaseUrl($url));
+        $this->assertSame(200, $poRes['status']);
+
+        preg_match('/const PREFILL_LINES = (.*?);\n/', $poRes['body'], $m);
+        $this->assertNotEmpty($m, 'the PO page must emit prefill lines for this link');
+        $lines = json_decode($m[1], true);
+        $this->assertCount(1, $lines);
+        $this->assertSame($productId, $lines[0]['product_id']);
+        $this->assertSame('9', $lines[0]['qty'], 'the reorder quantity must survive the round trip');
+    }
+
+    public function testFollowingTheCreateDraftPoLinkCreatesNoPurchaseOrder(): void
+    {
+        $jar = $this->loggedInUserSession();
+        $token = bin2hex(random_bytes(4));
+        $supplier = $this->seedSupplier("P3B3 NoMutation $token");
+        $this->seedProduct("P3B3 NoMutation Product $token", 1, 5, 5, $supplier['id']);
+
+        $alertRes = $this->httpGet($jar, '/stock-alert/index.php');
+        $url = $this->createPoUrlForSupplier($alertRes['body'], $supplier['id']);
+        $this->assertNotNull($url);
+
+        $before = (int) $this->pdo->query('SELECT COUNT(*) FROM purchase_orders')->fetchColumn();
+        $this->httpGet($jar, $this->stripBaseUrl($url));
+        $after = (int) $this->pdo->query('SELECT COUNT(*) FROM purchase_orders')->fetchColumn();
+
+        $this->assertSame($before, $after, 'a GET must never create a purchase order');
+    }
+
+    public function testNoSupplierGroupHasNoCreateDraftPoAction(): void
+    {
+        $jar = $this->loggedInUserSession();
+        $token = bin2hex(random_bytes(4));
+        $this->seedProduct("P3B3 Orphan $token", 1, 5, 10, null);
+
+        $res = $this->httpGet($jar, '/stock-alert/index.php');
+        $body = $res['body'];
+
+        $this->assertStringContainsString("P3B3 Orphan $token", $body, 'the orphan product still lists');
+        $this->assertStringContainsString('No Supplier', $body);
+        // No link may carry supplier_id= with an empty/absent supplier.
+        $this->assertDoesNotMatchRegularExpression(
+            '/create\.php\?supplier_id=&/',
+            $body,
+            'the No Supplier group must never emit a Create Draft PO link'
+        );
+    }
+
+    public function testSupplierWithNoLowStockProductsGetsNoAction(): void
+    {
+        $jar = $this->loggedInUserSession();
+        $token = bin2hex(random_bytes(4));
+        $supplier = $this->seedSupplier("P3B3 Healthy $token");
+        $this->seedProduct("P3B3 Healthy Product $token", 50, 5, 10, $supplier['id']);
+
+        $res = $this->httpGet($jar, '/stock-alert/index.php');
+        $this->assertNull(
+            $this->createPoUrlForSupplier($res['body'], $supplier['id']),
+            'a supplier with nothing low-stock has no group and therefore no action'
+        );
+    }
+
+    public function testProductIdsAreCappedAtOneHundred(): void
+    {
+        $jar = $this->loggedInUserSession();
+        $token = bin2hex(random_bytes(4));
+        $supplier = $this->seedSupplier("P3B3 Bulk $token");
+        for ($i = 0; $i < 105; $i++) {
+            $this->seedProduct("P3B3 Bulk $token $i", 0, 5, 1, $supplier['id']);
+        }
+
+        $res = $this->httpGet($jar, '/stock-alert/index.php');
+        $url = $this->createPoUrlForSupplier($res['body'], $supplier['id']);
+        $this->assertNotNull($url);
+
+        $query = $this->parsePrefillUrl($url);
+        $this->assertCount(100, $query['product_id'], 'the link must carry at most P3-B2\'s 100-line cap');
+    }
+
+    public function testViewerGetsNoActionableCreateDraftPoControl(): void
+    {
+        $token = bin2hex(random_bytes(4));
+        $supplier = $this->seedSupplier("P3B3 Viewer $token");
+        $this->seedProduct("P3B3 Viewer Product $token", 1, 5, 10, $supplier['id']);
+
+        $viewerJar = $this->loggedInViewerSession();
+        $res = $this->httpGet($viewerJar, '/stock-alert/index.php');
+
+        $this->assertSame(200, $res['status'], 'a Viewer may still read the page');
+        $this->assertStringContainsString("P3B3 Viewer Product $token", $res['body'], 'and still sees the data');
+        $this->assertStringNotContainsString('Create Draft PO', $res['body'], 'but must not get the write affordance');
+        $this->assertNull($this->createPoUrlForSupplier($res['body'], $supplier['id']));
+    }
+
+    public function testStockInActionSurvivesAlongsideTheNewAction(): void
+    {
+        $jar = $this->loggedInUserSession();
+        $token = bin2hex(random_bytes(4));
+        $supplier = $this->seedSupplier("P3B3 Coexist $token");
+        $productId = $this->seedProduct("P3B3 Coexist Product $token", 1, 5, 10, $supplier['id']);
+
+        $res = $this->httpGet($jar, '/stock-alert/index.php');
+        $this->assertStringContainsString("/stock-in/index.php?product_id=$productId", $res['body'], 'the per-product Stock In link must remain');
+        $this->assertNotNull($this->createPoUrlForSupplier($res['body'], $supplier['id']), 'alongside the new group action');
+    }
+
     // ---- Regression: existing surfaces unaffected ----
 
     public function testProductListLowStockFilterStillWorks(): void
@@ -331,6 +498,59 @@ final class StockAlertPageTest extends HttpServerTestCase
         $id = (int) $this->pdo->lastInsertId();
         $this->cleanupProductIds[] = $id;
         return $id;
+    }
+
+    // Phase P3-B3: finds the Create Draft PO href whose supplier_id is
+    // the one given, and returns it HTML-decoded (the page renders it
+    // through htmlspecialchars, so &amp; must be unescaped before the
+    // URL can be parsed or followed). Returns null when no such link
+    // exists - which is itself the assertion in several tests above.
+    private function createPoUrlForSupplier(string $html, int $supplierId): ?string
+    {
+        if (!preg_match_all('/href="([^"]*purchase-order\/create\.php\?[^"]*)"/', $html, $matches)) {
+            return null;
+        }
+        foreach ($matches[1] as $rawHref) {
+            $href = html_entity_decode($rawHref, ENT_QUOTES, 'UTF-8');
+            $query = $this->parsePrefillUrl($href);
+            if (($query['supplier_id'] ?? null) === (string) $supplierId) {
+                return $href;
+            }
+        }
+        return null;
+    }
+
+    // Parses the query string back into ['supplier_id' => string,
+    // 'product_id' => string[]] the way PHP itself would on the
+    // receiving end.
+    private function parsePrefillUrl(string $url): array
+    {
+        $queryString = parse_url($url, PHP_URL_QUERY) ?? '';
+        parse_str($queryString, $parsed);
+
+        $productIds = $parsed['product_id'] ?? [];
+        if (!is_array($productIds)) {
+            $productIds = [$productIds];
+        }
+
+        return [
+            'supplier_id' => isset($parsed['supplier_id']) ? (string) $parsed['supplier_id'] : null,
+            'product_id' => array_map('strval', array_values($productIds)),
+        ];
+    }
+
+    // The page emits absolute-from-docroot hrefs (BASE_URL prefixed);
+    // httpGet() expects the app-relative path.
+    private function stripBaseUrl(string $url): string
+    {
+        $path = parse_url($url, PHP_URL_PATH) ?? $url;
+        $query = parse_url($url, PHP_URL_QUERY);
+        $marker = '/purchase-order/';
+        $pos = strpos($path, $marker);
+        if ($pos !== false) {
+            $path = substr($path, $pos);
+        }
+        return $query !== null ? $path . '?' . $query : $path;
     }
 
     private function seedSupplier(string $name): array

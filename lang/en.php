@@ -391,6 +391,8 @@ return [
     'stockalert_empty' => 'No products need reordering right now.',
     'stockalert_no_supplier' => 'No Supplier',
     'stockalert_no_supplier_help' => 'These products have no supplier assigned yet. Assign a supplier on the product before it can take part in supplier-assisted purchasing.',
+    'stockalert_create_draft_po' => 'Create Draft PO',
+    'stockalert_create_draft_po_hint' => 'Opens a draft purchase order with these products filled in. You can review, edit, or remove lines before saving — nothing is ordered until you save it.',
 
     // Customer & Debts
     'customer_title' => 'Customers & Debts',
