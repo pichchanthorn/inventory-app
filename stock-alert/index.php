@@ -55,6 +55,10 @@ foreach ($rows as $p) {
     if (!isset($groups[$key])) {
         $groups[$key] = [
             'has_supplier' => $p['supplier_id'] !== null,
+            // Phase P3-B3: kept alongside the name so the group's
+            // "Create Draft PO" link can name its supplier without a
+            // second lookup - it is already on every row of this group.
+            'supplier_id' => $p['supplier_id'] !== null ? (int) $p['supplier_id'] : null,
             'supplier_name' => $p['supplier_name'],
             'products' => [],
         ];
@@ -77,16 +81,60 @@ require_once __DIR__ . '/../includes/header.php';
 
 <?php foreach ($groups as $group): ?>
 <div class="card mb-3">
-  <div class="p-3 border-bottom">
-    <div class="bracket-label mb-0">
-      <?php if ($group['has_supplier']): ?>
-        <i class="bi bi-truck"></i> <?= htmlspecialchars($group['supplier_name']) ?>
-      <?php else: ?>
-        <i class="bi bi-question-circle"></i> <?= __('stockalert_no_supplier') ?>
+  <div class="p-3 border-bottom d-flex justify-content-between align-items-center gap-2 flex-wrap">
+    <div>
+      <div class="bracket-label mb-0">
+        <?php if ($group['has_supplier']): ?>
+          <i class="bi bi-truck"></i> <?= htmlspecialchars($group['supplier_name']) ?>
+        <?php else: ?>
+          <i class="bi bi-question-circle"></i> <?= __('stockalert_no_supplier') ?>
+        <?php endif; ?>
+      </div>
+      <?php if (!$group['has_supplier']): ?>
+        <div class="text-secondary small mt-2"><?= __('stockalert_no_supplier_help') ?></div>
       <?php endif; ?>
     </div>
-    <?php if (!$group['has_supplier']): ?>
-      <div class="text-secondary small mt-2"><?= __('stockalert_no_supplier_help') ?></div>
+    <?php
+    // Phase P3-B3: the Low Stock -> assisted Draft PO bridge. A plain
+    // GET link to the P3-B2 prefill contract
+    // (purchase-order/create.php?supplier_id=N&product_id[]=...) - it
+    // only NAVIGATES; no purchase order is created here, and nothing on
+    // this page mutates anything.
+    //
+    // Offered once per supplier group (never per product) and only for
+    // a real supplier - the "No Supplier" group stays informational,
+    // since P3-B2 would reject those products anyway.
+    //
+    // canWrite() gates the control the same way every other write
+    // affordance in this app does, so a Viewer never sees it. That is a
+    // UI concern only: purchase-order/create.php performs its own
+    // canWrite() redirect and re-validates every id server-side (see
+    // includes/purchase_order_prefill.php), which remains the
+    // authoritative boundary. Nothing here is trusted downstream.
+    //
+    // Ids are taken straight from the rows this group already rendered
+    // - no extra query - capped at 100 to match buildAssistedPoPrefill()'s
+    // own $maxLines default, so the link can never carry more than that
+    // function would accept. array_slice keeps the group's displayed
+    // order, making the truncation deterministic rather than arbitrary.
+    if ($group['has_supplier'] && canWrite()):
+        $prefillProductIds = array_map(
+            static fn(array $product): int => (int) $product['id'],
+            array_slice($group['products'], 0, 100)
+        );
+        // http_build_query encodes every value - never string
+        // concatenation - and emits product_id[0]=..&product_id[1]=..,
+        // which PHP parses back into the array P3-B2 expects.
+        $prefillUrl = BASE_URL . '/purchase-order/create.php?' . http_build_query([
+            'supplier_id' => $group['supplier_id'],
+            'product_id' => $prefillProductIds,
+        ]);
+    ?>
+      <a href="<?= htmlspecialchars($prefillUrl) ?>"
+         class="btn btn-sm btn-outline-primary"
+         title="<?= htmlspecialchars(__('stockalert_create_draft_po_hint')) ?>">
+        <i class="bi bi-file-earmark-plus"></i> <?= __('stockalert_create_draft_po') ?>
+      </a>
     <?php endif; ?>
   </div>
   <table class="table mb-0 align-middle table-cards-mobile">
