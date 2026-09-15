@@ -389,6 +389,8 @@ return [
     'stockalert_col_severity' => 'Severity',
     'stockalert_reorder_not_set' => 'Not set',
     'stockalert_empty' => 'No products need reordering right now.',
+    'stockalert_no_supplier' => 'No Supplier',
+    'stockalert_no_supplier_help' => 'These products have no supplier assigned yet. Assign a supplier on the product before it can take part in supplier-assisted purchasing.',
 
     // Customer & Debts
     'customer_title' => 'Customers & Debts',
