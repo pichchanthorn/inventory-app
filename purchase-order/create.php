@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../includes/auth_check.php';
 require_once __DIR__ . '/../includes/stock.php';
 require_once __DIR__ . '/../includes/purchase_order.php';
+require_once __DIR__ . '/../includes/purchase_order_prefill.php';
 require_once __DIR__ . '/../includes/validation.php';
 require_once __DIR__ . '/../includes/currency.php';
 require_once __DIR__ . '/../config/db.php';
@@ -28,6 +29,30 @@ $formSupplierId = '';
 $formOrderDate = date('Y-m-d');
 $formExpectedDate = '';
 $formNote = '';
+
+// Phase P3-B2: optional assisted prefill, arriving as a plain GET link
+// from the Low Stock page's supplier group
+// (?supplier_id=N&product_id[]=A&product_id[]=B) - the same query-string
+// handoff stock-in/index.php's ?product_id= preselect (Phase L1) already
+// uses, rather than a second POST endpoint or a session payload that two
+// browser tabs would race over.
+//
+// Validated entirely server-side by buildAssistedPoPrefill() against the
+// $suppliers/$products arrays this page already loaded - see
+// includes/purchase_order_prefill.php for why a client can never make a
+// product appear under a supplier that is not its own. Nothing here
+// creates or mutates a purchase order: this only decides which rows the
+// form OPENS with, and the user still reviews, edits, removes, and
+// submits them through the unchanged POST handler below.
+$prefill = ['supplier_id' => null, 'lines' => []];
+if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+    $prefill = buildAssistedPoPrefill($_GET, $suppliers, $products);
+    if ($prefill['supplier_id'] !== null) {
+        // Reuses the existing sticky-value plumbing, so the supplier
+        // <select> below needs no markup change to render preselected.
+        $formSupplierId = (string) $prefill['supplier_id'];
+    }
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify();
@@ -164,6 +189,11 @@ require_once __DIR__ . '/../includes/header.php';
 
 <script>
 const PRODUCTS = <?= json_encode($products) ?>;
+// Phase P3-B2: server-validated prefill lines (empty array on a normal
+// visit). Already filtered/owned-checked in PHP - this is only what the
+// form OPENS with; every value stays editable and the server revalidates
+// whatever is finally submitted.
+const PREFILL_LINES = <?= json_encode($prefill['lines']) ?>;
 const T_CHOOSE_PRODUCT = <?= json_encode(__('common_choose_product_option')) ?>;
 const T_NOW = <?= json_encode(__('common_now_label')) ?>;
 const T_PCS = <?= json_encode(__('common_pcs')) ?>;
@@ -364,7 +394,14 @@ function updateGrandTotal() {
   document.getElementById('lineTotal').textContent = '$' + total.toFixed(2);
 }
 
-addRow();
+// Phase P3-B2: open with the assisted suggestions when the Low Stock
+// page handed us any, otherwise the single blank row this form has
+// always started with.
+if (PREFILL_LINES.length) {
+  PREFILL_LINES.forEach(line => addRow(line.product_id, line.qty, line.cost));
+} else {
+  addRow();
+}
 </script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>

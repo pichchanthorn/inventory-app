@@ -66,6 +66,7 @@ require APP_ROOT . '/includes/backup.php';
 require APP_ROOT . '/includes/validation.php';
 require APP_ROOT . '/includes/stock_alert.php';
 require APP_ROOT . '/includes/purchase_order.php';
+require APP_ROOT . '/includes/purchase_order_prefill.php';
 require TESTS_ROOT . '/SchemaBuilder.php';
 require TESTS_ROOT . '/TestCase.php';
 require TESTS_ROOT . '/fixtures/seed_helpers.php';
