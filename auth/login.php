@@ -13,6 +13,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $user = $stmt->fetch();
 
     if ($user && password_verify($pass, $user['password'])) {
+        // Phase K2-A: rotate the session ID the moment authentication
+        // succeeds, BEFORE any authenticated value is written below.
+        //
+        // The session is already open by this point - includes/lang.php
+        // (required above) starts it to read $_SESSION['lang'] - so
+        // whatever ID the browser presented has already been adopted.
+        // PHP's session.use_strict_mode defaults to 0 and this project
+        // ships no session configuration, which means that ID may have
+        // been chosen by an attacker rather than issued by the server.
+        // Without this call the same ID would simply become an
+        // authenticated one (session fixation).
+        //
+        // The `true` argument deletes the old server-side session file
+        // rather than leaving it behind as a second, still-valid copy.
+        // $_SESSION contents are carried over to the new ID by PHP, so
+        // the pre-login language choice survives and the assignments
+        // below behave exactly as before.
+        session_regenerate_id(true);
+
         $_SESSION['user_id']   = $user['id'];
         $_SESSION['user_name'] = $user['name'];
         $_SESSION['role_id']   = $user['role_id'];

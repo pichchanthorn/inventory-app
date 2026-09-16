@@ -157,6 +157,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_password'])) {
             logAudit($pdo, $actorId, 'update', 'user', $user['id'], $before, $after);
             $pdo->commit();
 
+            // Phase K2-A: rotate the session ID after a successful
+            // password change. A password change is often the response
+            // to a suspected compromise, so the ID that was valid before
+            // it must not continue to be valid after it.
+            //
+            // session_regenerate_id(true) carries $_SESSION over to the
+            // new ID and deletes the old server-side file, so the user
+            // stays logged in and every value below (including the
+            // must_change_password flag set next) behaves as before.
+            // Only THIS session is rotated - invalidating the user's
+            // other sessions is deliberately out of scope for K2-A.
+            session_regenerate_id(true);
+
             $_SESSION['must_change_password'] = false;
             $pwMsg = __('profile_password_changed_msg');
         } catch (Throwable $e) {
