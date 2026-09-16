@@ -519,6 +519,20 @@ testing, the following would need attention:
   feature flag (`SELF_REGISTRATION_ENABLED`) — configuration is already
   externalized rather than hardcoded, which production deployment
   builds on rather than needing to retrofit.
+- **Web-boundary rules for both supported setups.** This repository is
+  served with its own root as the web root, so without access rules the
+  web server would hand out any non-PHP file in it — `database/*.sql`,
+  the `.md` docs, `composer.json`, and (on a cloned copy) all of
+  `.git/`. The root `.htaccess` covers the XAMPP/Apache setup and
+  `docker/nginx/default.conf` covers the Docker setup; both also
+  disable directory listing. Keep the two in step when either changes.
+
+  > **Apache/XAMPP prerequisite:** `.htaccess` only takes effect where
+  > Apache is configured with `AllowOverride All` (XAMPP's default for
+  > `htdocs`). If it is set to `None`, Apache **silently ignores** the
+  > file and the boundary does not exist. Confirm after deploying by
+  > requesting `/inventory-app/database/schema.sql` — it must return
+  > `403`, not the file.
 
 **Would need to be added for production**
 
