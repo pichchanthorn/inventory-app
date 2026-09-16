@@ -1,0 +1,80 @@
+# ================================================
+# PCTN Inventory - Phase K1 web boundary (Apache / XAMPP)
+#
+# The documented XAMPP setup (see README.md, "Option 1") places this
+# whole folder inside htdocs, so the repository root IS the web-served
+# directory - the same layout the Docker/Nginx stack uses, and the one
+# config/base_url.php depends on. This file adds the access boundary
+# without moving any application file.
+#
+# Without it, Apache serves every non-PHP file here as a static
+# download: database/schema.sql, database/seed.sql, all 17 migrations,
+# every .md, composer.json, phpunit.xml.dist, docker-compose.yml, and -
+# on a git-cloned deployment - the entire .git/ directory. XAMPP's stock
+# htdocs configuration also enables directory listing, so /database/
+# would be browsable.
+#
+# REQUIRES `AllowOverride All` (or at least `Options` + `FileInfo` +
+# `Limit`) on the directory containing this file. XAMPP's default
+# htdocs configuration provides this. If AllowOverride is None, Apache
+# SILENTLY IGNORES this entire file and the boundary does not exist -
+# so verify it, do not assume it. See README.md's deployment notes.
+#
+# The equivalent rules for the Docker/Nginx stack live in
+# docker/nginx/default.conf and must be kept in step with this file.
+# ================================================
+
+# ---- 1. No directory listing -------------------------------------
+# Closes the /inventory-app/database/ browsing case directly.
+<IfModule mod_autoindex.c>
+    Options -Indexes
+</IfModule>
+
+# ---- 2. Non-public directories and dot-directories ---------------
+# <FilesMatch> can only see a basename, so it cannot block ".git/config"
+# (whose basename is "config"). Path-based rules need mod_rewrite.
+#
+# Patterns are matched against the path relative to this directory, so
+# they work identically whether the app is served from a domain root or
+# from /inventory-app/.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Any dotfile or dot-directory at any depth: .git/, .github/,
+    # .gitignore. The dot must start the path or follow a slash, so
+    # ordinary filenames like auth/login.php are unaffected.
+    RewriteRule (^|/)\. - [F,L]
+
+    # Repository directories that are never part of the public surface.
+    # `audit/` is deliberately absent - it is the Admin-only Audit Log
+    # page (audit/index.php), a real application route.
+    RewriteRule (^|/)(database|tests|docs|docker|vendor)(/|$) - [F,L]
+</IfModule>
+
+# ---- 3. Repository metadata / data file types --------------------
+# Defence in depth: these also cover any such file outside the
+# directories blocked above, and still apply if mod_rewrite is absent.
+#
+# Blocking *.sql does NOT affect the application's backup download -
+# that is an authenticated Admin-only POST to settings/index.php which
+# streams the dump through PHP and merely names the attachment *.sql.
+# No .sql URL is ever requested.
+<FilesMatch "\.(sql|md|dist|yml|yaml|cmd|lock)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+<Files "composer.json">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</Files>
