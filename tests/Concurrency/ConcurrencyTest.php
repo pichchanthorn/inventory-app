@@ -40,6 +40,11 @@ final class ConcurrencyTest extends TestCase
     // cleanup list in this class.
     private array $cleanupPurchaseOrderIds = [];
     private array $cleanupSupplierIds = [];
+    // Phase K2-C: login_throttle_race.php workers insert login_attempts
+    // rows keyed by a submitted email string, not by a user id - there
+    // is no FK to follow, so the addresses used are tracked explicitly
+    // and removed by address in tearDown().
+    private array $cleanupLoginEmails = [];
 
     protected function setUp(): void
     {
@@ -62,6 +67,12 @@ final class ConcurrencyTest extends TestCase
         // items itself cascades automatically (ON DELETE CASCADE on
         // purchase_order_id), so only the header + its audit rows need
         // an explicit delete here.
+        // Phase K2-C: login_attempts has no foreign keys at all, so its
+        // rows can go first without regard to the FK ordering below.
+        foreach ($this->cleanupLoginEmails as $email) {
+            $stmt = $this->pdo->prepare('DELETE FROM login_attempts WHERE email = ?');
+            $stmt->execute([strtolower($email)]);
+        }
         foreach ($this->cleanupPurchaseOrderIds as $id) {
             // Phase P2: purchase_order_receipts.purchase_order_item_id has
             // no ON DELETE behavior (RESTRICT), so any receipt row must be
@@ -1333,6 +1344,47 @@ final class ConcurrencyTest extends TestCase
         $id = (int) $this->pdo->lastInsertId();
         $this->cleanupSupplierIds[] = $id;
         return $id;
+    }
+
+    // ================================================
+    // Phase K2-C - login brute-force throttle.
+    //
+    // The whole reason login_attempts is row-per-attempt rather than a
+    // counter column: a counter would be a read-modify-write, so two
+    // simultaneous failures could read the same value and one increment
+    // would vanish, quietly handing an attacker extra tries. An INSERT
+    // has no such race. This drives eight genuinely parallel processes
+    // at one address through the exact same runParallel()/proc_open()
+    // harness as the Stock Out and reference-number races above, and
+    // asserts that all eight land.
+    // ================================================
+    public function testConcurrentFailedLoginsAllRecordAndThenThrottleTheAccount(): void
+    {
+        $email = 'k2c.race.' . bin2hex(random_bytes(4)) . '@test.local';
+        $this->cleanupLoginEmails[] = $email;
+
+        $workers = array_fill(0, 8, ['login_throttle_race.php', $email]);
+        $results = $this->runParallel($workers);
+
+        foreach ($results as $i => $result) {
+            $this->assertSame('ok', $result['status'], "worker $i failed: " . ($result['message'] ?? ''));
+        }
+
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM login_attempts WHERE email = ?');
+        $stmt->execute([strtolower($email)]);
+        $this->assertSame(
+            8,
+            (int) $stmt->fetchColumn(),
+            'eight concurrent failures must record eight rows - a lost one is a free extra guess'
+        );
+
+        // And the account must actually be throttled afterwards, i.e.
+        // the recorded rows are the ones the application itself counts.
+        require_once dirname(__DIR__, 2) . '/includes/login_throttle.php';
+        $this->assertTrue(
+            loginIsThrottled($this->pdo, $email),
+            'after eight concurrent failures the address must be refused'
+        );
     }
 
     /** @return array{status:string, value?:int} */
