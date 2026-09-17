@@ -78,3 +78,24 @@
         Deny from all
     </IfModule>
 </Files>
+
+# ---- 4. Minimal HTTP security headers -----------------------------
+# Phase K2-E. Same three headers as docker/nginx/default.conf, kept in
+# step per that file's own note. Deliberately NOT
+# Content-Security-Policy or Strict-Transport-Security: this app loads
+# Bootstrap/html5-qrcode from a CDN and uses inline <script> for the
+# theme/language toggle, so a real CSP needs nonces/hashes; and the
+# documented XAMPP deployment is plain HTTP
+# (http://localhost/inventory-app), so HSTS would be ignored by
+# browsers on that origin and would only become a footgun once TLS is
+# introduced.
+#
+# XAMPP's stock Apache build ships mod_headers enabled, but this is
+# guarded the same way every other module-dependent rule in this file
+# is - if it is somehow absent, these headers are silently skipped
+# rather than breaking the request.
+<IfModule mod_headers.c>
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set Referrer-Policy "same-origin"
+</IfModule>
