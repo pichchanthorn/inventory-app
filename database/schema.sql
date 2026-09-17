@@ -28,6 +28,17 @@ CREATE TABLE users (
     role_id INT DEFAULT 2,
     avatar VARCHAR(255) DEFAULT NULL,
     must_change_password TINYINT(1) NOT NULL DEFAULT 0,
+    -- Phase K2-D: the baseline an authenticated session is checked
+    -- against. auth/login.php copies this value into the session, and
+    -- includes/auth_check.php compares it on every authenticated
+    -- request - a mismatch means the password was changed since this
+    -- session began, so the session is torn down. TIMESTAMP(6) because
+    -- the test is equality, and one-second resolution would miss a
+    -- reset landing in the same second as the previous change.
+    -- Deliberately no ON UPDATE: with it, any unrelated UPDATE to the
+    -- row (a role change, for instance) would move the value and log
+    -- the user out. See database/migrations/019_add_password_changed_at.sql.
+    password_changed_at TIMESTAMP(6) NULL DEFAULT CURRENT_TIMESTAMP(6),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     created_by INT NULL,
