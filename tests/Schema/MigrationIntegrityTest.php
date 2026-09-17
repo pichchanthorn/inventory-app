@@ -25,7 +25,7 @@ use Tests\SchemaBuilder;
 //     therefore builds tests/fixtures/schema_baseline_pre_migrations.sql
 //     (a reconstruction of that pre-migration-001 shape - see that
 //     file's own header for exactly how it was derived) in a SEPARATE,
-//     dedicated scratch database, applies migrations 001-018 to it in
+//     dedicated scratch database, applies migrations 001-019 to it in
 //     order, and compares the resulting structure against the real
 //     schema.sql-built database using information_schema queries -
 //     structural/semantic checks, never a raw-text diff of the .sql
@@ -93,12 +93,13 @@ final class MigrationIntegrityTest extends TestCase
         $this->assertTrue($this->columnExists($this->mainPdo, $dbName, 'purchase_order_items', 'subtotal'));
         $this->assertTrue($this->columnExists($this->mainPdo, $dbName, 'purchase_order_receipts', 'stock_transaction_item_id'));
         $this->assertTrue($this->columnExists($this->mainPdo, $dbName, 'login_attempts', 'attempted_at'));
+        $this->assertTrue($this->columnExists($this->mainPdo, $dbName, 'users', 'password_changed_at'));
 
         $seedCount = (int) $this->mainPdo->query('SELECT COUNT(*) FROM reference_counters')->fetchColumn();
         $this->assertSame(3, $seedCount, 'a fresh install must seed all three reference_counters rows (stock_transactions, customer_debts, purchase_orders)');
     }
 
-    public function testMigrations001Through018ApplyCleanlyToACompatibleDatabase(): void
+    public function testMigrations001Through019ApplyCleanlyToACompatibleDatabase(): void
     {
         $builder = new SchemaBuilder($this->scratchPdo);
         $builder->dropAllTables();
@@ -106,9 +107,9 @@ final class MigrationIntegrityTest extends TestCase
 
         $migrationsDir = dirname(__DIR__, 2) . '/database/migrations';
         $files = glob($migrationsDir . '/0*.sql');
-        sort($files); // filenames are zero-padded (001_..018_..), so lexical sort is numeric order
+        sort($files); // filenames are zero-padded (001_..019_..), so lexical sort is numeric order
 
-        $this->assertCount(18, $files, 'expected exactly migrations 001 through 018 to be present');
+        $this->assertCount(19, $files, 'expected exactly migrations 001 through 019 to be present');
 
         foreach ($files as $file) {
             try {
@@ -131,7 +132,7 @@ final class MigrationIntegrityTest extends TestCase
             'categories' => ['updated_at', 'created_by', 'updated_by'],
             'units' => ['created_at', 'updated_at', 'created_by', 'updated_by'],
             'suppliers' => ['created_at', 'updated_at', 'created_by', 'updated_by'],
-            'users' => ['updated_at', 'created_by', 'updated_by'],
+            'users' => ['updated_at', 'created_by', 'updated_by', 'password_changed_at'],
             'purchase_orders' => ['reference', 'supplier_id', 'status', 'order_date', 'expected_date', 'note'],
             'purchase_order_items' => ['ordered_qty', 'unit_cost', 'subtotal', 'received_qty'],
             'purchase_order_receipts' => ['purchase_order_item_id', 'stock_transaction_item_id', 'qty'],

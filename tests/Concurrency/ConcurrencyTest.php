@@ -1387,6 +1387,88 @@ final class ConcurrencyTest extends TestCase
         );
     }
 
+    // ================================================
+    // Phase K2-D - privilege freshness.
+    //
+    // includes/auth_check.php keeps a session alive by comparing the
+    // baseline it stored at login against users.password_changed_at,
+    // and user/index.php writes the new hash and that timestamp in ONE
+    // statement. The failure this guards against is a half-applied
+    // reset: a concurrent reader seeing the new password without the new
+    // timestamp would keep every existing session of that account alive,
+    // which is exactly what the reset was meant to stop.
+    //
+    // Four readers poll the real row through the same
+    // runParallel()/proc_open() harness as the races above while this
+    // process commits the reset, and every distinct pair they observe is
+    // checked for internal consistency.
+    // ================================================
+    public function testAPasswordResetIsNeverObservedHalfApplied(): void
+    {
+        $userId = $this->seedFreshnessUser();
+        $oldHash = $this->passwordHashOf($userId);
+        $oldStamp = $this->passwordChangedAtOf($userId);
+
+        // Workers poll until this moment; runParallel() starts them all
+        // at goAt = now + 0.5s, so the commit below lands mid-poll.
+        $until = microtime(true) + 1.3;
+        $workers = array_fill(0, 4, ['privilege_freshness_race.php', (string) $userId, sprintf('%.6f', $until)]);
+
+        $newHash = password_hash('ConcurrencyIssued999!', PASSWORD_DEFAULT);
+        $this->pendingFreshnessReset = [$userId, $newHash];
+
+        $results = $this->runParallel($workers);
+
+        $newStamp = $this->passwordChangedAtOf($userId);
+        $this->assertNotSame($oldStamp, $newStamp, 'precondition: the reset must actually have moved the timestamp');
+        $this->assertSame($newHash, $this->passwordHashOf($userId), 'precondition: the reset must actually have changed the hash');
+
+        $observed = [];
+        foreach ($results as $i => $result) {
+            $this->assertSame('ok', $result['status'], "worker $i failed: " . ($result['message'] ?? ''));
+            foreach ($result['pairs'] as $pair) {
+                [$hash, $stamp] = $pair;
+                $isBefore = ($hash === $oldHash && $stamp === $oldStamp);
+                $isAfter = ($hash === $newHash && $stamp === $newStamp);
+                $this->assertTrue(
+                    $isBefore || $isAfter,
+                    'a reader observed a half-applied reset: hash and password_changed_at must always move together'
+                );
+                $observed[$isBefore ? 'before' : 'after'] = true;
+            }
+        }
+
+        // Guards against the test passing vacuously because every
+        // worker happened to poll entirely on one side of the commit.
+        $this->assertArrayHasKey('after', $observed, 'the readers must have observed the post-reset state');
+    }
+
+    private ?array $pendingFreshnessReset = null;
+
+    private function seedFreshnessUser(): int
+    {
+        $email = 'conc.k2d.' . bin2hex(random_bytes(4)) . '@test.local';
+        $stmt = $this->pdo->prepare('INSERT INTO users (name, email, password, role_id) VALUES (?,?,?,2)');
+        $stmt->execute(['K2D Concurrency User', $email, password_hash('ConcurrencyStart123!', PASSWORD_DEFAULT)]);
+        $id = (int) $this->pdo->lastInsertId();
+        $this->cleanupUserIds[] = $id;
+        return $id;
+    }
+
+    private function passwordHashOf(int $userId): string
+    {
+        $stmt = $this->pdo->prepare('SELECT password FROM users WHERE id = ?');
+        $stmt->execute([$userId]);
+        return (string) $stmt->fetchColumn();
+    }
+
+    private function passwordChangedAtOf(int $userId): string
+    {
+        $stmt = $this->pdo->prepare('SELECT password_changed_at FROM users WHERE id = ?');
+        $stmt->execute([$userId]);
+        return (string) $stmt->fetchColumn();
+    }
+
     /** @return array{status:string, value?:int} */
     private function runParallel(array $commands): array
     {
@@ -1400,6 +1482,20 @@ final class ConcurrencyTest extends TestCase
             $proc = proc_open($fullCmd, $descriptors, $pipes);
             $this->assertIsResource($proc, 'failed to launch worker process: ' . $cmd[0]);
             $processes[] = ['proc' => $proc, 'pipes' => $pipes];
+        }
+
+        // Phase K2-D: commit the reset while the readers are polling.
+        // Launched workers wait until $goAt, so sleeping past it here
+        // puts the commit squarely inside their polling window - the
+        // same statement user/index.php's reset action runs.
+        if ($this->pendingFreshnessReset !== null) {
+            [$resetUserId, $resetHash] = $this->pendingFreshnessReset;
+            $this->pendingFreshnessReset = null;
+            usleep((int) max(0, ($goAt - microtime(true) + 0.25) * 1000000));
+            $reset = $this->pdo->prepare(
+                'UPDATE users SET password = ?, must_change_password = 1, password_changed_at = CURRENT_TIMESTAMP(6) WHERE id = ?'
+            );
+            $reset->execute([$resetHash, $resetUserId]);
         }
 
         $results = [];

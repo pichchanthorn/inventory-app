@@ -130,7 +130,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'reset_passwor
             try {
                 $hashed = password_hash($newPassword, PASSWORD_DEFAULT);
                 $pdo->beginTransaction();
-                $stmt = $pdo->prepare('UPDATE users SET password = ?, must_change_password = ?, updated_by = ? WHERE id = ?');
+                // Phase K2-D: password and password_changed_at move in
+                // ONE statement inside the existing transaction, so the
+                // two can never disagree - a new hash without a new
+                // timestamp would leave every existing session of that
+                // account alive, which is exactly the failure this
+                // reset is meant to prevent.
+                $stmt = $pdo->prepare('UPDATE users SET password = ?, must_change_password = ?, password_changed_at = CURRENT_TIMESTAMP(6), updated_by = ? WHERE id = ?');
                 $stmt->execute([$hashed, $mustChange, $actorId, $id]);
 
                 $afterStmt = $pdo->prepare('SELECT * FROM users WHERE id = ?');

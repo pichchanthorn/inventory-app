@@ -78,6 +78,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['user_name'] = $user['name'];
             $_SESSION['role_id']   = $user['role_id'];
             $_SESSION['must_change_password'] = (bool) $user['must_change_password'];
+            // Phase K2-D: the baseline includes/auth_check.php compares
+            // against on every later request. Storing it here - from the
+            // same row the password was just verified against - is what
+            // lets a subsequent password change invalidate this session
+            // and every other one for the account. No extra query and no
+            // second session_regenerate_id(): K2-A's rotation above has
+            // already run, and $_SESSION survives it.
+            $_SESSION['password_changed_at'] = $user['password_changed_at'];
             header('Location: ' . BASE_URL . '/dashboard.php');
             exit;
         } else {

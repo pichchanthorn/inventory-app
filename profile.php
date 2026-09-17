@@ -147,12 +147,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_password'])) {
         $before = userAuditSnapshot($user);
         try {
             $pdo->beginTransaction();
-            $stmt = $pdo->prepare('UPDATE users SET password = ?, must_change_password = 0, updated_by = ? WHERE id = ?');
+            // Phase K2-D: same single-statement rule as the Admin
+            // reset in user/index.php - the hash and its timestamp are
+            // written together inside this transaction, never apart.
+            $stmt = $pdo->prepare('UPDATE users SET password = ?, must_change_password = 0, password_changed_at = CURRENT_TIMESTAMP(6), updated_by = ? WHERE id = ?');
             $stmt->execute([password_hash($new, PASSWORD_DEFAULT), $actorId, $user['id']]);
 
             $afterStmt = $pdo->prepare('SELECT * FROM users WHERE id = ?');
             $afterStmt->execute([$user['id']]);
-            $after = userAuditSnapshot($afterStmt->fetch());
+            $afterRow = $afterStmt->fetch();
+            $after = userAuditSnapshot($afterRow);
 
             logAudit($pdo, $actorId, 'update', 'user', $user['id'], $before, $after);
             $pdo->commit();
@@ -166,9 +170,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_password'])) {
             // new ID and deletes the old server-side file, so the user
             // stays logged in and every value below (including the
             // must_change_password flag set next) behaves as before.
-            // Only THIS session is rotated - invalidating the user's
-            // other sessions is deliberately out of scope for K2-A.
             session_regenerate_id(true);
+
+            // Phase K2-D: adopt the new baseline for THIS session.
+            //
+            // The UPDATE above moved users.password_changed_at, and
+            // includes/auth_check.php tears down any session whose
+            // baseline no longer matches it. Without this line the user
+            // would be signed out by their own password change on the
+            // very next request - so this is what preserves the existing
+            // behaviour of staying signed in. Every OTHER session for
+            // this account still carries the old baseline and is
+            // invalidated on its next request, which is the point.
+            //
+            // Read from the row already fetched for the audit snapshot,
+            // inside the same transaction that wrote it - no extra query,
+            // and the value is the one actually committed rather than a
+            // PHP-side guess at what the database stored.
+            $_SESSION['password_changed_at'] = $afterRow['password_changed_at'];
 
             $_SESSION['must_change_password'] = false;
             $pwMsg = __('profile_password_changed_msg');
