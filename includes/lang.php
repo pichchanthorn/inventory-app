@@ -1,4 +1,10 @@
 <?php
+// Phase K2-B: configure the session cookie before the session opens.
+// This is the first session_start() for every page that renders UI -
+// includes/auth_check.php requires this file before its own guarded
+// start, so this is where the cookie parameters have to land.
+require_once __DIR__ . '/../config/session.php';
+
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }

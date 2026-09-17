@@ -1,5 +1,9 @@
 <?php
 require_once __DIR__ . '/../config/base_url.php';
+// Phase K2-B: configure the session cookie before the session opens, so
+// that session_get_cookie_params() below returns the SAME attributes the
+// cookie was actually set with and the deletion cookie matches it.
+require_once __DIR__ . '/../config/session.php';
 session_start();
 
 // Phase K2-A: complete the logout.
