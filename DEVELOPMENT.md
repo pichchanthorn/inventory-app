@@ -837,3 +837,74 @@ PO amendment/edit-after-submit.
 The next planned phase is **P3-B — Low Stock → Assisted Draft Purchase
 Order** (read-only planning only as of this entry; not yet implemented,
 not yet branched).
+
+---
+
+## Security Hardening — Phases K1 through K2-E
+
+**Status: K1, K2-A, K2-B, K2-C, K2-D COMPLETE / MERGED. K2-E COMPLETE (pending review).**
+
+Addresses the P0/P1/P2 gaps recorded in `docs/adr/ADR-008-security-production-deployment.md`, one small reviewed batch at a time, each on its own feature branch with an explicit scope boundary and a full regression run before merge. See that ADR's own "Outcome" section for the fuller mapping.
+
+- **K1 — Web boundary hardening.** `docker/nginx/default.conf` and
+  `.htaccess` deny `database/`, `tests/`, `docs/`, `docker/`, `vendor/`,
+  dotfiles/dot-directories, and repository metadata file types
+  (`*.sql`, `*.md`, `*.yml`, `composer.json`), placed ahead of the PHP
+  handler. `audit/` deliberately left reachable — it is a real
+  Admin-only application route, not repository metadata. No
+  `public/`-only restructure — `config/base_url.php`'s `BASE_URL`
+  derivation depends on the repository root being the document root.
+- **K2-A — Session lifecycle hardening.** `session_regenerate_id(true)`
+  on successful login (closes session fixation); full logout
+  invalidation (session data, cookie, server-side record); session
+  rotation on a self-service password change.
+- **K2-B — Session cookie hardening.** `config/session.php` centralizes
+  `HttpOnly`, `SameSite=Lax`, and a `Secure` flag derived from the
+  actual request scheme (`$_SERVER['HTTPS']` /
+  `X-Forwarded-Proto`) rather than hard-coded — both shipped
+  deployments are plain HTTP today, so an unconditional `Secure` would
+  have broken login outright. Also enables
+  `session.use_strict_mode`.
+- **K2-C — Login abuse protection.** New `login_attempts` table +
+  `includes/login_throttle.php`: 5 failed attempts per submitted email
+  within a rolling 10-minute window, checked (and refused) **before**
+  any password verification, self-expiring, no permanent lockout. Also
+  closed an unintended username-enumeration timing oracle — an unknown
+  email previously skipped `password_verify()` entirely and answered
+  ~210x faster than a real account; it now performs one real verify
+  against a fixed dummy hash.
+- **K2-D — Privilege freshness & session invalidation.** Previously
+  `$_SESSION['role_id']` was set once at login and never refreshed, so
+  demoting an Admin (or resetting their password) had no effect on an
+  already-authenticated session. `includes/auth_check.php` now
+  re-reads `role_id`, `must_change_password`, and the new
+  `users.password_changed_at` (migration `019`) once per authenticated
+  request; a mismatch or a missing user row tears the session down the
+  same way logout does. A password change now invalidates every other
+  session for that account while preserving the existing
+  stay-signed-in behavior for the session that made the change.
+- **K2-E — Residual security & production hygiene.** `config/db.php` no
+  longer renders the raw PDO exception (host/user/database/SQLSTATE) to
+  an unauthenticated visitor on a connection failure — it logs the real
+  error and shows one generic sentence. The Docker image
+  (`docker/php/php.ini`) now ships `display_errors=Off`,
+  `log_errors=On` (to container stderr), and `expose_php=Off` — the
+  bare `php:8.4-fpm` base image otherwise runs on PHP's compiled
+  defaults (`display_errors=1`, `log_errors=0`), which is the opposite
+  of what a production deployment needs. `docker/nginx/default.conf`
+  and `.htaccess` both gained `X-Frame-Options: SAMEORIGIN`,
+  `X-Content-Type-Options: nosniff`, and `Referrer-Policy: same-origin`.
+  `Content-Security-Policy` and `HSTS` were deliberately NOT added —
+  see ADR-008's Outcome section for why.
+
+**Deliberately deferred, not overlooked (candidates for a later phase,
+not V1):** Content-Security-Policy (needs nonces/hashes for the
+CDN scripts and inline theme/language toggle), HSTS (both deployments
+are plain HTTP today), login CSRF and converting logout from GET to
+POST, idle/absolute session timeout, `password_needs_rehash()`.
+
+Current security-focused automated coverage: `AuthorizationTest`,
+`BackupAuditTest`, `CsrfTest`, `LoginThrottleTest`,
+`PrivilegeFreshnessTest`, `SessionCookieAttributesTest`,
+`SessionLifecycleTest` — all part of the standard `tests/Http/` suite
+run before every merge in this series.

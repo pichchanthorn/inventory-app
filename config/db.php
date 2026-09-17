@@ -20,5 +20,15 @@ $options = [
 try {
     $pdo = new PDO($dsn, $user, $pass, $options);
 } catch (PDOException $e) {
-    die('Database connection failed: ' . $e->getMessage());
+    // Phase K2-E: the application still cannot continue without a
+    // database, so this still stops the request - but the real
+    // exception (which carries the DB host, username, database name and
+    // SQLSTATE) must never reach the browser. It goes to error_log()
+    // instead, which XAMPP/Laragon surface in their own PHP error log
+    // for local debugging, and which the Docker image (see
+    // docker/php/php.ini) sends to container stderr for `docker logs`.
+    // The visitor gets a single generic sentence with no diagnostic
+    // content at all.
+    error_log('Database connection failed: ' . $e->getMessage());
+    die('A required service is temporarily unavailable. Please try again shortly.');
 }
