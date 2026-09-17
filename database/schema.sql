@@ -620,3 +620,31 @@ INSERT INTO reference_counters (counter_key, next_value) VALUES
     ('stock_transactions', 1),
     ('customer_debts', 1),
     ('purchase_orders', 1);
+
+-- Failed login attempts, one row per failure (Phase K2-C). Backs the
+-- brute-force throttle in includes/login_throttle.php: "five failures
+-- for this address within the last ten minutes" is a COUNT over
+-- attempted_at, so the window rolls on its own and no reset moment or
+-- scheduled job exists to get wrong. Row-per-attempt rather than a
+-- counter column is deliberate - a counter would be a read-modify-write
+-- and two simultaneous failures could lose an increment, the same race
+-- the guarded UPDATEs in includes/stock.php avoid.
+--
+-- `email` stores the SUBMITTED address and carries NO foreign key: a
+-- brute-force run mostly targets addresses that do not exist, and those
+-- attempts are exactly the ones worth counting. VARCHAR(150) matches
+-- users.email, and the schema's utf8mb4_general_ci collation folds case
+-- the same way the login lookup already does.
+--
+-- No ip_address column - K2-C is account-scoped by decision, since a
+-- shop's whole staff shares one NAT address. idx_attempted_at exists
+-- separately from idx_email_time because pruning filters on
+-- attempted_at alone, which the composite index (email first) cannot
+-- serve. See database/migrations/018_add_login_attempts.sql.
+CREATE TABLE login_attempts (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(150) NOT NULL,
+    attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_email_time (email, attempted_at),
+    INDEX idx_attempted_at (attempted_at)
+);

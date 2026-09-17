@@ -2,44 +2,96 @@
 require_once __DIR__ . '/../config/base_url.php';
 require_once __DIR__ . '/../includes/lang.php';
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../includes/login_throttle.php';
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = trim($_POST['email']);
     $pass  = $_POST['password'];
 
-    $stmt = $pdo->prepare('SELECT * FROM users WHERE email = ?');
-    $stmt->execute([$email]);
-    $user = $stmt->fetch();
-
-    if ($user && password_verify($pass, $user['password'])) {
-        // Phase K2-A: rotate the session ID the moment authentication
-        // succeeds, BEFORE any authenticated value is written below.
-        //
-        // The session is already open by this point - includes/lang.php
-        // (required above) starts it to read $_SESSION['lang'] - so
-        // whatever ID the browser presented has already been adopted.
-        // PHP's session.use_strict_mode defaults to 0 and this project
-        // ships no session configuration, which means that ID may have
-        // been chosen by an attacker rather than issued by the server.
-        // Without this call the same ID would simply become an
-        // authenticated one (session fixation).
-        //
-        // The `true` argument deletes the old server-side session file
-        // rather than leaving it behind as a second, still-valid copy.
-        // $_SESSION contents are carried over to the new ID by PHP, so
-        // the pre-login language choice survives and the assignments
-        // below behave exactly as before.
-        session_regenerate_id(true);
-
-        $_SESSION['user_id']   = $user['id'];
-        $_SESSION['user_name'] = $user['name'];
-        $_SESSION['role_id']   = $user['role_id'];
-        $_SESSION['must_change_password'] = (bool) $user['must_change_password'];
-        header('Location: ' . BASE_URL . '/dashboard.php');
-        exit;
-    } else {
+    // Phase K2-C: decide whether this address is currently refused
+    // BEFORE touching the users table or any password hash.
+    //
+    // Doing it first is the point. A bcrypt verify costs roughly 0.23s
+    // of CPU here (PASSWORD_DEFAULT is cost 12), and the stock php-fpm
+    // pool runs five workers - so a throttle that still paid for the
+    // hash would let an attacker exhaust the shop's own ability to log
+    // in while being "protected". A refused request costs one indexed
+    // COUNT instead.
+    //
+    // The refusal is deliberately indistinguishable from an ordinary
+    // failure: same $error, same rendered page, same 200. Nothing tells
+    // the caller that a throttle exists or which address tripped it.
+    if (loginIsThrottled($pdo, $email)) {
         $error = __('login_invalid');
+    } else {
+        $stmt = $pdo->prepare('SELECT * FROM users WHERE email = ?');
+        $stmt->execute([$email]);
+        $user = $stmt->fetch();
+
+        // Phase K2-C: always perform one real bcrypt verify, whether or
+        // not the address exists.
+        //
+        // Previously this was `$user && password_verify(...)`, so a
+        // submitted address with no account skipped the hash entirely
+        // and answered in about a thousandth of the time a real account
+        // took - measured at 0.0011s against 0.2324s, a ~210x tell that
+        // enumerated every valid account in the shop at one request
+        // each. The dummy hash is a fixed constant in
+        // includes/login_throttle.php, never regenerated per request.
+        //
+        // The lookup itself is unchanged - same query, same binding,
+        // same case-folding behaviour as before.
+        $authenticated = $user
+            ? password_verify($pass, $user['password'])
+            : verifyAgainstDummyHash($pass);
+
+        if ($authenticated) {
+            // Phase K2-C: proving the password wipes this address's
+            // failure history, so a member of staff who fumbles a few
+            // times and then gets it right does not carry those
+            // failures into the next ten minutes.
+            clearFailedLogins($pdo, $email);
+
+            // Phase K2-A: rotate the session ID the moment
+            // authentication succeeds, BEFORE any authenticated value
+            // is written below.
+            //
+            // The session is already open by this point -
+            // includes/lang.php (required above) starts it to read
+            // $_SESSION['lang'] - so whatever ID the browser presented
+            // has already been adopted. K2-B now sets
+            // session.use_strict_mode=1, but that is configuration a
+            // deployment could lose; without this call a presented ID
+            // would simply become an authenticated one (session
+            // fixation), so the rotation stays the primary defence.
+            //
+            // The `true` argument deletes the old server-side session
+            // file rather than leaving it behind as a second,
+            // still-valid copy. $_SESSION contents are carried over to
+            // the new ID by PHP, so the pre-login language choice
+            // survives and the assignments below behave exactly as
+            // before.
+            session_regenerate_id(true);
+
+            $_SESSION['user_id']   = $user['id'];
+            $_SESSION['user_name'] = $user['name'];
+            $_SESSION['role_id']   = $user['role_id'];
+            $_SESSION['must_change_password'] = (bool) $user['must_change_password'];
+            header('Location: ' . BASE_URL . '/dashboard.php');
+            exit;
+        } else {
+            // Phase K2-C: record the failure, then take out rows that
+            // have already aged past the window. Pruning here rather
+            // than on a schedule keeps the table proportional to recent
+            // activity without this application growing a scheduler;
+            // the cutoff is the window boundary itself, so it can only
+            // ever remove attempts that no longer count for anyone.
+            recordFailedLogin($pdo, $email);
+            pruneStaleLoginAttempts($pdo);
+
+            $error = __('login_invalid');
+        }
     }
 }
 ?>
