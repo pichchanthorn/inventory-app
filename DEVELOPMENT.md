@@ -393,6 +393,22 @@ automated test suite again. This was a smoke check, not a full audit,
 and not a substitute for verifying the application on a real deployment
 target directly.
 
+### J5 — Backup Failure Handling & Audit Logging
+
+A same-day follow-up fix (commit `54a2fe8`) closing the two gaps J1-J4
+had just identified and left open in this log: the backup action now
+wraps `streamDatabaseBackup()` in its own `try`/`catch`, using
+`backupFailureMessage()` to log the real exception and append a safe,
+generic message to the still-open download stream on failure instead of
+producing a silent truncated file; and a successful backup now calls
+`logAudit()` (action `create`, entity `backup`, snapshot limited to the
+generated filename), in a separate `try`/`catch` so a failure to write
+the audit row can never retroactively mark an already-streamed,
+successful backup as failed. Added
+`tests/Unit/BackupFailureMessageTest.php` (3 tests) and
+`tests/Http/BackupAuditTest.php` (3 tests) to pin both behaviors. This
+closes both items previously tracked under Known Limitations below.
+
 ---
 
 ## Current Engineering Status
@@ -403,9 +419,16 @@ plain PHP + MySQL/MariaDB architecture — no framework migration is
 planned. Current engineering priorities, in order, are: accurate stock,
 accurate sales, accurate debt/payment records, accurate invoices,
 auditability, backup/recovery, security, and maintainability. Phase J
-work verified the reliability side of that list (automated regression
-coverage, CI, and backup/restore recoverability); the two known,
-non-blocking gaps that remain are tracked below under Known Limitations.
+(including J5) verified and completed the reliability side of that list
+(automated regression coverage, CI, backup/restore recoverability, and
+backup failure handling/audit logging). Phases K1 through K2-E
+subsequently verified and hardened the security side (web boundary,
+session lifecycle, session cookies, login abuse protection, privilege
+freshness, and residual production hygiene) — see "Security Hardening —
+Phases K1 through K2-E" below for the full breakdown and V1 closure
+status. The full automated suite currently stands at 494 tests / 3,458
+assertions, all passing. Remaining non-blocking items are tracked below
+under Known Limitations.
 
 ---
 
@@ -434,18 +457,26 @@ non-blocking gaps that remain are tracked below under Known Limitations.
       backup/restore behavior against a disposable test database, wired
       into GitHub Actions CI (Phase J2). See "Phase J — Production
       Reliability & Quality Hardening" above.
-- [ ] Backup failure/error handling — `settings/index.php`'s backup
+- [x] ~~Backup failure/error handling — `settings/index.php`'s backup
       action calls `includes/backup.php::streamDatabaseBackup()` with no
       `try`/`catch` around it, unlike every other mutating action in the
       app. A failure here would produce a truncated download with no
-      on-screen explanation, not data loss or corruption. **Severity:
-      LOW, deferred** — not a blocker to using the backup feature today.
-- [ ] Backup audit logging — creating a database backup does not call
+      on-screen explanation, not data loss or corruption.~~ **Resolved
+      in Phase J5** — the backup action is now wrapped in its own
+      `try`/`catch`; a failure calls `backupFailureMessage()`, which logs
+      the real exception and appends a safe, generic message to the
+      still-open download stream instead of producing a silent truncated
+      file. Covered by `tests/Unit/BackupFailureMessageTest.php`.
+- [x] ~~Backup audit logging — creating a database backup does not call
       `logAudit()`, so there is currently no audit-trail record of who
       exported a full copy of the database and when, unlike every other
-      sensitive Admin action in the app. **Severity: MEDIUM, deferred**
-      — a real accountability gap, not a data-safety or correctness
-      issue; does not affect the backup feature's own reliability.
+      sensitive Admin action in the app.~~ **Resolved in Phase J5** — a
+      successful backup now calls `logAudit()` (action `create`, entity
+      `backup`), in its own `try`/`catch` so a failure to write the audit
+      row can never retroactively mark an already-streamed, successful
+      backup as failed. The snapshot records only the generated
+      filename — never SQL content or credentials. Covered by
+      `tests/Http/BackupAuditTest.php`.
 
 ---
 
@@ -842,7 +873,7 @@ not yet branched).
 
 ## Security Hardening — Phases K1 through K2-E
 
-**Status: K1, K2-A, K2-B, K2-C, K2-D COMPLETE / MERGED. K2-E COMPLETE (pending review).**
+**Status: K1, K2-A, K2-B, K2-C, K2-D, K2-E — ALL COMPLETE / MERGED.**
 
 Addresses the P0/P1/P2 gaps recorded in `docs/adr/ADR-008-security-production-deployment.md`, one small reviewed batch at a time, each on its own feature branch with an explicit scope boundary and a full regression run before merge. See that ADR's own "Outcome" section for the fuller mapping.
 
@@ -908,3 +939,40 @@ Current security-focused automated coverage: `AuthorizationTest`,
 `PrivilegeFreshnessTest`, `SessionCookieAttributesTest`,
 `SessionLifecycleTest` — all part of the standard `tests/Http/` suite
 run before every merge in this series.
+
+### V1 Closure Status
+
+Each phase above merged into `main` on its own reviewed pull request:
+K1 (#85), K2-A (#86), K2-B (#87), K2-C (#88), K2-D (#89), K2-E (#90).
+Following K2-E, a final independent security and production-readiness
+re-audit ("K-QA") was performed against `main` as the last gate before
+V1 closure: it independently re-verified every K1-K2-E control (web
+boundary confirmed against real, unmodified Apache and Nginx instances
+serving this repository — not just config-file inspection — plus live
+checks of session rotation/cookie attributes/strict-mode behavior,
+login throttling and its timing-oracle fix, privilege-freshness
+revocation/promotion, and the generic-error/no-secret-disclosure
+behavior added in K2-E), and additionally swept SQL-injection
+resistance, output encoding, file-upload handling, transaction/rollback
+balance, and audit-trail integrity. Outcome: no unresolved High or
+Critical findings, no regression in K1-K2-E behavior, and the full
+regression suite passing (494 tests / 3,458 assertions, matching the
+count on `main` at the time of this entry). Two Low-severity,
+non-blocking items were recorded for follow-up rather than blocking
+closure: `ARCHITECTURE.md` §13 still describes some of these gaps as
+open (it is a dated v1.0.0 baseline snapshot, not a live document, and
+was out of scope for the K2-E documentation pass); and the Docker
+image's runtime behavior for the K2-E `php.ini` settings has not been
+confirmed inside an actually-running container in a Docker-capable
+environment (verified instead via isolated PHP-ini loading, which
+confirms the file itself is correct). Neither blocks V1.
+
+**V1 is closed as of `main` @ `3499684`** (K2-E merge). Deferred,
+non-blocking items carried forward as documented, owner-level, or V2
+decisions rather than defects: Content-Security-Policy and HSTS (both
+need infrastructure this deployment doesn't have yet — see K2-E above
+and ADR-008's Outcome section), login-form CSRF and converting logout
+from GET to POST, idle/absolute session timeout (a shop-workflow
+tradeoff for the business owner, not an engineering gap),
+`password_needs_rehash()`, and the two items noted above from the K-QA
+re-audit. V2 planning has not started as of this entry.
