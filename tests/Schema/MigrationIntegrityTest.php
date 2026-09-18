@@ -17,7 +17,7 @@ use Tests\SchemaBuilder;
 //     tests/bootstrap.php already built for the whole suite - no new
 //     infrastructure needed for this half.
 //
-//  2. testMigrations001Through017ApplyCleanlyToACompatibleDatabase() -
+//  2. testMigrations001Through020ApplyCleanlyToACompatibleDatabase() -
 //     every migration file's own header comment says it must run
 //     "against an EXISTING database that predates this change" (a truly
 //     empty database does not qualify - these are additive ALTER/CREATE
@@ -25,7 +25,7 @@ use Tests\SchemaBuilder;
 //     therefore builds tests/fixtures/schema_baseline_pre_migrations.sql
 //     (a reconstruction of that pre-migration-001 shape - see that
 //     file's own header for exactly how it was derived) in a SEPARATE,
-//     dedicated scratch database, applies migrations 001-019 to it in
+//     dedicated scratch database, applies migrations 001-020 to it in
 //     order, and compares the resulting structure against the real
 //     schema.sql-built database using information_schema queries -
 //     structural/semantic checks, never a raw-text diff of the .sql
@@ -94,12 +94,13 @@ final class MigrationIntegrityTest extends TestCase
         $this->assertTrue($this->columnExists($this->mainPdo, $dbName, 'purchase_order_receipts', 'stock_transaction_item_id'));
         $this->assertTrue($this->columnExists($this->mainPdo, $dbName, 'login_attempts', 'attempted_at'));
         $this->assertTrue($this->columnExists($this->mainPdo, $dbName, 'users', 'password_changed_at'));
+        $this->assertTrue($this->columnExists($this->mainPdo, $dbName, 'users', 'is_active'));
 
         $seedCount = (int) $this->mainPdo->query('SELECT COUNT(*) FROM reference_counters')->fetchColumn();
         $this->assertSame(3, $seedCount, 'a fresh install must seed all three reference_counters rows (stock_transactions, customer_debts, purchase_orders)');
     }
 
-    public function testMigrations001Through019ApplyCleanlyToACompatibleDatabase(): void
+    public function testMigrations001Through020ApplyCleanlyToACompatibleDatabase(): void
     {
         $builder = new SchemaBuilder($this->scratchPdo);
         $builder->dropAllTables();
@@ -107,9 +108,9 @@ final class MigrationIntegrityTest extends TestCase
 
         $migrationsDir = dirname(__DIR__, 2) . '/database/migrations';
         $files = glob($migrationsDir . '/0*.sql');
-        sort($files); // filenames are zero-padded (001_..019_..), so lexical sort is numeric order
+        sort($files); // filenames are zero-padded (001_..020_..), so lexical sort is numeric order
 
-        $this->assertCount(19, $files, 'expected exactly migrations 001 through 019 to be present');
+        $this->assertCount(20, $files, 'expected exactly migrations 001 through 020 to be present');
 
         foreach ($files as $file) {
             try {

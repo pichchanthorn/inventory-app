@@ -56,6 +56,7 @@ function userAuditSnapshot(array $row): array {
         'role_id'              => (int) $row['role_id'],
         'avatar'               => $row['avatar'],
         'must_change_password' => (int) $row['must_change_password'],
+        'is_active'            => (int) $row['is_active'],
         'created_at'           => $row['created_at'],
         'updated_at'           => $row['updated_at'] ?? null,
         'created_by'           => $row['created_by'] ?? null,

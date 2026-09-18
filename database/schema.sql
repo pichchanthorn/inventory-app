@@ -28,6 +28,11 @@ CREATE TABLE users (
     role_id INT DEFAULT 2,
     avatar VARCHAR(255) DEFAULT NULL,
     must_change_password TINYINT(1) NOT NULL DEFAULT 0,
+    -- Phase V2-B3: account deactivation. A plain boolean, not a status
+    -- enum - see database/migrations/020_add_user_active_status.sql for
+    -- why. includes/auth_check.php's existing privilege-freshness read
+    -- rejects a session the moment this becomes 0.
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
     -- Phase K2-D: the baseline an authenticated session is checked
     -- against. auth/login.php copies this value into the session, and
     -- includes/auth_check.php compares it on every authenticated

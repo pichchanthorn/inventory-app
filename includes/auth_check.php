@@ -37,7 +37,7 @@ if (!isset($_SESSION['user_id'])) {
 // ONCE here, not at the 63 isAdmin()/canWrite() call sites, which are
 // left completely untouched and keep reading $_SESSION.
 // ================================================
-$freshStmt = $pdo->prepare('SELECT role_id, must_change_password, password_changed_at FROM users WHERE id = ?');
+$freshStmt = $pdo->prepare('SELECT role_id, must_change_password, password_changed_at, is_active FROM users WHERE id = ?');
 $freshStmt->execute([$_SESSION['user_id']]);
 $freshUser = $freshStmt->fetch();
 
@@ -47,6 +47,20 @@ if (!$freshUser) {
     // isset($_SESSION['user_id']) - the id was never resolved against a
     // row. Treat it as unauthenticated and tear the session down the
     // same way logout does.
+    destroyCurrentSession();
+    header('Location: ' . BASE_URL . '/auth/login.php');
+    exit;
+}
+
+// Phase V2-B3: account deactivation. Checked immediately after
+// confirming the row exists, and before the password-baseline check
+// below - a deactivated account must be fully signed out on its very
+// next request, the same as a deleted account, not merely lose
+// privileges the way a role demotion does (which deliberately leaves
+// the session alive as a lesser role). Reuses the identical
+// destroyCurrentSession() teardown - no second session-invalidation
+// mechanism.
+if (!$freshUser['is_active']) {
     destroyCurrentSession();
     header('Location: ' . BASE_URL . '/auth/login.php');
     exit;

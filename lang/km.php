@@ -454,6 +454,15 @@ return [
     'user_reset_password_submit' => 'កំណត់ពាក្យសម្ងាត់ឡើងវិញ',
     'user_password_reset_banner_title' => 'ពាក្យសម្ងាត់ត្រូវបានកំណត់ឡើងវិញ — សូមចែករំលែកពាក្យសម្ងាត់ថ្មីនេះទៅបុគ្គលិក៖',
     'user_err_self_reset' => 'សូមប្រើទំព័រប្រវត្តិរូបដើម្បីផ្លាស់ប្តូរពាក្យសម្ងាត់ខ្លួនឯង។',
+    // V2-B3: account deactivation
+    'user_status_active' => 'សកម្ម',
+    'user_status_inactive' => 'អសកម្ម',
+    'user_deactivate_button' => 'ធ្វើឲ្យអសកម្ម',
+    'user_reactivate_button' => 'ធ្វើឲ្យសកម្មឡើងវិញ',
+    'user_confirm_deactivate' => 'ធ្វើឲ្យអ្នកប្រើនេះអសកម្មឬ? គាត់នឹងត្រូវបានចាកចេញ ហើយមិនអាចចូលប្រើបានទេ រហូតដល់ត្រូវបានធ្វើឲ្យសកម្មឡើងវិញ។',
+    'user_confirm_reactivate' => 'ធ្វើឲ្យអ្នកប្រើនេះសកម្មឡើងវិញឬ? គាត់នឹងអាចចូលប្រើបានឡើងវិញ។',
+    'user_err_self_deactivate' => 'អ្នកមិនអាចធ្វើឲ្យគណនីខ្លួនឯងអសកម្មបានទេ។',
+    'user_err_last_active_admin' => 'អ្នកមិនអាចធ្វើឲ្យអ្នកគ្រប់គ្រងសកម្មចុងក្រោយអសកម្មបានទេ។',
 
     // Settings
     'settings_title' => 'ការកំណត់',
