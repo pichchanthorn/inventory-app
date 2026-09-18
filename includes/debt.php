@@ -7,6 +7,12 @@
 // and StockConflictException.
 // ================================================
 
+// V2-B1: recordCreditSale()/recordDebtPayment() below now write their own
+// audit trail via the existing, generic logAudit() - same reasoning as
+// includes/stock.php's and includes/purchase_order.php's own require_once
+// of audit.php, since this file now calls logAudit() itself.
+require_once __DIR__ . '/audit.php';
+
 // Same "PREFIX-000123" pattern as nextStockReference() in
 // includes/stock.php, just its own counter key ('customer_debts')
 // instead of 'stock_transactions' - debts aren't stock_transactions, so
@@ -93,8 +99,19 @@ function recordCreditSale(PDO $pdo, array $lines, string $date, int $userId, ?in
         }
 
         $debtReference = nextDebtReference($pdo);
+        $dueDateValue = $dueDate !== '' ? $dueDate : null;
         $stmt = $pdo->prepare('INSERT INTO customer_debts (reference, customer_id, stock_transaction_id, total_amount, due_date, created_by, updated_by) VALUES (?,?,?,?,?,?,?)');
-        $stmt->execute([$debtReference, $customerId, $txId, $total, $dueDate !== '' ? $dueDate : null, $userId, $userId]);
+        $stmt->execute([$debtReference, $customerId, $txId, $total, $dueDateValue, $userId, $userId]);
+        $debtId = (int) $pdo->lastInsertId();
+
+        logAudit($pdo, $userId, 'create', 'customer_debt', $debtId, null, [
+            'name' => $debtReference,
+            'reference' => $debtReference,
+            'customer_id' => $customerId,
+            'stock_transaction_id' => (int) $txId,
+            'total_amount' => $total,
+            'due_date' => $dueDateValue,
+        ]);
 
         $pdo->commit();
         return [
@@ -154,14 +171,38 @@ function recordDebtPayment(PDO $pdo, int $debtId, float $amount, string $payment
             claimIdempotencyToken($pdo, $idempotencyToken, $userId);
         }
 
+        $stmt = $pdo->prepare('SELECT * FROM customer_debts WHERE id = ?');
+        $stmt->execute([$debtId]);
+        $before = $stmt->fetch();
+
         $stmt = $pdo->prepare('UPDATE customer_debts SET paid_amount = paid_amount + ?, updated_by = ? WHERE id = ? AND paid_amount + ? <= total_amount');
         $stmt->execute([$amount, $userId, $debtId, $amount]);
         if ($stmt->rowCount() === 0) {
             throw new DebtOverpaymentException($debtId);
         }
+        $before['name'] = $before['reference'];
 
+        $noteValue = $note !== '' ? $note : null;
         $stmt = $pdo->prepare('INSERT INTO customer_debt_payments (debt_id, amount, payment_date, note, created_by) VALUES (?,?,?,?,?)');
-        $stmt->execute([$debtId, $amount, $paymentDate, $note !== '' ? $note : null, $userId]);
+        $stmt->execute([$debtId, $amount, $paymentDate, $noteValue, $userId]);
+        $paymentId = (int) $pdo->lastInsertId();
+
+        $stmt = $pdo->prepare('SELECT paid_amount, balance, status FROM customer_debts WHERE id = ?');
+        $stmt->execute([$debtId]);
+        $after = $stmt->fetch();
+
+        logAudit($pdo, $userId, 'update', 'customer_debt', $debtId, $before, [
+            'name' => $before['reference'],
+            'paid_amount' => (float) $after['paid_amount'],
+            'balance' => (float) $after['balance'],
+            'status' => $after['status'],
+            'payment_this_event' => [
+                'id' => $paymentId,
+                'amount' => $amount,
+                'payment_date' => $paymentDate,
+                'note' => $noteValue,
+            ],
+        ]);
 
         $pdo->commit();
     } catch (Throwable $e) {
