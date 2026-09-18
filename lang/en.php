@@ -488,6 +488,16 @@ return [
     'audit_before_label' => 'Before',
     'audit_after_label' => 'After',
     'audit_empty' => 'No audit history yet.',
+    // V2-B2: filters/pagination
+    'audit_entity_customer_debt' => 'Customer Debt',
+    'audit_filter_all_actors' => 'All Actors',
+    'audit_filter_all_entity_types' => 'All Entity Types',
+    'audit_filter_all_actions' => 'All Actions',
+    'audit_filter_from_label' => 'From',
+    'audit_filter_to_label' => 'To',
+    'audit_pagination_summary' => 'Showing %d–%d of %d',
+    'audit_pagination_previous' => 'Previous',
+    'audit_pagination_next' => 'Next',
 
     // Purchase Orders (Phase P1)
     'nav_purchase_orders' => 'Purchase Orders',

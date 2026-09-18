@@ -487,6 +487,16 @@ return [
     'audit_before_label' => 'មុន',
     'audit_after_label' => 'បន្ទាប់',
     'audit_empty' => 'មិនទាន់មានប្រវត្តិសវនកម្មនៅឡើយ។',
+    // V2-B2: filters/pagination
+    'audit_entity_customer_debt' => 'បំណុលអតិថិជន',
+    'audit_filter_all_actors' => 'អ្នកធ្វើសកម្មភាពទាំងអស់',
+    'audit_filter_all_entity_types' => 'ប្រភេទធាតុទាំងអស់',
+    'audit_filter_all_actions' => 'សកម្មភាពទាំងអស់',
+    'audit_filter_from_label' => 'ចាប់ពី',
+    'audit_filter_to_label' => 'ដល់',
+    'audit_pagination_summary' => 'បង្ហាញ %d–%d នៃ %d',
+    'audit_pagination_previous' => 'មុន',
+    'audit_pagination_next' => 'បន្ទាប់',
 
     // Purchase Orders (Phase P1)
     'nav_purchase_orders' => 'ការបញ្ជាទិញពីអ្នកផ្គត់ផ្គង់',
