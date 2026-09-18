@@ -46,6 +46,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ? password_verify($pass, $user['password'])
             : verifyAgainstDummyHash($pass);
 
+        // Phase V2-B3: checked only AFTER a successful password verify,
+        // never before - checking it earlier (or skipping the verify
+        // for a deactivated account) would reopen exactly the timing
+        // side-channel Phase K2-C's unconditional-verify design was
+        // built to close, this time revealing which addresses are
+        // deactivated rather than which exist. The rejection below is
+        // handled identically to a wrong password - same recordFailedLogin/
+        // pruneStaleLoginAttempts bookkeeping, same generic $error - so
+        // a deactivated account is fully indistinguishable from a wrong
+        // password from the outside.
+        if ($authenticated && $user !== null && !$user['is_active']) {
+            $authenticated = false;
+        }
+
         if ($authenticated) {
             // Phase K2-C: proving the password wipes this address's
             // failure history, so a member of staff who fumbles a few

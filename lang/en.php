@@ -455,6 +455,15 @@ return [
     'user_reset_password_submit' => 'Reset password',
     'user_password_reset_banner_title' => 'Password reset — share this new password with the staff member:',
     'user_err_self_reset' => 'Use the profile page to change your own password.',
+    // V2-B3: account deactivation
+    'user_status_active' => 'Active',
+    'user_status_inactive' => 'Inactive',
+    'user_deactivate_button' => 'Deactivate',
+    'user_reactivate_button' => 'Reactivate',
+    'user_confirm_deactivate' => 'Deactivate this user? They will be signed out and unable to log in until reactivated.',
+    'user_confirm_reactivate' => 'Reactivate this user? They will be able to log in again.',
+    'user_err_self_deactivate' => 'You cannot deactivate your own account.',
+    'user_err_last_active_admin' => 'You cannot deactivate the last active Admin.',
 
     // Settings
     'settings_title' => 'Settings',
